@@ -59,34 +59,53 @@ export default function ReturnsPage() {
     loadLoans();
   }, []);
 
-  function handleSearch() {
-    const keyword = query.trim().toLowerCase();
+  // =====================================================
+  // SEARCH TRANSACTION WITH DEBOUNCE
+  // =====================================================
 
-    if (!keyword) {
-      setFilteredLoans(loans);
-      return;
-    }
+  useEffect(() => {
+    let cancelled = false;
 
-    const result = loans.filter(
-      ({ loan, member, items }) =>
-        loan.loanNumber
-          .toLowerCase()
-          .includes(keyword) ||
-        member.name
-          .toLowerCase()
-          .includes(keyword) ||
-        items.some((item) =>
-          item.book.title
+    const timer = window.setTimeout(() => {
+      if (cancelled) {
+        return;
+      }
+
+      const keyword = query.trim().toLowerCase();
+
+      if (!keyword) {
+        setFilteredLoans(loans);
+        return;
+      }
+
+      const result = loans.filter(
+        ({ loan, member, items }) =>
+          loan.loanNumber
             .toLowerCase()
             .includes(keyword) ||
-          item.bookCopy.code
+          member.name
             .toLowerCase()
-            .includes(keyword),
-        ),
-    );
+            .includes(keyword) ||
+          items.some((item) =>
+            item.book.title
+              .toLowerCase()
+              .includes(keyword) ||
+            item.bookCopy.code
+              .toLowerCase()
+              .includes(keyword),
+          ),
+      );
 
-    setFilteredLoans(result);
-  }
+      if (!cancelled) {
+        setFilteredLoans(result);
+      }
+    }, 400);
+
+    return () => {
+      cancelled = true;
+      window.clearTimeout(timer);
+    };
+  }, [query, loans]);
 
   function selectLoan(loanData: ReturnLoanData) {
     setSelectedLoan(loanData);
@@ -242,31 +261,16 @@ export default function ReturnsPage() {
             1. Cari Transaksi Aktif
           </h3>
 
-          <div className="mt-5 flex flex-col gap-3 sm:flex-row sm:items-end">
-            <div className="flex-1">
-              <Input
-                id="return-search"
-                label="Transaksi"
-                value={query}
-                onChange={(event) =>
-                  setQuery(event.target.value)
-                }
-                onKeyDown={(event) => {
-                  if (event.key === "Enter") {
-                    event.preventDefault();
-                    handleSearch();
-                  }
-                }}
-                placeholder="Cari nomor transaksi, anggota, atau buku..."
-              />
-            </div>
-
-            <Button
-              type="button"
-              onClick={handleSearch}
-            >
-              Cari
-            </Button>
+          <div className="mt-5">
+            <Input
+              id="return-search"
+              label="Transaksi"
+              value={query}
+              onChange={(event) =>
+                setQuery(event.target.value)
+              }
+              placeholder="Cari nomor transaksi, anggota, buku, atau copy..."
+            />
           </div>
 
           {error && (

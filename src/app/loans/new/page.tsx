@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { FormEvent, useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 
 import Card from "@/components/ui/Card";
@@ -9,8 +9,10 @@ import Button from "@/components/ui/Button";
 
 import {
   createMember,
+  getMembers,
   searchMembers,
   searchBooks,
+  getAvailableBooks,
   getBookCopies,
   createLoan,
 } from "@/lib/mock-api";
@@ -22,19 +24,40 @@ import type {
   Member,
 } from "@/lib/types";
 
+type MemberFormErrors = {
+  name: string;
+  phone: string;
+  identityNumber: string;
+  email: string;
+};
+
+const EMPTY_MEMBER_ERRORS: MemberFormErrors = {
+  name: "",
+  phone: "",
+  identityNumber: "",
+  email: "",
+};
+
 export default function NewLoanPage() {
   const router = useRouter();
+
+  // =====================================================
+  // MEMBER SEARCH
+  // =====================================================
 
   const [memberQuery, setMemberQuery] = useState("");
   const [members, setMembers] = useState<Member[]>([]);
   const [selectedMember, setSelectedMember] =
     useState<Member | null>(null);
 
-  const [loading, setLoading] = useState(false);
-  const [error, setError] = useState("");
+  const [memberLoading, setMemberLoading] = useState(false);
+  const [memberError, setMemberError] = useState("");
 
-  const [showMemberForm, setShowMemberForm] =
-    useState(false);
+  // =====================================================
+  // CREATE MEMBER
+  // =====================================================
+
+  const [showMemberForm, setShowMemberForm] = useState(false);
 
   const [memberName, setMemberName] = useState("");
   const [memberPhone, setMemberPhone] = useState("");
@@ -42,91 +65,259 @@ export default function NewLoanPage() {
     useState("");
   const [memberEmail, setMemberEmail] = useState("");
 
-  const [memberFormError, setMemberFormError] =
-    useState("");
+  const [memberFormErrors, setMemberFormErrors] =
+    useState<MemberFormErrors>(EMPTY_MEMBER_ERRORS);
+
   const [memberFormLoading, setMemberFormLoading] =
     useState(false);
+
+  // =====================================================
+  // BOOK SEARCH
+  // =====================================================
 
   const [bookQuery, setBookQuery] = useState("");
   const [books, setBooks] = useState<Book[]>([]);
   const [selectedBook, setSelectedBook] =
     useState<Book | null>(null);
 
+  const [bookLoading, setBookLoading] = useState(false);
+  const [bookError, setBookError] = useState("");
+
+  // =====================================================
+  // BOOK COPY
+  // =====================================================
+
   const [bookCopies, setBookCopies] =
     useState<BookCopy[]>([]);
+
   const [selectedCopyIds, setSelectedCopyIds] =
     useState<string[]>([]);
 
-  const [bookLoading, setBookLoading] =
-    useState(false);
-  const [bookError, setBookError] = useState("");
-  const [copyLoading, setCopyLoading] =
-    useState(false);
+  const [copyLoading, setCopyLoading] = useState(false);
   const [copyError, setCopyError] = useState("");
 
-  const [borrowedAt, setBorrowedAt] =
-    useState("");
-  const [dueAt, setDueAt] = useState("");
-  const [dateError, setDateError] =
-    useState("");
+  // =====================================================
+  // DATE
+  // =====================================================
 
-  const [submitLoading, setSubmitLoading] =
-    useState(false);
-  const [submitError, setSubmitError] =
-    useState("");
+  const [borrowedAt, setBorrowedAt] = useState("");
+  const [dueAt, setDueAt] = useState("");
+  const [dateError, setDateError] = useState("");
+
+  // =====================================================
+  // SUBMIT
+  // =====================================================
+
+  const [submitLoading, setSubmitLoading] = useState(false);
+  const [submitError, setSubmitError] = useState("");
   const [successLoan, setSuccessLoan] =
     useState<Loan | null>(null);
 
-  async function handleSearchMember() {
-    if (!memberQuery.trim()) {
-      setMembers([]);
+  // =====================================================
+  // SEARCH MEMBER WITH DEBOUNCE
+  // =====================================================
+
+  useEffect(() => {
+    if (selectedMember || showMemberForm) {
       return;
     }
 
-    setLoading(true);
-    setError("");
+    setMemberLoading(true);
 
-    try {
-      const result =
-        await searchMembers(memberQuery);
+    let cancelled = false;
 
-      setMembers(result);
-    } catch {
-      setError("Pencarian anggota gagal.");
-    } finally {
-      setLoading(false);
+    const timer = window.setTimeout(() => {
+      async function loadMembers() {
+        setMemberLoading(true);
+        setMemberError("");
+
+        try {
+          const keyword = memberQuery.trim();
+
+          const result = keyword
+            ? await searchMembers(keyword)
+            : await getMembers();
+
+          if (!cancelled) {
+            setMembers(result);
+          }
+        } catch {
+          if (!cancelled) {
+            setMemberError("Data anggota gagal dimuat.");
+            setMembers([]);
+          }
+        } finally {
+          if (!cancelled) {
+            setMemberLoading(false);
+          }
+        }
+      }
+
+      void loadMembers();
+    }, 400);
+
+    return () => {
+      cancelled = true;
+      window.clearTimeout(timer);
+    };
+  }, [memberQuery, selectedMember, showMemberForm]);
+
+  // =====================================================
+  // BOOK SEARCH WITH DEBOUNCE
+  // =====================================================
+
+  useEffect(() => {
+    if (!selectedMember) {
+      setBooks([]);
+      setBookLoading(false);
+      return;
     }
+
+    setBookLoading(true);
+
+    let cancelled = false;
+
+    const timer = window.setTimeout(() => {
+      async function loadBooks() {
+        setBookLoading(true);
+        setBookError("");
+
+        try {
+          const result = await searchBooks(
+            bookQuery.trim(),
+          );
+
+          if (!cancelled) {
+            setBooks(result);
+          }
+        } catch {
+          if (!cancelled) {
+            setBookError("Pencarian buku gagal.");
+            setBooks([]);
+          }
+        } finally {
+          if (!cancelled) {
+            setBookLoading(false);
+          }
+        }
+      }
+
+      void loadBooks();
+    }, 400);
+
+    return () => {
+      cancelled = true;
+      window.clearTimeout(timer);
+    };
+  }, [bookQuery, selectedMember]);
+
+  // =====================================================
+  // SELECT MEMBER
+  // =====================================================
+
+  async function handleSelectMember(member: Member) {
+    setSelectedMember(member);
+
+    setMembers([]);
+    setMemberQuery("");
+    setMemberError("");
+
+    // Reset pemilihan buku
+    setBookQuery("");
+    setSelectedBook(null);
+    setSelectedCopyIds([]);
+    setBookCopies([]);
+    setBookError("");
+    setCopyError("");
+
+    // Reset tanggal
+    setBorrowedAt("");
+    setDueAt("");
+    setDateError("");
+
+    // Reset submit
+    setSubmitError("");
+    setSuccessLoan(null);
+
   }
 
-  async function handleCreateMember() {
-    setMemberFormError("");
+  // =====================================================
+  // VALIDATE MEMBER FORM
+  // =====================================================
 
-    if (!memberName.trim()) {
-      setMemberFormError("Nama wajib diisi.");
-      return;
+  function validateMemberForm() {
+    const errors: MemberFormErrors = {
+      name: "",
+      phone: "",
+      identityNumber: "",
+      email: "",
+    };
+
+    const name = memberName.trim();
+    const phone = memberPhone.trim();
+    const identityNumber =
+      memberIdentityNumber.trim();
+    const email = memberEmail.trim();
+
+    // Nama
+    if (!name) {
+      errors.name = "Nama wajib diisi.";
+    } else if (name.length < 2) {
+      errors.name =
+        "Nama harus terdiri dari minimal 2 karakter.";
     }
 
-    if (!memberPhone.trim()) {
-      setMemberFormError(
-        "Nomor HP wajib diisi.",
-      );
-      return;
+    // Nomor HP
+    if (!phone) {
+      errors.phone = "Nomor HP wajib diisi.";
+    } else if (!/^\d+$/.test(phone)) {
+      errors.phone =
+        "Nomor HP hanya boleh berisi angka.";
+    } else if (phone.length < 10 || phone.length > 15) {
+      errors.phone =
+        "Nomor HP harus terdiri dari 10-15 digit.";
     }
 
-    if (!memberIdentityNumber.trim()) {
-      setMemberFormError("NIK wajib diisi.");
-      return;
+    // NIK
+    if (!identityNumber) {
+      errors.identityNumber = "NIK wajib diisi.";
+    } else if (!/^\d+$/.test(identityNumber)) {
+      errors.identityNumber =
+        "NIK hanya boleh berisi angka.";
+    } else if (identityNumber.length !== 16) {
+      errors.identityNumber =
+        "NIK harus terdiri dari 16 digit.";
     }
 
+    // Email
     if (
-      memberEmail.trim() &&
-      !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(
-        memberEmail.trim(),
-      )
+      email &&
+      !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)
     ) {
-      setMemberFormError(
-        "Format email tidak valid.",
-      );
+      errors.email = "Format email tidak valid.";
+    }
+
+    setMemberFormErrors(errors);
+
+    return !Object.values(errors).some(Boolean);
+  }
+
+  // =====================================================
+  // CREATE MEMBER
+  // =====================================================
+
+  async function handleCreateMember(
+    event?: FormEvent<HTMLFormElement>,
+  ) {
+    event?.preventDefault();
+
+    if (memberFormLoading) {
+      return;
+    }
+
+    const valid = validateMemberForm();
+
+    if (!valid) {
       return;
     }
 
@@ -138,50 +329,48 @@ export default function NewLoanPage() {
         phone: memberPhone.trim(),
         identityNumber:
           memberIdentityNumber.trim(),
-        email:
-          memberEmail.trim() || undefined,
+        email: memberEmail.trim() || undefined,
         memberType: "UMUM",
         status: "ACTIVE",
       });
 
+      // Langsung pilih anggota yang baru dibuat
       setSelectedMember(member);
+
       setShowMemberForm(false);
 
+      // Reset form
       setMemberName("");
       setMemberPhone("");
       setMemberIdentityNumber("");
       setMemberEmail("");
-    } catch {
-      setMemberFormError(
-        "Anggota gagal dibuat.",
-      );
+
+      setMemberFormErrors(EMPTY_MEMBER_ERRORS);
+
+      setMembers([]);
+      setMemberQuery("");
+
+
+    } catch (error) {
+      const message =
+        error instanceof Error
+          ? error.message
+          : "Anggota gagal dibuat.";
+
+      setMemberFormErrors({
+        name: "",
+        phone: "",
+        identityNumber: "",
+        email: message,
+      });
     } finally {
       setMemberFormLoading(false);
     }
   }
 
-  async function handleSearchBook() {
-    if (!bookQuery.trim()) {
-      setBooks([]);
-      return;
-    }
-
-    setBookLoading(true);
-    setBookError("");
-
-    try {
-      const result =
-        await searchBooks(bookQuery);
-
-      setBooks(result);
-    } catch {
-      setBookError(
-        "Pencarian buku gagal.",
-      );
-    } finally {
-      setBookLoading(false);
-    }
-  }
+  // =====================================================
+  // SELECT BOOK
+  // =====================================================
 
   async function selectBook(book: Book) {
     if (
@@ -194,23 +383,30 @@ export default function NewLoanPage() {
     setSelectedBook(book);
     setSelectedCopyIds([]);
     setBookCopies([]);
+
     setCopyError("");
+    setSubmitError("");
 
     setCopyLoading(true);
 
     try {
-      const copies =
-        await getBookCopies(book.id);
+      const copies = await getBookCopies(book.id);
 
       setBookCopies(copies);
     } catch {
       setCopyError(
         "Copy buku gagal dimuat.",
       );
+
+      setBookCopies([]);
     } finally {
       setCopyLoading(false);
     }
   }
+
+  // =====================================================
+  // TOGGLE BOOK COPY
+  // =====================================================
 
   function toggleCopy(copy: BookCopy) {
     if (copy.status !== "AVAILABLE") {
@@ -230,6 +426,10 @@ export default function NewLoanPage() {
     setSubmitError("");
   }
 
+  // =====================================================
+  // DATE VALIDATION
+  // =====================================================
+
   function validateDates() {
     setDateError("");
 
@@ -237,6 +437,7 @@ export default function NewLoanPage() {
       setDateError(
         "Tanggal peminjaman wajib diisi.",
       );
+
       return false;
     }
 
@@ -244,6 +445,7 @@ export default function NewLoanPage() {
       setDateError(
         "Tanggal jatuh tempo wajib diisi.",
       );
+
       return false;
     }
 
@@ -251,39 +453,74 @@ export default function NewLoanPage() {
       setDateError(
         "Tanggal jatuh tempo tidak boleh sebelum tanggal peminjaman.",
       );
+
       return false;
     }
 
     return true;
   }
 
+  // =====================================================
+  // SUBMIT LOAN
+  // =====================================================
+
   async function handleSubmitLoan() {
+    if (submitLoading) {
+      return;
+    }
+
     setSubmitError("");
 
+    // Validasi anggota
     if (!selectedMember) {
       setSubmitError(
         "Anggota belum dipilih.",
       );
+
       return;
     }
 
+    // Validasi buku
     if (!selectedBook) {
-      setSubmitError("Buku belum dipilih.");
+      setSubmitError(
+        "Buku belum dipilih.",
+      );
+
       return;
     }
 
+    // Validasi copy
     if (selectedCopyIds.length === 0) {
       setSubmitError(
         "Minimal satu copy harus dipilih.",
       );
+
       return;
     }
 
+    // Pastikan copy masih valid
+    const selectedCopies =
+      bookCopies.filter((copy) =>
+        selectedCopyIds.includes(copy.id),
+      );
+
+    const hasUnavailableCopy =
+      selectedCopies.length !==
+        selectedCopyIds.length ||
+      selectedCopies.some(
+        (copy) => copy.status !== "AVAILABLE",
+      );
+
+    if (hasUnavailableCopy) {
+      setSubmitError(
+        "Ada copy yang sudah tidak tersedia. Silakan pilih ulang copy buku.",
+      );
+
+      return;
+    }
+
+    // Validasi tanggal
     if (!validateDates()) {
-      return;
-    }
-
-    if (submitLoading) {
       return;
     }
 
@@ -299,6 +536,7 @@ export default function NewLoanPage() {
       });
 
       setSuccessLoan(loan);
+
     } catch (error) {
       setSubmitError(
         error instanceof Error
@@ -310,8 +548,44 @@ export default function NewLoanPage() {
     }
   }
 
+  // =====================================================
+  // RESET MEMBER
+  // =====================================================
+
+  function handleChangeMember() {
+    setSelectedMember(null);
+
+    setMemberQuery("");
+    setMembers([]);
+    setMemberError("");
+
+    setBookQuery("");
+    setBooks([]);
+    setSelectedBook(null);
+    setSelectedCopyIds([]);
+    setBookCopies([]);
+
+    setBookError("");
+    setCopyError("");
+
+    setBorrowedAt("");
+    setDueAt("");
+    setDateError("");
+
+    setSubmitError("");
+    setSuccessLoan(null);
+  }
+
+  // =====================================================
+  // RENDER
+  // =====================================================
+
   return (
     <main className="min-h-screen bg-slate-50">
+      {/* =================================================
+          HEADER
+      ================================================= */}
+
       <header className="border-b border-slate-200 bg-white">
         <div className="mx-auto flex max-w-7xl items-center px-4 py-4 sm:px-6 lg:px-8">
           <div>
@@ -327,16 +601,25 @@ export default function NewLoanPage() {
       </header>
 
       <div className="mx-auto max-w-4xl px-4 py-6 sm:px-6 lg:px-8">
+
+        {/* =================================================
+            TITLE
+        ================================================= */}
+
         <div className="mb-6">
           <h2 className="text-2xl font-bold text-slate-900">
             Peminjaman Buku
           </h2>
 
           <p className="mt-1 text-sm text-slate-500">
-            Cari anggota terlebih dahulu untuk
-            membuat transaksi.
+            Pilih anggota, buku, copy buku, dan tanggal
+            peminjaman.
           </p>
         </div>
+
+        {/* =================================================
+            1. MEMBER
+        ================================================= */}
 
         <Card className="p-6">
           <h3 className="text-lg font-semibold text-slate-900">
@@ -348,113 +631,103 @@ export default function NewLoanPage() {
             NIK, atau nomor HP.
           </p>
 
-          <div className="mt-5 flex flex-col gap-3 sm:flex-row">
-            <div className="flex-1">
-              <Input
-                id="member-search"
-                label="Anggota"
-                value={memberQuery}
-                onChange={(event) =>
-                  setMemberQuery(
-                    event.target.value,
-                  )
-                }
-                onKeyDown={(event) => {
-                  if (event.key === "Enter") {
-                    event.preventDefault();
-                    handleSearchMember();
-                  }
-                }}
-                placeholder="Cari anggota..."
-              />
-            </div>
-
-            <div className="sm:self-end">
-              <Button
-                type="button"
-                onClick={handleSearchMember}
-                loading={loading}
-                disabled={!memberQuery.trim()}
-              >
-                Cari
-              </Button>
-            </div>
-          </div>
-
-          {error && (
-            <p
-              role="alert"
-              className="mt-4 text-sm text-red-600"
-            >
-              {error}
-            </p>
-          )}
-
-          {!loading &&
-            memberQuery.trim() &&
-            members.length === 0 &&
-            !error &&
-            !showMemberForm && (
-              <div className="mt-5 rounded-lg border border-slate-200 bg-slate-50 p-4">
-                <p className="font-medium text-slate-800">
-                  Anggota tidak ditemukan
-                </p>
-
-                <p className="mt-1 text-sm text-slate-500">
-                  Anggota belum ditemukan. Kamu
-                  dapat membuat anggota baru.
-                </p>
-
-                <Button
-                  type="button"
-                  variant="secondary"
-                  className="mt-3"
-                  onClick={() => {
-                    setShowMemberForm(true);
-                    setMemberFormError("");
-                  }}
-                >
-                  Buat Anggota Baru
-                </Button>
+          {!selectedMember && (
+            <>
+              <div className="mt-5 flex flex-col gap-3 sm:flex-row">
+                <div className="flex-1">
+                  <Input
+                    id="member-search"
+                    label="Anggota"
+                    value={memberQuery}
+                    onChange={(event) => {
+                      setMemberQuery(event.target.value);
+                      setMemberError("");
+                    }}
+                    placeholder="Cari nama, nomor anggota, NIK, atau nomor HP..."
+                  />
+                </div>
               </div>
-            )}
 
-          {members.length > 0 &&
-            !selectedMember && (
-              <div className="mt-5 space-y-3">
-                <h4 className="text-sm font-semibold text-slate-700">
-                  Hasil pencarian
-                </h4>
+              {memberError && (
+                <p
+                  role="alert"
+                  className="mt-4 text-sm text-red-600"
+                >
+                  {memberError}
+                </p>
+              )}
 
-                {members.map((member) => (
-                  <button
-                    key={member.id}
-                    type="button"
-                    onClick={() =>
-                      setSelectedMember(member)
-                    }
-                    className="w-full rounded-lg border border-slate-200 bg-white p-4 text-left transition hover:border-blue-300 hover:bg-blue-50 focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-500"
-                  >
-                    <p className="font-medium text-slate-900">
-                      {member.name}
+              {/* HASIL MEMBER */}
+
+              {!memberLoading &&
+                memberQuery.trim() &&
+                members.length === 0 &&
+                !memberError &&
+                !showMemberForm && (
+                  <div className="mt-5 rounded-lg border border-slate-200 bg-slate-50 p-4">
+                    <p className="font-medium text-slate-800">
+                      Anggota tidak ditemukan
                     </p>
 
                     <p className="mt-1 text-sm text-slate-500">
-                      {member.memberNumber} ·{" "}
-                      {member.phone}
+                      Anggota belum ditemukan.
+                      Kamu dapat membuat anggota baru.
                     </p>
 
-                    <p className="mt-1 text-xs text-slate-500">
-                      Status:{" "}
-                      {member.status ===
-                      "ACTIVE"
-                        ? "Aktif"
-                        : "Tidak aktif"}
-                    </p>
-                  </button>
-                ))}
-              </div>
-            )}
+                    <Button
+                      type="button"
+                      variant="secondary"
+                      className="mt-3"
+                      onClick={() => {
+                        setShowMemberForm(true);
+                        setMemberFormErrors(
+                          EMPTY_MEMBER_ERRORS,
+                        );
+                      }}
+                    >
+                      Buat Anggota Baru
+                    </Button>
+                  </div>
+                )}
+
+              {members.length > 0 && (
+                <div className="mt-5 space-y-3">
+                  <h4 className="text-sm font-semibold text-slate-700">
+                    Hasil pencarian
+                  </h4>
+
+                  {members.map((member) => (
+                    <button
+                      key={member.id}
+                      type="button"
+                      onClick={() =>
+                        handleSelectMember(member)
+                      }
+                      className="w-full rounded-lg border border-slate-200 bg-white p-4 text-left transition hover:border-blue-300 hover:bg-blue-50 focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-500"
+                    >
+                      <p className="font-medium text-slate-900">
+                        {member.name}
+                      </p>
+
+                      <p className="mt-1 text-sm text-slate-500">
+                        {member.memberNumber} ·{" "}
+                        {member.phone}
+                      </p>
+
+                      <p className="mt-1 text-xs text-slate-500">
+                        Status:{" "}
+                        {member.status === "ACTIVE"
+                          ? "Aktif"
+                          : "Tidak aktif"}
+                      </p>
+                    </button>
+                  ))}
+                </div>
+              )}
+            </>
+          )}
+
+          {/* SELECTED MEMBER */}
 
           {selectedMember && (
             <div className="mt-5 rounded-lg border border-slate-200 bg-slate-50 p-4">
@@ -476,9 +749,7 @@ export default function NewLoanPage() {
                 <Button
                   type="button"
                   variant="secondary"
-                  onClick={() =>
-                    setSelectedMember(null)
-                  }
+                  onClick={handleChangeMember}
                 >
                   Ganti Anggota
                 </Button>
@@ -487,7 +758,11 @@ export default function NewLoanPage() {
           )}
         </Card>
 
-        {showMemberForm && (
+        {/* =================================================
+            CREATE MEMBER
+        ================================================= */}
+
+        {showMemberForm && !selectedMember && (
           <Card className="mt-5 p-6">
             <h3 className="text-lg font-semibold text-slate-900">
               Buat Anggota Baru
@@ -498,40 +773,93 @@ export default function NewLoanPage() {
               peminjaman.
             </p>
 
-            <div className="mt-5 space-y-4">
+            <form
+              onSubmit={handleCreateMember}
+              className="mt-5 space-y-4"
+            >
               <Input
                 id="member-name"
                 label="Nama"
                 value={memberName}
-                onChange={(event) =>
+                onChange={(event) => {
                   setMemberName(
                     event.target.value,
-                  )
-                }
+                  );
+
+                  if (memberFormErrors.name) {
+                    setMemberFormErrors(
+                      (current) => ({
+                        ...current,
+                        name: "",
+                      }),
+                    );
+                  }
+                }}
+                error={memberFormErrors.name}
+                autoComplete="name"
                 required
               />
 
               <Input
                 id="member-phone"
                 label="Nomor HP"
+                type="tel"
+                inputMode="numeric"
+                maxLength={15}
                 value={memberPhone}
-                onChange={(event) =>
-                  setMemberPhone(
-                    event.target.value,
-                  )
-                }
+                onChange={(event) => {
+                  const value =
+                    event.target.value
+                      .replace(/\D/g, "")
+                      .slice(0, 15);
+
+                  setMemberPhone(value);
+
+                  if (memberFormErrors.phone) {
+                    setMemberFormErrors(
+                      (current) => ({
+                        ...current,
+                        phone: "",
+                      }),
+                    );
+                  }
+                }}
+                error={memberFormErrors.phone}
+                placeholder="08xxxxxxxxxx"
+                autoComplete="tel"
                 required
               />
 
               <Input
                 id="member-identity-number"
                 label="NIK"
+                type="text"
+                inputMode="numeric"
+                maxLength={16}
                 value={memberIdentityNumber}
-                onChange={(event) =>
-                  setMemberIdentityNumber(
-                    event.target.value,
-                  )
+                onChange={(event) => {
+                  const value =
+                    event.target.value
+                      .replace(/\D/g, "")
+                      .slice(0, 16);
+
+                  setMemberIdentityNumber(value);
+
+                  if (
+                    memberFormErrors.identityNumber
+                  ) {
+                    setMemberFormErrors(
+                      (current) => ({
+                        ...current,
+                        identityNumber: "",
+                      }),
+                    );
+                  }
+                }}
+                error={
+                  memberFormErrors.identityNumber
                 }
+                placeholder="16 digit NIK"
                 required
               />
 
@@ -540,27 +868,29 @@ export default function NewLoanPage() {
                 label="Email (opsional)"
                 type="email"
                 value={memberEmail}
-                onChange={(event) =>
+                onChange={(event) => {
                   setMemberEmail(
                     event.target.value,
-                  )
-                }
-              />
+                  );
 
-              {memberFormError && (
-                <p
-                  role="alert"
-                  className="text-sm text-red-600"
-                >
-                  {memberFormError}
-                </p>
-              )}
+                  if (memberFormErrors.email) {
+                    setMemberFormErrors(
+                      (current) => ({
+                        ...current,
+                        email: "",
+                      }),
+                    );
+                  }
+                }}
+                error={memberFormErrors.email}
+                placeholder="nama@email.com"
+                autoComplete="email"
+              />
 
               <div className="flex flex-col gap-3 sm:flex-row">
                 <Button
-                  type="button"
+                  type="submit"
                   loading={memberFormLoading}
-                  onClick={handleCreateMember}
                 >
                   Simpan Anggota
                 </Button>
@@ -571,15 +901,21 @@ export default function NewLoanPage() {
                   disabled={memberFormLoading}
                   onClick={() => {
                     setShowMemberForm(false);
-                    setMemberFormError("");
+                    setMemberFormErrors(
+                      EMPTY_MEMBER_ERRORS,
+                    );
                   }}
                 >
                   Batal
                 </Button>
               </div>
-            </div>
+            </form>
           </Card>
         )}
+
+        {/* =================================================
+            2. BOOK
+        ================================================= */}
 
         {selectedMember && (
           <Card className="mt-5 p-6">
@@ -588,39 +924,36 @@ export default function NewLoanPage() {
             </h3>
 
             <p className="mt-1 text-sm text-slate-500">
-              Cari judul buku yang akan dipinjam.
+              Semua buku yang tersedia ditampilkan.
+              Gunakan pencarian untuk mempersempit daftar.
             </p>
 
-            <div className="mt-5 flex flex-col gap-3 sm:flex-row sm:items-end">
-              <div className="flex-1">
-                <Input
-                  id="book-search"
-                  label="Buku"
-                  value={bookQuery}
-                  onChange={(event) =>
-                    setBookQuery(
-                      event.target.value,
-                    )
-                  }
-                  onKeyDown={(event) => {
-                    if (event.key === "Enter") {
-                      event.preventDefault();
-                      handleSearchBook();
-                    }
-                  }}
-                  placeholder="Cari judul, kode, atau ISBN..."
-                />
-              </div>
+            {/* SEARCH BOOK */}
 
-              <Button
-                type="button"
-                onClick={handleSearchBook}
-                loading={bookLoading}
-                disabled={!bookQuery.trim()}
-              >
-                Cari
-              </Button>
+            <div className="mt-5">
+              <Input
+                id="book-search"
+                label="Cari Buku"
+                value={bookQuery}
+                onChange={(event) =>
+                  setBookQuery(event.target.value)
+                }
+                placeholder="Cari judul, kode, atau ISBN..."
+              />
             </div>
+            {/* RESET SEARCH */}
+
+            {bookQuery.trim() && (
+              <button
+                type="button"
+                onClick={() => {
+                  setBookQuery("");
+                }}
+                className="mt-3 text-sm font-medium text-blue-600 hover:text-blue-700"
+              >
+                Tampilkan semua buku
+              </button>
+            )}
 
             {bookError && (
               <p
@@ -631,222 +964,264 @@ export default function NewLoanPage() {
               </p>
             )}
 
+            {/* LOADING */}
+
+            {bookLoading && (
+              <p className="mt-5 text-sm text-slate-500">
+                Memuat daftar buku...
+              </p>
+            )}
+
+            {/* EMPTY */}
+
             {!bookLoading &&
-              bookQuery.trim() &&
               books.length === 0 &&
               !bookError && (
                 <div className="mt-5 rounded-lg border border-slate-200 bg-slate-50 p-4">
                   <p className="font-medium text-slate-800">
-                    Buku tidak ditemukan
+                    {bookQuery.trim()
+                      ? "Buku tidak ditemukan"
+                      : "Tidak ada buku tersedia"}
                   </p>
 
                   <p className="mt-1 text-sm text-slate-500">
-                    Tidak ada buku yang sesuai
-                    dengan pencarian.
+                    {bookQuery.trim()
+                      ? "Tidak ada buku tersedia yang sesuai dengan pencarian."
+                      : "Saat ini tidak ada buku yang dapat dipinjam."}
                   </p>
                 </div>
               )}
 
-            {books.length > 0 && (
-              <div className="mt-5 space-y-3">
-                <h4 className="text-sm font-semibold text-slate-700">
-                  Hasil pencarian
-                </h4>
+            {/* BOOK LIST */}
 
-                {books.map((book) => {
-                  const unavailable =
-                    book.status ===
-                      "INACTIVE" ||
-                    book.availableCopies <= 0;
+            {!bookLoading &&
+              books.length > 0 && (
+                <div className="mt-5 space-y-3">
+                  <h4 className="text-sm font-semibold text-slate-700">
+                    {bookQuery.trim()
+                      ? "Hasil pencarian"
+                      : "Buku tersedia"}
+                  </h4>
 
-                  const selected =
-                    selectedBook?.id === book.id;
+                  {books.map((book) => {
+                    const unavailable =
+                      book.status === "INACTIVE" ||
+                      book.availableCopies <= 0;
 
-                  return (
-                    <div
-                      key={book.id}
-                      className={`rounded-lg border p-4 ${
-                        selected
-                          ? "border-blue-500 bg-blue-50"
-                          : "border-slate-200 bg-white"
-                      }`}
-                    >
-                      <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
-                        <div>
-                          <p className="font-medium text-slate-900">
-                            {book.title}
-                          </p>
+                    const selected =
+                      selectedBook?.id === book.id;
 
-                          <p className="mt-1 text-sm text-slate-500">
-                            Kode: {book.code}
-                          </p>
-                        </div>
-
-                        <p className="text-sm text-slate-600">
-                          {book.status ===
-                          "AVAILABLE"
-                            ? "Tersedia"
-                            : book.status ===
-                                "BORROWED"
-                              ? "Dipinjam"
-                              : "Tidak aktif"}
-                        </p>
-                      </div>
-
-                      <div className="mt-3 grid grid-cols-2 gap-3 text-sm">
-                        <div>
-                          <p className="text-slate-500">
-                            Total copy
-                          </p>
-
-                          <p className="font-medium text-slate-900">
-                            {book.totalCopies}
-                          </p>
-                        </div>
-
-                        <div>
-                          <p className="text-slate-500">
-                            Tersedia
-                          </p>
-
-                          <p className="font-medium text-slate-900">
-                            {book.availableCopies}
-                          </p>
-                        </div>
-                      </div>
-
-                      <Button
-                        type="button"
-                        className="mt-4"
-                        disabled={unavailable}
-                        loading={
-                          selected &&
-                          copyLoading
-                        }
-                        onClick={() =>
-                          selectBook(book)
-                        }
+                    return (
+                      <div
+                        key={book.id}
+                        className={`rounded-lg border p-4 ${
+                          selected
+                            ? "border-blue-500 bg-blue-50"
+                            : "border-slate-200 bg-white"
+                        }`}
                       >
-                        {unavailable
-                          ? "Tidak tersedia"
-                          : selected
-                            ? "Buku dipilih"
-                            : "Pilih Buku"}
-                      </Button>
+                        {/* BOOK HEADER */}
 
-                      {selected && (
-                        <div className="mt-4 border-t border-slate-200 pt-4">
-                          <p className="text-sm font-medium text-slate-700">
-                            Pilih copy buku
-                          </p>
-
-                          <p className="mt-1 text-xs text-slate-500">
-                            Pilih satu atau lebih
-                            copy yang tersedia.
-                          </p>
-
-                          {copyError && (
-                            <p
-                              role="alert"
-                              className="mt-3 text-sm text-red-600"
-                            >
-                              {copyError}
+                        <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+                          <div>
+                            <p className="font-medium text-slate-900">
+                              {book.title}
                             </p>
-                          )}
 
-                          {copyLoading ? (
-                            <p className="mt-4 text-sm text-slate-500">
-                              Memuat copy buku...
+                            <p className="mt-1 text-sm text-slate-500">
+                              Kode: {book.code}
                             </p>
-                          ) : (
-                            <div className="mt-4 space-y-2">
-                              {bookCopies.map(
-                                (copy) => {
-                                  const
-                                    unavailableCopy =
+
+                            {book.author && (
+                              <p className="mt-1 text-sm text-slate-500">
+                                Penulis: {book.author}
+                              </p>
+                            )}
+
+                            {book.isbn && (
+                              <p className="mt-1 text-xs text-slate-400">
+                                ISBN: {book.isbn}
+                              </p>
+                            )}
+                          </div>
+
+                          <p className="text-sm font-medium text-slate-600">
+                            {book.status === "AVAILABLE"
+                              ? "Tersedia"
+                              : book.status === "BORROWED"
+                                ? "Dipinjam"
+                                : "Tidak aktif"}
+                          </p>
+                        </div>
+
+                        {/* COPY INFO */}
+
+                        <div className="mt-4 grid grid-cols-2 gap-3">
+                          <div className="rounded-lg bg-slate-50 p-3">
+                            <p className="text-xs text-slate-500">
+                              Total copy
+                            </p>
+
+                            <p className="mt-1 text-lg font-semibold text-slate-900">
+                              {book.totalCopies}
+                            </p>
+                          </div>
+
+                          <div className="rounded-lg bg-slate-50 p-3">
+                            <p className="text-xs text-slate-500">
+                              Tersedia
+                            </p>
+
+                            <p className="mt-1 text-lg font-semibold text-slate-900">
+                              {book.availableCopies}
+                            </p>
+                          </div>
+                        </div>
+
+                        {/* SELECT BOOK */}
+
+                        <Button
+                          type="button"
+                          className="mt-4"
+                          disabled={unavailable}
+                          loading={
+                            selected && copyLoading
+                          }
+                          onClick={() =>
+                            selectBook(book)
+                          }
+                        >
+                          {unavailable
+                            ? "Tidak tersedia"
+                            : selected
+                              ? "Buku dipilih"
+                              : "Pilih Buku"}
+                        </Button>
+
+                        {/* COPY LIST */}
+
+                        {selected && (
+                          <div className="mt-4 border-t border-slate-200 pt-4">
+                            <p className="text-sm font-medium text-slate-700">
+                              Pilih copy buku
+                            </p>
+
+                            <p className="mt-1 text-xs text-slate-500">
+                              Pilih satu atau lebih
+                              copy yang tersedia.
+                            </p>
+
+                            {copyError && (
+                              <p
+                                role="alert"
+                                className="mt-3 text-sm text-red-600"
+                              >
+                                {copyError}
+                              </p>
+                            )}
+
+                            {copyLoading ? (
+                              <p className="mt-4 text-sm text-slate-500">
+                                Memuat copy buku...
+                              </p>
+                            ) : bookCopies.length === 0 ? (
+                              <div className="mt-4 rounded-lg border border-slate-200 bg-slate-50 p-4">
+                                <p className="text-sm font-medium text-slate-800">
+                                  Tidak ada copy buku
+                                  yang tersedia.
+                                </p>
+
+                                <p className="mt-1 text-xs text-slate-500">
+                                  Semua copy buku
+                                  sedang dipinjam atau
+                                  tidak dapat digunakan.
+                                </p>
+                              </div>
+                            ) : (
+                              <div className="mt-4 space-y-2">
+                                {bookCopies.map(
+                                  (copy) => {
+                                    const unavailableCopy =
                                       copy.status !==
                                       "AVAILABLE";
 
-                                  const
-                                    checked =
+                                    const checked =
                                       selectedCopyIds.includes(
                                         copy.id,
                                       );
 
-                                  return (
-                                    <label
-                                      key={
-                                        copy.id
-                                      }
-                                      className={`flex cursor-pointer items-center gap-3 rounded-lg border p-3 ${
-                                        unavailableCopy
-                                          ? "cursor-not-allowed bg-slate-100 opacity-60"
-                                          : checked
-                                            ? "border-blue-500 bg-blue-50"
-                                            : "border-slate-200 bg-white"
-                                      }`}
-                                    >
-                                      <input
-                                        type="checkbox"
-                                        checked={
-                                          checked
-                                        }
-                                        disabled={
+                                    return (
+                                      <label
+                                        key={copy.id}
+                                        className={`flex items-center gap-3 rounded-lg border p-3 ${
                                           unavailableCopy
-                                        }
-                                        onChange={() =>
-                                          toggleCopy(
-                                            copy,
-                                          )
-                                        }
-                                        className="h-4 w-4"
-                                      />
-
-                                      <div>
-                                        <p className="text-sm font-medium text-slate-900">
-                                          {
-                                            copy.code
+                                            ? "cursor-not-allowed bg-slate-100 opacity-60"
+                                            : checked
+                                              ? "border-blue-500 bg-blue-50"
+                                              : "border-slate-200 bg-white"
+                                        }`}
+                                      >
+                                        <input
+                                          type="checkbox"
+                                          checked={checked}
+                                          disabled={
+                                            unavailableCopy
                                           }
-                                        </p>
+                                          onChange={() =>
+                                            toggleCopy(
+                                              copy,
+                                            )
+                                          }
+                                          className="h-4 w-4"
+                                        />
 
-                                        <p className="text-xs text-slate-500">
-                                          Status:{" "}
-                                          {copy.status ===
-                                          "AVAILABLE"
-                                            ? "Tersedia"
-                                            : copy.status ===
-                                                "BORROWED"
-                                              ? "Dipinjam"
+                                        <div>
+                                          <p className="text-sm font-medium text-slate-900">
+                                            {copy.code}
+                                          </p>
+
+                                          <p className="text-xs text-slate-500">
+                                            Status:{" "}
+                                            {copy.status ===
+                                            "AVAILABLE"
+                                              ? "Tersedia"
                                               : copy.status ===
-                                                  "INACTIVE"
-                                                ? "Tidak aktif"
-                                                : "Hilang"}
-                                        </p>
-                                      </div>
-                                    </label>
-                                  );
-                                },
-                              )}
-                            </div>
-                          )}
+                                                  "BORROWED"
+                                                ? "Dipinjam"
+                                                : copy.status ===
+                                                    "INACTIVE"
+                                                  ? "Tidak aktif"
+                                                  : "Hilang"}
+                                          </p>
+                                        </div>
+                                      </label>
+                                    );
+                                  },
+                                )}
+                              </div>
+                            )}
 
-                          <p className="mt-3 text-sm text-slate-600">
-                            Copy dipilih:{" "}
-                            <span className="font-semibold">
-                              {
-                                selectedCopyIds.length
-                              }
-                            </span>
-                          </p>
-                        </div>
-                      )}
-                    </div>
-                  );
-                })}
-              </div>
-            )}
+                            <p className="mt-3 text-sm text-slate-600">
+                              Copy dipilih:{" "}
+                              <span className="font-semibold">
+                                {
+                                  selectedCopyIds.length
+                                }
+                              </span>
+                            </p>
+                          </div>
+                        )}
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
           </Card>
         )}
+
+        {/* =================================================
+            3. DATE
+        ================================================= */}
 
         {selectedBook && (
           <Card className="mt-5 p-6">
@@ -870,15 +1245,13 @@ export default function NewLoanPage() {
                     event.target.value;
 
                   setBorrowedAt(value);
-                  setDateError("");
 
-                  if (
-                    dueAt &&
-                    value > dueAt
-                  ) {
+                  if (dueAt && value > dueAt) {
                     setDateError(
                       "Tanggal jatuh tempo tidak boleh sebelum tanggal peminjaman.",
                     );
+                  } else {
+                    setDateError("");
                   }
                 }}
                 required
@@ -888,9 +1261,7 @@ export default function NewLoanPage() {
                 id="due-at"
                 label="Tanggal jatuh tempo"
                 type="date"
-                min={
-                  borrowedAt || undefined
-                }
+                min={borrowedAt || undefined}
                 value={dueAt}
                 onChange={(event) => {
                   const value =
@@ -905,6 +1276,7 @@ export default function NewLoanPage() {
                     setDateError(
                       "Tanggal jatuh tempo tidak boleh sebelum tanggal peminjaman.",
                     );
+
                     return;
                   }
 
@@ -925,6 +1297,10 @@ export default function NewLoanPage() {
           </Card>
         )}
 
+        {/* =================================================
+            4. SUMMARY
+        ================================================= */}
+
         {selectedMember &&
           selectedBook &&
           selectedCopyIds.length > 0 &&
@@ -941,6 +1317,9 @@ export default function NewLoanPage() {
               </p>
 
               <div className="mt-5 space-y-5">
+
+                {/* MEMBER */}
+
                 <div>
                   <p className="text-sm text-slate-500">
                     Anggota
@@ -953,7 +1332,13 @@ export default function NewLoanPage() {
                   <p className="mt-1 text-sm text-slate-500">
                     {selectedMember.memberNumber}
                   </p>
+
+                  <p className="text-sm text-slate-500">
+                    {selectedMember.phone}
+                  </p>
                 </div>
+
+                {/* BOOK */}
 
                 <div>
                   <p className="text-sm text-slate-500">
@@ -981,8 +1366,7 @@ export default function NewLoanPage() {
                         const copy =
                           bookCopies.find(
                             (item) =>
-                              item.id ===
-                              copyId,
+                              item.id === copyId,
                           );
 
                         return (
@@ -997,6 +1381,8 @@ export default function NewLoanPage() {
                     )}
                   </div>
                 </div>
+
+                {/* DATE */}
 
                 <div className="grid gap-4 border-t border-slate-200 pt-5 sm:grid-cols-2">
                   <div>
@@ -1029,6 +1415,8 @@ export default function NewLoanPage() {
                 </div>
               </div>
 
+              {/* SUBMIT */}
+
               <div className="mt-5 border-t border-slate-200 pt-5">
                 {submitError && (
                   <p
@@ -1050,6 +1438,10 @@ export default function NewLoanPage() {
               </div>
             </Card>
           )}
+
+        {/* =================================================
+            SUCCESS
+        ================================================= */}
 
         {successLoan && (
           <Card className="mt-5 p-6">
@@ -1076,15 +1468,36 @@ export default function NewLoanPage() {
                 </p>
               </div>
 
-              <Button
-                type="button"
-                className="mt-5"
-                onClick={() => {
-                  router.push("/transactions");
-                }}
-              >
-                Kembali ke Transaksi
-              </Button>
+              <div className="mt-5 flex flex-col gap-3 sm:flex-row">
+                <Button
+                  type="button"
+                  onClick={() => {
+                    router.push("/transactions");
+                  }}
+                >
+                  Kembali ke Transaksi
+                </Button>
+
+                <Button
+                  type="button"
+                  variant="secondary"
+                  onClick={() => {
+                    setSuccessLoan(null);
+                    setSelectedMember(null);
+                    setSelectedBook(null);
+                    setSelectedCopyIds([]);
+                    setBookCopies([]);
+                    setBooks([]);
+                    setBookQuery("");
+                    setBorrowedAt("");
+                    setDueAt("");
+                    setDateError("");
+                    setSubmitError("");
+                  }}
+                >
+                  Peminjaman Baru
+                </Button>
+              </div>
             </div>
           </Card>
         )}

@@ -27,6 +27,8 @@ export default function TransactionsPage() {
   const [error, setError] = useState("");
 
   const [search, setSearch] = useState("");
+  const [debouncedSearch, setDebouncedSearch] = useState("");
+
   const [status, setStatus] = useState<
     TransactionStatus | ""
   >("");
@@ -57,9 +59,19 @@ export default function TransactionsPage() {
     loadTransactions();
   }, []);
 
+  useEffect(() => {
+    const timer = window.setTimeout(() => {
+      setDebouncedSearch(search);
+    }, 400);
+
+    return () => {
+      window.clearTimeout(timer);
+    };
+  }, [search]);
+
   const filteredTransactions = useMemo(
     () => {
-      const keyword = search
+      const keyword = debouncedSearch
         .trim()
         .toLowerCase();
 
@@ -113,7 +125,7 @@ export default function TransactionsPage() {
     },
     [
       transactions,
-      search,
+      debouncedSearch,
       status,
       startDate,
       endDate,
