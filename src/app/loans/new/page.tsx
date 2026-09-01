@@ -1,18 +1,19 @@
 "use client";
 
-import { FormEvent, useEffect, useState } from "react";
+import { FormEvent, useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 
 import Card from "@/components/ui/Card";
 import Input from "@/components/ui/Input";
 import Button from "@/components/ui/Button";
+import AppHeader from "@/components/ui/AppHeader";
+import BackLink from "@/components/ui/BackLink";
 
 import {
   createMember,
   getMembers,
   searchMembers,
   searchBooks,
-  getAvailableBooks,
   getBookCopies,
   createLoan,
 } from "@/lib/mock-api";
@@ -40,6 +41,7 @@ const EMPTY_MEMBER_ERRORS: MemberFormErrors = {
 
 export default function NewLoanPage() {
   const router = useRouter();
+  const successRef = useRef<HTMLDivElement>(null);
 
   // =====================================================
   // MEMBER SEARCH
@@ -113,6 +115,27 @@ export default function NewLoanPage() {
   const [successLoan, setSuccessLoan] =
     useState<Loan | null>(null);
 
+  function formatDate(value: string) {
+    const date = new Date(`${value.slice(0, 10)}T00:00:00`);
+
+    return Number.isNaN(date.getTime())
+      ? "-"
+      : date.toLocaleDateString("id-ID", {
+          day: "2-digit",
+          month: "2-digit",
+          year: "numeric",
+        });
+  }
+
+  useEffect(() => {
+    if (successLoan) {
+      successRef.current?.scrollIntoView({
+        behavior: "smooth",
+        block: "start",
+      });
+    }
+  }, [successLoan]);
+
   // =====================================================
   // SEARCH MEMBER WITH DEBOUNCE
   // =====================================================
@@ -121,8 +144,6 @@ export default function NewLoanPage() {
     if (selectedMember || showMemberForm) {
       return;
     }
-
-    setMemberLoading(true);
 
     let cancelled = false;
 
@@ -168,12 +189,8 @@ export default function NewLoanPage() {
 
   useEffect(() => {
     if (!selectedMember) {
-      setBooks([]);
-      setBookLoading(false);
       return;
     }
-
-    setBookLoading(true);
 
     let cancelled = false;
 
@@ -465,7 +482,7 @@ export default function NewLoanPage() {
   // =====================================================
 
   async function handleSubmitLoan() {
-    if (submitLoading) {
+    if (submitLoading || successLoan) {
       return;
     }
 
@@ -576,6 +593,31 @@ export default function NewLoanPage() {
     setSuccessLoan(null);
   }
 
+  function resetLoanForm() {
+    setMemberQuery("");
+    setMembers([]);
+    setSelectedMember(null);
+    setMemberError("");
+    setShowMemberForm(false);
+    setMemberName("");
+    setMemberPhone("");
+    setMemberIdentityNumber("");
+    setMemberEmail("");
+    setMemberFormErrors(EMPTY_MEMBER_ERRORS);
+    setBookQuery("");
+    setBooks([]);
+    setSelectedBook(null);
+    setBookError("");
+    setBookCopies([]);
+    setSelectedCopyIds([]);
+    setCopyError("");
+    setBorrowedAt("");
+    setDueAt("");
+    setDateError("");
+    setSubmitError("");
+    setSuccessLoan(null);
+  }
+
   // =====================================================
   // RENDER
   // =====================================================
@@ -586,30 +628,19 @@ export default function NewLoanPage() {
           HEADER
       ================================================= */}
 
-      <header className="border-b border-slate-200 bg-white">
-        <div className="mx-auto flex max-w-7xl items-center px-4 py-4 sm:px-6 lg:px-8">
-          <div>
-            <h1 className="text-xl font-bold text-slate-900">
-              BukuFlow
-            </h1>
+      <AppHeader subtitle="Catat Peminjaman" />
 
-            <p className="text-sm text-slate-500">
-              Catat Peminjaman
-            </p>
-          </div>
-        </div>
-      </header>
-
-      <div className="mx-auto max-w-4xl px-4 py-6 sm:px-6 lg:px-8">
+      <div className="page-container py-6">
 
         {/* =================================================
             TITLE
         ================================================= */}
 
         <div className="mb-6">
-          <h2 className="text-2xl font-bold text-slate-900">
+          <BackLink href="/dashboard" />
+          <h1 className="mt-2 text-2xl font-bold text-slate-900">
             Peminjaman Buku
-          </h2>
+          </h1>
 
           <p className="mt-1 text-sm text-slate-500">
             Pilih anggota, buku, copy buku, dan tanggal
@@ -621,7 +652,11 @@ export default function NewLoanPage() {
             1. MEMBER
         ================================================= */}
 
-        <Card className="p-6">
+        <div
+          inert={Boolean(successLoan) || undefined}
+          className={successLoan ? "pointer-events-none opacity-60" : ""}
+        >
+        <Card className="p-4 sm:p-6">
           <h3 className="text-lg font-semibold text-slate-900">
             1. Cari Anggota
           </h3>
@@ -763,7 +798,7 @@ export default function NewLoanPage() {
         ================================================= */}
 
         {showMemberForm && !selectedMember && (
-          <Card className="mt-5 p-6">
+          <Card className="mt-5 p-4 sm:p-6">
             <h3 className="text-lg font-semibold text-slate-900">
               Buat Anggota Baru
             </h3>
@@ -775,7 +810,7 @@ export default function NewLoanPage() {
 
             <form
               onSubmit={handleCreateMember}
-              className="mt-5 space-y-4"
+              className="mt-5 grid gap-4 sm:grid-cols-2"
             >
               <Input
                 id="member-name"
@@ -887,7 +922,7 @@ export default function NewLoanPage() {
                 autoComplete="email"
               />
 
-              <div className="flex flex-col gap-3 sm:flex-row">
+              <div className="flex flex-col gap-3 sm:col-span-2 sm:flex-row">
                 <Button
                   type="submit"
                   loading={memberFormLoading}
@@ -918,7 +953,7 @@ export default function NewLoanPage() {
         ================================================= */}
 
         {selectedMember && (
-          <Card className="mt-5 p-6">
+          <Card className="mt-5 p-4 sm:p-6">
             <h3 className="text-lg font-semibold text-slate-900">
               2. Pilih Buku
             </h3>
@@ -1224,7 +1259,7 @@ export default function NewLoanPage() {
         ================================================= */}
 
         {selectedBook && (
-          <Card className="mt-5 p-6">
+          <Card className="mt-5 p-4 sm:p-6">
             <h3 className="text-lg font-semibold text-slate-900">
               3. Tanggal Peminjaman
             </h3>
@@ -1306,7 +1341,7 @@ export default function NewLoanPage() {
           selectedCopyIds.length > 0 &&
           borrowedAt &&
           dueAt && (
-            <Card className="mt-5 p-6">
+            <Card className="mt-5 p-4 sm:p-6">
               <h3 className="text-lg font-semibold text-slate-900">
                 4. Ringkasan Peminjaman
               </h3>
@@ -1391,11 +1426,7 @@ export default function NewLoanPage() {
                     </p>
 
                     <p className="mt-1 font-medium text-slate-900">
-                      {new Date(
-                        `${borrowedAt}T00:00:00`,
-                      ).toLocaleDateString(
-                        "id-ID",
-                      )}
+                      {formatDate(borrowedAt)}
                     </p>
                   </div>
 
@@ -1405,11 +1436,7 @@ export default function NewLoanPage() {
                     </p>
 
                     <p className="mt-1 font-medium text-slate-900">
-                      {new Date(
-                        `${dueAt}T00:00:00`,
-                      ).toLocaleDateString(
-                        "id-ID",
-                      )}
+                      {formatDate(dueAt)}
                     </p>
                   </div>
                 </div>
@@ -1430,7 +1457,7 @@ export default function NewLoanPage() {
                 <Button
                   type="button"
                   loading={submitLoading}
-                  disabled={submitLoading}
+                  disabled={submitLoading || Boolean(successLoan)}
                   onClick={handleSubmitLoan}
                 >
                   Konfirmasi Peminjaman
@@ -1438,13 +1465,15 @@ export default function NewLoanPage() {
               </div>
             </Card>
           )}
+        </div>
 
         {/* =================================================
             SUCCESS
         ================================================= */}
 
         {successLoan && (
-          <Card className="mt-5 p-6">
+          <div ref={successRef} className="scroll-mt-6">
+            <Card className="mt-5 border-green-200 bg-green-50 p-4 sm:p-6">
             <div
               role="status"
               aria-live="polite"
@@ -1468,6 +1497,14 @@ export default function NewLoanPage() {
                 </p>
               </div>
 
+              <div className="mt-4 grid gap-4 border-t border-green-200 pt-4 text-sm sm:grid-cols-2">
+                <div><p className="text-slate-500">Anggota</p><p className="mt-1 font-medium text-slate-900">{selectedMember?.name ?? "-"}</p></div>
+                <div><p className="text-slate-500">Buku</p><p className="mt-1 font-medium text-slate-900">{selectedBook?.title ?? "-"}</p></div>
+                <div><p className="text-slate-500">Copy</p><p className="mt-1 font-medium text-slate-900">{bookCopies.filter((copy) => selectedCopyIds.includes(copy.id)).map((copy) => copy.code).join(", ") || "-"}</p></div>
+                <div><p className="text-slate-500">Tanggal peminjaman</p><p className="mt-1 font-medium text-slate-900">{formatDate(successLoan.borrowedAt)}</p></div>
+                <div><p className="text-slate-500">Jatuh tempo</p><p className="mt-1 font-medium text-slate-900">{formatDate(successLoan.dueAt)}</p></div>
+              </div>
+
               <div className="mt-5 flex flex-col gap-3 sm:flex-row">
                 <Button
                   type="button"
@@ -1475,31 +1512,20 @@ export default function NewLoanPage() {
                     router.push("/transactions");
                   }}
                 >
-                  Kembali ke Transaksi
+                  Lihat Riwayat Transaksi
                 </Button>
 
                 <Button
                   type="button"
                   variant="secondary"
-                  onClick={() => {
-                    setSuccessLoan(null);
-                    setSelectedMember(null);
-                    setSelectedBook(null);
-                    setSelectedCopyIds([]);
-                    setBookCopies([]);
-                    setBooks([]);
-                    setBookQuery("");
-                    setBorrowedAt("");
-                    setDueAt("");
-                    setDateError("");
-                    setSubmitError("");
-                  }}
+                  onClick={resetLoanForm}
                 >
-                  Peminjaman Baru
+                  Catat Peminjaman Baru
                 </Button>
               </div>
             </div>
-          </Card>
+            </Card>
+          </div>
         )}
       </div>
     </main>

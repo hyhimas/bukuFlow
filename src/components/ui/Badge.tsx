@@ -10,10 +10,10 @@ export default function Badge({
   variant = "neutral",
 }: BadgeProps) {
   const styles = {
-    success: "bg-green-50 text-green-700 border-green-200",
-    warning: "bg-yellow-50 text-yellow-700 border-yellow-200",
-    danger: "bg-red-50 text-red-700 border-red-200",
-    neutral: "bg-slate-50 text-slate-700 border-slate-200",
+    success: "bg-success-surface text-success border-success-border",
+    warning: "bg-warning-surface text-warning border-warning-border",
+    danger: "bg-danger-surface text-danger border-danger-border",
+    neutral: "bg-neutral-surface text-app-text-muted border-neutral-border",
   };
 
   return (

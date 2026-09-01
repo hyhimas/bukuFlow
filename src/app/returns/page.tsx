@@ -1,11 +1,17 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 
 import Button from "@/components/ui/Button";
 import Card from "@/components/ui/Card";
 import Input from "@/components/ui/Input";
 import Badge from "@/components/ui/Badge";
+import AppHeader from "@/components/ui/AppHeader";
+import BackLink from "@/components/ui/BackLink";
+import ConfirmationDialog from "@/components/ui/ConfirmationDialog";
+import EmptyState from "@/components/ui/EmptyState";
+import FeedbackPanel from "@/components/ui/FeedbackPanel";
+import LoadingState from "@/components/ui/LoadingState";
 
 import {
   getReturnLoans,
@@ -15,6 +21,8 @@ import {
 import type { ReturnLoanData, Loan } from "@/lib/types";
 
 export default function ReturnsPage() {
+  const detailRef = useRef<HTMLDivElement>(null);
+  const successRef = useRef<HTMLDivElement>(null);
   const [loans, setLoans] = useState<ReturnLoanData[]>([]);
   const [filteredLoans, setFilteredLoans] =
     useState<ReturnLoanData[]>([]);
@@ -36,6 +44,22 @@ export default function ReturnsPage() {
 
   const [successLoan, setSuccessLoan] =
     useState<Loan | null>(null);
+  const [returnedCopies, setReturnedCopies] = useState<string[]>([]);
+  const [showConfirmation, setShowConfirmation] = useState(false);
+
+  function formatDate(value?: string) {
+    if (!value) return "-";
+
+    const date = new Date(`${value.slice(0, 10)}T00:00:00`);
+
+    return Number.isNaN(date.getTime())
+      ? "-"
+      : date.toLocaleDateString("id-ID", {
+          day: "2-digit",
+          month: "2-digit",
+          year: "numeric",
+        });
+  }
 
   useEffect(() => {
     async function loadLoans() {
@@ -107,6 +131,24 @@ export default function ReturnsPage() {
     };
   }, [query, loans]);
 
+  useEffect(() => {
+    if (selectedLoan) {
+      detailRef.current?.scrollIntoView({
+        behavior: "smooth",
+        block: "start",
+      });
+    }
+  }, [selectedLoan]);
+
+  useEffect(() => {
+    if (successLoan) {
+      successRef.current?.scrollIntoView({
+        behavior: "smooth",
+        block: "start",
+      });
+    }
+  }, [successLoan]);
+
   function selectLoan(loanData: ReturnLoanData) {
     setSelectedLoan(loanData);
     setSelectedItemIds([]);
@@ -152,6 +194,11 @@ export default function ReturnsPage() {
       );
 
       setSuccessLoan(loan);
+      setReturnedCopies(
+        selectedLoan.items
+          .filter(({ loanItem }) => selectedItemIds.includes(loanItem.id))
+          .map(({ book, bookCopy }) => `${book.title} (${bookCopy.code})`),
+      );
       setSelectedItemIds([]);
 
       const updatedLoans = loans
@@ -193,10 +240,8 @@ export default function ReturnsPage() {
   if (loading) {
     return (
       <main className="min-h-screen bg-slate-50">
-        <div className="mx-auto max-w-5xl px-4 py-8">
-          <p className="text-sm text-slate-500">
-            Memuat transaksi aktif...
-          </p>
+        <div className="page-container py-8">
+          <LoadingState label="Memuat transaksi aktif..." />
         </div>
       </main>
     );
@@ -204,25 +249,14 @@ export default function ReturnsPage() {
 
   return (
     <main className="min-h-screen bg-slate-50">
-      <header className="border-b border-slate-200 bg-white">
-        <div className="mx-auto flex max-w-7xl items-center px-4 py-4 sm:px-6 lg:px-8">
-          <div>
-            <h1 className="text-xl font-bold text-slate-900">
-              BukuFlow
-            </h1>
+      <AppHeader subtitle="Catat Pengembalian" />
 
-            <p className="text-sm text-slate-500">
-              Catat Pengembalian
-            </p>
-          </div>
-        </div>
-      </header>
-
-      <div className="mx-auto max-w-5xl px-4 py-6 sm:px-6 lg:px-8">
+      <div className="page-container py-6">
         <div className="mb-6">
-          <h2 className="text-2xl font-bold text-slate-900">
+          <BackLink href="/dashboard" />
+          <h1 className="mt-2 text-2xl font-bold text-slate-900">
             Pengembalian Buku
-          </h2>
+          </h1>
 
           <p className="mt-1 text-sm text-slate-500">
             Cari transaksi aktif untuk memproses pengembalian.
@@ -230,7 +264,8 @@ export default function ReturnsPage() {
         </div>
 
         {successLoan && (
-          <Card className="mb-5 p-6">
+          <div ref={successRef} className="scroll-mt-6">
+            <Card role="status" aria-live="polite" className="mb-5 border-green-200 bg-green-50 p-4 sm:p-6">
             <h3 className="text-lg font-semibold text-slate-900">
               Pengembalian Berhasil
             </h3>
@@ -243,7 +278,22 @@ export default function ReturnsPage() {
               berhasil dicatat.
             </p>
 
-            <p className="mt-3 text-sm text-slate-600">
+            <div className="mt-4 grid gap-4 border-t border-green-200 pt-4 text-sm sm:grid-cols-2">
+              <div>
+                <p className="text-slate-500">Buku/copy dikembalikan</p>
+                <p className="mt-1 font-medium text-slate-900">
+                  {returnedCopies.join(", ") || "-"}
+                </p>
+              </div>
+              <div>
+                <p className="text-slate-500">Tanggal pengembalian</p>
+                <p className="mt-1 font-medium text-slate-900">
+                  {formatDate(successLoan.returnedAt)}
+                </p>
+              </div>
+            </div>
+
+            <p className="mt-4 text-sm text-slate-600">
               Status transaksi:{" "}
               <span className="font-semibold">
                 {successLoan.status === "COMPLETED"
@@ -253,7 +303,8 @@ export default function ReturnsPage() {
                     : "Aktif"}
               </span>
             </p>
-          </Card>
+            </Card>
+          </div>
         )}
 
         <Card className="p-6">
@@ -274,24 +325,25 @@ export default function ReturnsPage() {
           </div>
 
           {error && (
-            <p
-              role="alert"
-              className="mt-4 text-sm text-red-600"
-            >
-              {error}
-            </p>
+            <FeedbackPanel tone="error" className="mt-4">
+              <p>{error}</p>
+              <button
+                type="button"
+                onClick={() => window.location.reload()}
+                className="mt-3 min-h-11 rounded-lg border border-red-300 bg-white px-4 py-2 font-semibold text-red-700 transition hover:bg-red-50 focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 focus-visible:ring-offset-2"
+              >
+                Coba lagi
+              </button>
+            </FeedbackPanel>
           )}
 
           {!error &&
             filteredLoans.length === 0 && (
-              <div className="mt-5 rounded-lg border border-slate-200 bg-slate-50 p-6 text-center">
-                <p className="font-medium text-slate-800">
-                  Tidak ada transaksi aktif
-                </p>
-
-                <p className="mt-1 text-sm text-slate-500">
-                  Semua buku telah dikembalikan atau belum ada transaksi aktif.
-                </p>
+              <div className="mt-5">
+                <EmptyState
+                  title="Tidak ada transaksi aktif"
+                  description="Semua buku telah dikembalikan atau belum ada transaksi aktif."
+                />
               </div>
             )}
 
@@ -302,7 +354,12 @@ export default function ReturnsPage() {
                   key={item.loan.id}
                   type="button"
                   onClick={() => selectLoan(item)}
-                  className="w-full rounded-lg border border-slate-200 bg-white p-4 text-left transition hover:border-blue-300 hover:bg-blue-50 focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-500"
+                  aria-pressed={selectedLoan?.loan.id === item.loan.id}
+                  className={`w-full rounded-lg border p-4 text-left transition focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 ${
+                    selectedLoan?.loan.id === item.loan.id
+                      ? "border-blue-500 bg-blue-50 ring-1 ring-blue-200"
+                      : "border-slate-200 bg-white hover:border-blue-300 hover:bg-blue-50"
+                  }`}
                 >
                   <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
                     <div>
@@ -319,6 +376,10 @@ export default function ReturnsPage() {
                       </p>
                     </div>
 
+                    <div className="flex items-center gap-2">
+                      {selectedLoan?.loan.id === item.loan.id && (
+                        <span className="text-xs font-semibold text-blue-700">Dipilih</span>
+                      )}
                     <Badge
                       variant={
                         item.loan.status ===
@@ -332,6 +393,7 @@ export default function ReturnsPage() {
                         ? "Terlambat"
                         : "Aktif"}
                     </Badge>
+                    </div>
                   </div>
                 </button>
               ))}
@@ -340,9 +402,10 @@ export default function ReturnsPage() {
         </Card>
 
         {selectedLoan && (
-          <Card className="mt-5 p-6">
+          <div ref={detailRef} className="scroll-mt-6">
+            <Card className="mt-5 border-blue-200 p-4 sm:p-6">
             <h3 className="text-lg font-semibold text-slate-900">
-              2. Detail Pengembalian
+              Transaksi Dipilih
             </h3>
 
             <div className="mt-5 grid gap-4 sm:grid-cols-2">
@@ -353,6 +416,20 @@ export default function ReturnsPage() {
 
                 <p className="mt-1 font-medium text-slate-900">
                   {selectedLoan.loan.loanNumber}
+                </p>
+              </div>
+
+              <div>
+                <p className="text-sm text-slate-500">Jumlah item</p>
+                <p className="mt-1 font-medium text-slate-900">
+                  {selectedLoan.items.length} item
+                </p>
+              </div>
+
+              <div>
+                <p className="text-sm text-slate-500">Tanggal peminjaman</p>
+                <p className="mt-1 font-medium text-slate-900">
+                  {formatDate(selectedLoan.loan.borrowedAt)}
                 </p>
               </div>
 
@@ -376,9 +453,7 @@ export default function ReturnsPage() {
                 </p>
 
                 <p className="mt-1 font-medium text-slate-900">
-                  {new Date(
-                    `${selectedLoan.loan.dueAt}T00:00:00`,
-                  ).toLocaleDateString("id-ID")}
+                  {formatDate(selectedLoan.loan.dueAt)}
                 </p>
               </div>
 
@@ -403,9 +478,26 @@ export default function ReturnsPage() {
                   </Badge>
                 </div>
               </div>
+
+              <div className="sm:col-span-2">
+                <p className="text-sm text-slate-500">
+                  Buku/copy terkait
+                </p>
+
+                <p className="mt-1 font-medium text-slate-900">
+                  {selectedLoan.items
+                    .map(({ book, bookCopy }) =>
+                      `${book.title} (${bookCopy.code})`,
+                    )
+                    .join(", ")}
+                </p>
+              </div>
             </div>
 
-            <div className="mt-6">
+            <div className="mt-6 border-t border-slate-200 pt-6">
+              <h3 className="text-lg font-semibold text-slate-900">
+                Detail Pengembalian
+              </h3>
               <h4 className="font-medium text-slate-900">
                 Buku yang belum dikembalikan
               </h4>
@@ -491,7 +583,7 @@ export default function ReturnsPage() {
                 disabled={
                   selectedItemIds.length === 0
                 }
-                onClick={handleReturn}
+                onClick={() => setShowConfirmation(true)}
               >
                 Konfirmasi Pengembalian
               </Button>
@@ -509,9 +601,21 @@ export default function ReturnsPage() {
                 Batal
               </Button>
             </div>
-          </Card>
+            </Card>
+          </div>
         )}
       </div>
+      <ConfirmationDialog
+        open={showConfirmation}
+        title="Konfirmasi pengembalian"
+        description={`Anda akan mencatat pengembalian ${selectedItemIds.length} copy buku. Pastikan copy yang dipilih sudah sesuai.`}
+        confirmLabel="Ya, catat pengembalian"
+        onClose={() => setShowConfirmation(false)}
+        onConfirm={() => {
+          setShowConfirmation(false);
+          void handleReturn();
+        }}
+      />
     </main>
   );
 }

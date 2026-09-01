@@ -19,21 +19,22 @@ export default function Button({
   ...props
 }: ButtonProps) {
   const variantClass = {
-    primary: "bg-blue-600 text-white hover:bg-blue-700",
+    primary: "bg-brand text-white hover:bg-brand-strong",
     secondary:
-      "border border-slate-300 bg-white text-slate-700 hover:bg-slate-50",
+      "border border-app-border bg-app-surface text-app-text-muted hover:bg-neutral-surface",
     destructive:
-      "bg-red-600 text-white hover:bg-red-700",
+      "bg-danger text-white hover:bg-red-800",
   };
 
   return (
     <button
       {...props}
       disabled={disabled || loading}
-      className={`rounded-lg px-4 py-3 text-sm font-semibold transition
+      aria-busy={loading || undefined}
+      className={`min-h-11 rounded-lg px-4 py-3 text-sm font-semibold transition
         focus:outline-none
         focus-visible:ring-2
-        focus-visible:ring-blue-500
+        focus-visible:ring-brand
         focus-visible:ring-offset-2
         disabled:cursor-not-allowed
         disabled:opacity-60

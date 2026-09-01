@@ -1,26 +1,91 @@
 @import "tailwindcss";
 
 :root {
-  --background: #ffffff;
-  --foreground: #171717;
+  --background: #f8fafc;
+  --foreground: #0f172a;
 }
 
 @theme inline {
   --color-background: var(--background);
   --color-foreground: var(--foreground);
+  --color-brand: #2563eb;
+  --color-brand-strong: #1d4ed8;
+  --color-app-background: #f8fafc;
+  --color-app-surface: #ffffff;
+  --color-app-text: #0f172a;
+  --color-app-text-muted: #475569;
+  --color-app-border: #e2e8f0;
+  --color-success: #15803d;
+  --color-success-surface: #f0fdf4;
+  --color-success-border: #bbf7d0;
+  --color-warning: #a16207;
+  --color-warning-surface: #fefce8;
+  --color-warning-border: #fef08a;
+  --color-danger: #b91c1c;
+  --color-danger-surface: #fef2f2;
+  --color-danger-border: #fecaca;
+  --color-neutral-surface: #f8fafc;
+  --color-neutral-border: #e2e8f0;
+  --radius-app: 0.75rem;
+  --shadow-app: 0 1px 3px rgb(15 23 42 / 0.08);
   --font-sans: var(--font-geist-sans);
   --font-mono: var(--font-geist-mono);
-}
-
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
-  }
 }
 
 body {
   background: var(--background);
   color: var(--foreground);
-  font-family: Arial, Helvetica, sans-serif;
+  font-family: var(--font-geist-sans), Arial, Helvetica, sans-serif;
+}
+
+* {
+  scrollbar-color: #94a3b8 #f8fafc;
+  scrollbar-width: thin;
+}
+
+button,
+a,
+input,
+select {
+  -webkit-tap-highlight-color: transparent;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    scroll-behavior: auto !important;
+    transition-duration: 0.01ms !important;
+    animation-duration: 0.01ms !important;
+  }
+}
+
+::selection {
+  background: #dbeafe;
+  color: #172554;
+}
+
+.page-container {
+  width: 100%;
+  margin-inline: auto;
+  padding-inline: 1rem;
+}
+
+@media (min-width: 640px) {
+  .page-container {
+    padding-inline: 1.5rem;
+  }
+}
+
+@media (min-width: 768px) {
+  .page-container {
+    max-width: 76rem;
+    padding-inline: 2rem;
+  }
+}
+
+@media (min-width: 1280px) {
+  .page-container {
+    max-width: 80rem;
+  }
 }

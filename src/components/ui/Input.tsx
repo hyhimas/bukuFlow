@@ -14,11 +14,17 @@ export default function Input({
   className = "",
   ...props
 }: InputProps) {
+  const descriptionId = error
+    ? `${id}-error`
+    : helperText
+      ? `${id}-help`
+      : undefined;
+
   return (
     <div className="space-y-2">
       <label
         htmlFor={id}
-        className="block text-sm font-medium text-slate-700"
+        className="block text-sm font-medium text-app-text-muted"
       >
         {label}
       </label>
@@ -26,26 +32,28 @@ export default function Input({
       <input
         id={id}
         {...props}
-        className={`w-full rounded-lg border px-4 py-3 text-sm text-slate-900 outline-none transition
-          focus:border-blue-500
+        aria-invalid={Boolean(error) || undefined}
+        aria-describedby={descriptionId}
+        className={`w-full rounded-app border px-4 py-3 text-sm text-app-text outline-none transition
+          focus:border-brand
           focus:ring-2
           focus:ring-blue-100
           ${
             error
-              ? "border-red-400"
-              : "border-slate-300"
+              ? "border-danger"
+              : "border-app-border"
           }
           ${className}`}
       />
 
       {error && (
-        <p role="alert" className="text-sm text-red-600">
+        <p id={`${id}-error`} role="alert" className="text-sm text-danger">
           {error}
         </p>
       )}
 
       {!error && helperText && (
-        <p className="text-sm text-slate-500">
+        <p id={`${id}-help`} className="text-sm text-app-text-muted">
           {helperText}
         </p>
       )}

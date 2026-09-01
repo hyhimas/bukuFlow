@@ -5,8 +5,11 @@ import { useRouter } from "next/navigation";
 
 import Card from "@/components/ui/Card";
 import Badge from "@/components/ui/Badge";
+import AppHeader from "@/components/ui/AppHeader";
+import FeedbackPanel from "@/components/ui/FeedbackPanel";
+import LoadingState from "@/components/ui/LoadingState";
 
-import { clearSession, getSession } from "@/lib/auth";
+import { getSession } from "@/lib/auth";
 import { getDashboard } from "@/lib/mock-api";
 import type { Loan, UserRole } from "@/lib/types";
 
@@ -33,6 +36,18 @@ function getStatusVariant(
   if (status === "CANCELLED") return "danger";
 
   return "neutral";
+}
+
+function formatDate(value: string) {
+  const date = new Date(`${value.slice(0, 10)}T00:00:00`);
+
+  return Number.isNaN(date.getTime())
+    ? "-"
+    : date.toLocaleDateString("id-ID", {
+        day: "2-digit",
+        month: "2-digit",
+        year: "numeric",
+      });
 }
 
 export default function DashboardPage() {
@@ -70,18 +85,11 @@ export default function DashboardPage() {
     loadDashboard();
   }, [router]);
 
-  function handleLogout() {
-    clearSession();
-    router.replace("/login");
-  }
-
   if (loading) {
     return (
       <main className="min-h-screen bg-slate-50">
-        <div className="mx-auto max-w-7xl px-4 py-8">
-          <p className="text-sm text-slate-500">
-            Memuat dashboard...
-          </p>
+        <div className="page-container py-8">
+          <LoadingState label="Memuat dashboard..." />
         </div>
       </main>
     );
@@ -95,9 +103,16 @@ export default function DashboardPage() {
             Dashboard tidak dapat dimuat
           </h1>
 
-          <p className="mt-2 text-sm text-red-600">
-            {error}
-          </p>
+          <FeedbackPanel tone="error" className="mt-3">
+            <p>{error}</p>
+            <button
+              type="button"
+              onClick={() => window.location.reload()}
+              className="mt-3 min-h-11 rounded-app border border-danger-border bg-app-surface px-4 py-2 font-semibold text-danger transition hover:bg-danger-surface focus:outline-none focus-visible:ring-2 focus-visible:ring-brand focus-visible:ring-offset-2"
+            >
+              Coba lagi
+            </button>
+          </FeedbackPanel>
         </Card>
       </main>
     );
@@ -107,47 +122,15 @@ export default function DashboardPage() {
 
   return (
     <main className="min-h-screen bg-slate-50">
-      <header className="border-b border-slate-200 bg-white">
-        <div className="mx-auto flex max-w-7xl items-center justify-between px-4 py-4 sm:px-6 lg:px-8">
-          <div>
-            <h1 className="text-xl font-bold text-slate-900">
-              BukuFlow
-            </h1>
+      <AppHeader
+        subtitle={isCompanyAdmin ? "Dashboard Company" : "Dashboard Operasional"}
+      />
 
-            <p className="text-sm text-slate-500">
-              {isCompanyAdmin
-                ? "Dashboard Company"
-                : "Dashboard Operasional"}
-            </p>
-          </div>
-
-          <div className="flex items-center gap-4">
-            <div className="hidden text-right sm:block">
-              <p className="text-sm font-medium text-slate-900">
-                {name}
-              </p>
-
-              <p className="text-xs text-slate-500">
-                {isCompanyAdmin ? "Admin Company" : "Petugas"}
-              </p>
-            </div>
-
-            <button
-              type="button"
-              onClick={handleLogout}
-              className="rounded-lg border border-slate-300 px-3 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50 focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-500"
-            >
-              Keluar
-            </button>
-          </div>
-        </div>
-      </header>
-
-      <div className="mx-auto max-w-7xl px-4 py-6 sm:px-6 lg:px-8">
+      <div className="page-container py-6">
         <div className="mb-6">
-          <h2 className="text-2xl font-bold text-slate-900">
+          <h1 className="text-2xl font-bold text-slate-900">
             Selamat datang, {name}
-          </h2>
+          </h1>
 
           <p className="mt-1 text-sm text-slate-500">
             Ringkasan operasional perpustakaan.
@@ -156,7 +139,7 @@ export default function DashboardPage() {
 
         <section
           aria-label="Ringkasan perpustakaan"
-          className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4"
+          className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4"
         >
           <Card className="p-5">
             <p className="text-sm text-slate-500">
@@ -200,7 +183,7 @@ export default function DashboardPage() {
             Akses cepat
           </h2>
 
-          <div className="mt-3 grid gap-4 sm:grid-cols-2">
+          <div className="mt-3 grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
             <a
               href="/loans/new"
               className="rounded-xl border border-slate-200 bg-white p-5 shadow-sm transition hover:border-blue-300 focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-500"
@@ -226,57 +209,22 @@ export default function DashboardPage() {
                 Proses pengembalian buku.
               </p>
             </a>
+
+            <a
+              href="/transactions"
+              className="rounded-xl border border-slate-200 bg-white p-5 shadow-sm transition hover:border-blue-300 focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-500"
+            >
+              <h3 className="font-semibold text-slate-900">
+                Riwayat Transaksi
+              </h3>
+
+              <p className="mt-1 text-sm text-slate-500">
+                Lihat riwayat transaksi.
+              </p>
+            </a>
           </div>
         </section>
 
-        {isCompanyAdmin && (
-          <section className="mt-6">
-            <h2 className="text-lg font-semibold text-slate-900">
-              Administrasi
-            </h2>
-
-            <div className="mt-3 grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-              <a
-                href="/settings/users"
-                className="rounded-xl border border-slate-200 bg-white p-5 shadow-sm hover:border-blue-300"
-              >
-                <h3 className="font-semibold text-slate-900">
-                  Pengguna
-                </h3>
-
-                <p className="mt-1 text-sm text-slate-500">
-                  Kelola pengguna company.
-                </p>
-              </a>
-
-              <a
-                href="/settings/company"
-                className="rounded-xl border border-slate-200 bg-white p-5 shadow-sm hover:border-blue-300"
-              >
-                <h3 className="font-semibold text-slate-900">
-                  Company
-                </h3>
-
-                <p className="mt-1 text-sm text-slate-500">
-                  Kelola informasi company.
-                </p>
-              </a>
-
-              <a
-                href="/transactions"
-                className="rounded-xl border border-slate-200 bg-white p-5 shadow-sm hover:border-blue-300"
-              >
-                <h3 className="font-semibold text-slate-900">
-                  Riwayat Transaksi
-                </h3>
-
-                <p className="mt-1 text-sm text-slate-500">
-                  Lihat riwayat transaksi.
-                </p>
-              </a>
-            </div>
-          </section>
-        )}
 
         <Card className="mt-6 overflow-hidden">
           <div className="border-b border-slate-200 p-5">
@@ -309,9 +257,7 @@ export default function DashboardPage() {
 
                     <p className="mt-1 text-sm text-slate-500">
                       Jatuh tempo{" "}
-                      {new Date(
-                        loan.dueAt,
-                      ).toLocaleDateString("id-ID")}
+                      {formatDate(loan.dueAt)}
                     </p>
                   </div>
 

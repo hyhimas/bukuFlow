@@ -47,7 +47,7 @@ export default function LoginPage() {
 
   return (
     <main className="flex min-h-screen items-center justify-center bg-slate-50 px-4 py-8">
-      <div className="w-full max-w-md">
+      <div className="w-full max-w-sm md:max-w-lg xl:max-w-xl">
         <div className="mb-6 text-center">
           <h1 className="text-3xl font-bold text-slate-900">
             BukuFlow
@@ -58,7 +58,7 @@ export default function LoginPage() {
           </p>
         </div>
 
-        <Card className="p-6 sm:p-8">
+        <Card className="p-5 sm:p-6 md:p-8">
           <div className="mb-6">
             <h2 className="text-xl font-semibold text-slate-900">
               Masuk

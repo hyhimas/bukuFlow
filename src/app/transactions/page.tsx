@@ -6,22 +6,22 @@ import Badge from "@/components/ui/Badge";
 import Button from "@/components/ui/Button";
 import Card from "@/components/ui/Card";
 import Input from "@/components/ui/Input";
+import AppHeader from "@/components/ui/AppHeader";
+import BackLink from "@/components/ui/BackLink";
+import EmptyState from "@/components/ui/EmptyState";
+import FeedbackPanel from "@/components/ui/FeedbackPanel";
+import LoadingState from "@/components/ui/LoadingState";
 
 import { getTransactions } from "@/lib/mock-api";
 
 import type { Loan, TransactionData } from "@/lib/types";
 
-type TransactionStatus =
-  | "ACTIVE"
-  | "OVERDUE"
-  | "COMPLETED";
+type TransactionStatus = "ACTIVE" | "OVERDUE" | "COMPLETED";
 
 const PAGE_SIZE = 5;
 
 export default function TransactionsPage() {
-  const [transactions, setTransactions] = useState<
-    TransactionData[]
-  >([]);
+  const [transactions, setTransactions] = useState<TransactionData[]>([]);
 
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
@@ -29,9 +29,7 @@ export default function TransactionsPage() {
   const [search, setSearch] = useState("");
   const [debouncedSearch, setDebouncedSearch] = useState("");
 
-  const [status, setStatus] = useState<
-    TransactionStatus | ""
-  >("");
+  const [status, setStatus] = useState<TransactionStatus | "">("");
 
   const [startDate, setStartDate] = useState("");
   const [endDate, setEndDate] = useState("");
@@ -48,9 +46,7 @@ export default function TransactionsPage() {
 
         setTransactions(result);
       } catch {
-        setError(
-          "Riwayat transaksi gagal dimuat.",
-        );
+        setError("Riwayat transaksi gagal dimuat.");
       } finally {
         setLoading(false);
       }
@@ -69,68 +65,36 @@ export default function TransactionsPage() {
     };
   }, [search]);
 
-  const filteredTransactions = useMemo(
-    () => {
-      const keyword = debouncedSearch
-        .trim()
-        .toLowerCase();
+  const filteredTransactions = useMemo(() => {
+    const keyword = debouncedSearch.trim().toLowerCase();
 
-      return transactions.filter(
-        ({
-          loan,
-          member,
-          items,
-        }) => {
-          const matchesSearch =
-            keyword === "" ||
-            loan.loanNumber
-              .toLowerCase()
-              .includes(keyword) ||
-            member?.name
-              .toLowerCase()
-              .includes(keyword) ||
-            items.some(
-              ({ book, bookCopy }) =>
-                book?.title
-                  .toLowerCase()
-                  .includes(keyword) ||
-                bookCopy?.code
-                  .toLowerCase()
-                  .includes(keyword),
-            );
+    return transactions.filter(({ loan, member, items }) => {
+      const matchesSearch =
+        keyword === "" ||
+        loan.loanNumber.toLowerCase().includes(keyword) ||
+        member?.name.toLowerCase().includes(keyword) ||
+        items.some(
+          ({ book, bookCopy }) =>
+            book?.title.toLowerCase().includes(keyword) ||
+            bookCopy?.code.toLowerCase().includes(keyword),
+        );
 
-          const borrowedDate =
-            loan.borrowedAt.slice(0, 10);
+      const borrowedDate = getDateOnly(loan.borrowedAt);
 
-          const matchesStatus =
-            status === "" ||
-            loan.status === status;
+      const matchesStatus = status === "" || loan.status === status;
 
-          const matchesStartDate =
-            startDate === "" ||
-            borrowedDate >= startDate;
+      const dueDate = getDateOnly(loan.dueAt);
 
-          const matchesEndDate =
-            endDate === "" ||
-            borrowedDate <= endDate;
+      const matchesStartDate =
+        startDate === "" || (borrowedDate !== "" && borrowedDate >= startDate);
 
-          return (
-            matchesSearch &&
-            matchesStatus &&
-            matchesStartDate &&
-            matchesEndDate
-          );
-        },
+      const matchesEndDate =
+        endDate === "" || (dueDate !== "" && dueDate <= endDate);
+      return (
+        matchesSearch && matchesStatus && matchesStartDate && matchesEndDate
       );
-    },
-    [
-      transactions,
-      debouncedSearch,
-      status,
-      startDate,
-      endDate,
-    ],
-  );
+    });
+  }, [transactions, debouncedSearch, status, startDate, endDate]);
 
   function resetPagination() {
     setPage(1);
@@ -138,40 +102,53 @@ export default function TransactionsPage() {
 
   const totalPages = Math.max(
     1,
-    Math.ceil(
-      filteredTransactions.length /
-        PAGE_SIZE,
-    ),
+    Math.ceil(filteredTransactions.length / PAGE_SIZE),
   );
 
-  const paginatedTransactions =
-    filteredTransactions.slice(
-      (page - 1) * PAGE_SIZE,
-      page * PAGE_SIZE,
-    );
+  const currentPage = Math.min(page, totalPages);
 
-  function formatDate(
-    value?: string,
-  ) {
+  const paginatedTransactions = filteredTransactions.slice(
+    (currentPage - 1) * PAGE_SIZE,
+    currentPage * PAGE_SIZE,
+  );
+
+  function getDateOnly(value?: string) {
     if (!value) {
+      return "";
+    }
+
+    const isoDateMatch = value.match(/^(\d{4})-(\d{2})-(\d{2})/);
+
+    if (isoDateMatch) {
+      return isoDateMatch[0];
+    }
+
+    const date = new Date(value);
+
+    if (Number.isNaN(date.getTime())) {
+      return "";
+    }
+
+    const year = date.getFullYear();
+    const month = String(date.getMonth() + 1).padStart(2, "0");
+    const day = String(date.getDate()).padStart(2, "0");
+
+    return `${year}-${month}-${day}`;
+  }
+
+  function formatDate(value?: string) {
+    const dateOnly = getDateOnly(value);
+
+    if (!dateOnly) {
       return "-";
     }
 
-    return new Date(
-      value,
-    ).toLocaleDateString(
-      "id-ID",
-      {
-        day: "2-digit",
-        month: "2-digit",
-        year: "numeric",
-      },
-    );
+    const [year, month, day] = dateOnly.split("-");
+
+    return `${day}/${month}/${year}`;
   }
 
-  function getStatusLabel(
-    loanStatus: Loan["status"],
-  ) {
+  function getStatusLabel(loanStatus: Loan["status"]) {
     if (loanStatus === "ACTIVE") {
       return "Aktif";
     }
@@ -187,9 +164,7 @@ export default function TransactionsPage() {
     return loanStatus;
   }
 
-  function getStatusVariant(
-    loanStatus: Loan["status"],
-  ) {
+  function getStatusVariant(loanStatus: Loan["status"]) {
     if (loanStatus === "OVERDUE") {
       return "warning" as const;
     }
@@ -201,9 +176,7 @@ export default function TransactionsPage() {
     return "neutral" as const;
   }
 
-  function getBookList(
-    transaction: TransactionData,
-  ) {
+  function getBookList(transaction: TransactionData) {
     if (transaction.items.length === 0) {
       return "-";
     }
@@ -234,11 +207,9 @@ export default function TransactionsPage() {
   if (loading) {
     return (
       <main className="min-h-screen bg-slate-50">
-        <div className="mx-auto max-w-7xl px-4 py-8 sm:px-6 lg:px-8">
+        <div className="page-container py-8">
           <Card className="p-6">
-            <p className="text-sm text-slate-500">
-              Memuat riwayat transaksi...
-            </p>
+            <LoadingState label="Memuat riwayat transaksi..." />
           </Card>
         </div>
       </main>
@@ -247,23 +218,14 @@ export default function TransactionsPage() {
 
   return (
     <main className="min-h-screen bg-slate-50">
-      <header className="border-b border-slate-200 bg-white">
-        <div className="mx-auto max-w-7xl px-4 py-4 sm:px-6 lg:px-8">
-          <h1 className="text-xl font-bold text-slate-900">
-            BukuFlow
-          </h1>
+      <AppHeader subtitle="Riwayat Transaksi" />
 
-          <p className="text-sm text-slate-500">
-            Riwayat Transaksi
-          </p>
-        </div>
-      </header>
-
-      <div className="mx-auto max-w-7xl px-4 py-6 sm:px-6 lg:px-8">
+      <div className="page-container py-6">
         <div className="mb-6">
-          <h2 className="text-2xl font-bold text-slate-900">
+          <BackLink href="/dashboard" />
+          <h1 className="mt-2 text-2xl font-bold text-slate-900">
             Riwayat Transaksi
-          </h2>
+          </h1>
 
           <p className="mt-1 text-sm text-slate-500">
             Lihat riwayat peminjaman dan pengembalian.
@@ -271,30 +233,32 @@ export default function TransactionsPage() {
         </div>
 
         {error && (
-          <Card className="mb-5 p-6">
-            <p
-              role="alert"
-              className="text-sm text-red-600"
-            >
-              {error}
-            </p>
-          </Card>
+          <FeedbackPanel tone="error" className="mb-5">
+            <div>
+              <p>{error}</p>
+              <button
+                type="button"
+                onClick={() => window.location.reload()}
+                className="mt-3 min-h-11 rounded-lg border border-red-300 px-4 py-2 font-semibold transition hover:bg-red-50 focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 focus-visible:ring-offset-2"
+              >
+                Coba lagi
+              </button>
+            </div>
+          </FeedbackPanel>
         )}
 
-        <Card className="p-6">
+        <Card className="p-4 sm:p-6">
           <h3 className="text-lg font-semibold text-slate-900">
             Filter Transaksi
           </h3>
 
-          <div className="mt-5 grid gap-4 md:grid-cols-2 lg:grid-cols-4">
+          <div className="mt-5 grid gap-4 md:grid-cols-2 xl:grid-cols-4">
             <Input
               id="transaction-search"
               label="Pencarian"
               value={search}
               onChange={(event) => {
-                setSearch(
-                  event.target.value,
-                );
+                setSearch(event.target.value);
                 resetPagination();
               }}
               placeholder="Nomor, anggota, buku, copy..."
@@ -312,30 +276,18 @@ export default function TransactionsPage() {
                 id="transaction-status"
                 value={status}
                 onChange={(event) => {
-                  setStatus(
-                    event.target.value as
-                      | TransactionStatus
-                      | "",
-                  );
+                  setStatus(event.target.value as TransactionStatus | "");
                   resetPagination();
                 }}
                 className="mt-2 block w-full rounded-lg border border-slate-300 bg-white px-3 py-2.5 text-sm text-slate-900 outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-500"
               >
-                <option value="">
-                  Semua status
-                </option>
+                <option value="">Semua status</option>
 
-                <option value="ACTIVE">
-                  Aktif
-                </option>
+                <option value="ACTIVE">Aktif</option>
 
-                <option value="OVERDUE">
-                  Terlambat
-                </option>
+                <option value="OVERDUE">Terlambat</option>
 
-                <option value="COMPLETED">
-                  Selesai
-                </option>
+                <option value="COMPLETED">Selesai</option>
               </select>
             </div>
 
@@ -345,9 +297,7 @@ export default function TransactionsPage() {
               type="date"
               value={startDate}
               onChange={(event) => {
-                setStartDate(
-                  event.target.value,
-                );
+                setStartDate(event.target.value);
                 resetPagination();
               }}
             />
@@ -358,278 +308,191 @@ export default function TransactionsPage() {
               type="date"
               value={endDate}
               onChange={(event) => {
-                setEndDate(
-                  event.target.value,
-                );
+                setEndDate(event.target.value);
                 resetPagination();
               }}
             />
           </div>
 
-          <div className="mt-4 flex justify-end">
-            <Button
-              type="button"
-              variant="secondary"
-              onClick={resetFilters}
-            >
+          <div className="mt-4 flex justify-start md:justify-end">
+            <Button type="button" variant="secondary" onClick={resetFilters}>
               Reset Filter
             </Button>
           </div>
         </Card>
 
         {filteredTransactions.length === 0 ? (
-          <Card className="mt-5 p-8 text-center">
-            <h3 className="font-semibold text-slate-900">
-              Tidak ada transaksi
-            </h3>
-
-            <p className="mt-1 text-sm text-slate-500">
-              Tidak ada transaksi yang sesuai
-              dengan pencarian atau filter.
-            </p>
+          <Card className="mt-5 p-4">
+            <EmptyState
+              title="Tidak ada transaksi"
+              description="Tidak ada transaksi yang sesuai dengan pencarian atau filter."
+            />
           </Card>
         ) : (
           <>
-            <Card className="mt-5 hidden overflow-hidden md:block">
-              <div className="overflow-x-auto">
-                <table className="w-full text-left text-sm">
+            <Card className="mt-5 hidden overflow-hidden xl:block">
+              <div>
+                <table className="w-full table-fixed text-left text-sm">
                   <thead className="border-b border-slate-200 bg-slate-50">
                     <tr>
-                      <th className="px-5 py-4 font-semibold text-slate-700">
+                      <th className="whitespace-nowrap px-4 py-3 font-semibold text-slate-700">
                         Nomor transaksi
                       </th>
 
-                      <th className="px-5 py-4 font-semibold text-slate-700">
+                      <th className="whitespace-nowrap px-4 py-3 font-semibold text-slate-700">
                         Anggota
                       </th>
 
-                      <th className="px-5 py-4 font-semibold text-slate-700">
+                      <th className="px-4 py-3 font-semibold text-slate-700">
                         Buku
                       </th>
 
-                      <th className="px-5 py-4 font-semibold text-slate-700">
+                      <th className="whitespace-nowrap px-4 py-3 font-semibold text-slate-700">
                         Petugas
                       </th>
 
-                      <th className="px-5 py-4 font-semibold text-slate-700">
+                      <th className="whitespace-nowrap px-4 py-3 font-semibold text-slate-700">
                         Peminjaman
                       </th>
 
-                      <th className="px-5 py-4 font-semibold text-slate-700">
+                      <th className="whitespace-nowrap px-4 py-3 font-semibold text-slate-700">
                         Jatuh tempo
                       </th>
 
-                      <th className="px-5 py-4 font-semibold text-slate-700">
+                      <th className="whitespace-nowrap px-4 py-3 font-semibold text-slate-700">
                         Pengembalian
                       </th>
 
-                      <th className="px-5 py-4 font-semibold text-slate-700">
+                      <th className="whitespace-nowrap px-4 py-3 font-semibold text-slate-700">
                         Status
                       </th>
                     </tr>
                   </thead>
 
                   <tbody className="divide-y divide-slate-200">
-                    {paginatedTransactions.map(
-                      (transaction) => (
-                        <tr
-                          key={
-                            transaction.loan.id
-                          }
-                          className="bg-white"
-                        >
-                          <td className="px-5 py-4 font-medium text-slate-900">
-                            {
-                              transaction.loan
-                                .loanNumber
-                            }
-                          </td>
+                    {paginatedTransactions.map((transaction) => (
+                      <tr key={transaction.loan.id} className="bg-white">
+                        <td className="whitespace-nowrap px-4 py-3 font-medium text-slate-900">
+                          {transaction.loan.loanNumber}
+                        </td>
 
-                          <td className="px-5 py-4 text-slate-700">
-                            {transaction.member
-                              ?.name ?? "-"}
-                          </td>
+                        <td className="whitespace-nowrap px-4 py-3 text-slate-700">
+                          {transaction.member?.name ?? "-"}
+                        </td>
 
-                          <td className="max-w-sm px-5 py-4 text-slate-700">
-                            {getBookList(
-                              transaction,
-                            )}
-                          </td>
+                        <td className="max-w-xs px-4 py-3 leading-5 text-slate-700">
+                          {getBookList(transaction)}
+                        </td>
 
-                          <td className="px-5 py-4 text-slate-700">
-                            {transaction.user
-                              ?.name ?? "-"}
-                          </td>
+                        <td className="whitespace-nowrap px-4 py-3 text-slate-700">
+                          {transaction.user?.name ?? "-"}
+                        </td>
 
-                          <td className="px-5 py-4 text-slate-700">
-                            {formatDate(
-                              transaction.loan
-                                .borrowedAt,
-                            )}
-                          </td>
+                        <td className="whitespace-nowrap px-4 py-3 text-slate-700">
+                          {formatDate(transaction.loan.borrowedAt)}
+                        </td>
 
-                          <td className="px-5 py-4 text-slate-700">
-                            {formatDate(
-                              transaction.loan
-                                .dueAt,
-                            )}
-                          </td>
+                        <td className="whitespace-nowrap px-4 py-3 text-slate-700">
+                          {formatDate(transaction.loan.dueAt)}
+                        </td>
 
-                          <td className="px-5 py-4 text-slate-700">
-                            {formatDate(
-                              transaction.loan
-                                .returnedAt,
-                            )}
-                          </td>
+                        <td className="whitespace-nowrap px-4 py-3 text-slate-700">
+                          {formatDate(transaction.loan.returnedAt)}
+                        </td>
 
-                          <td className="px-5 py-4">
-                            <Badge
-                              variant={getStatusVariant(
-                                transaction.loan
-                                  .status,
-                              )}
-                            >
-                              {getStatusLabel(
-                                transaction.loan
-                                  .status,
-                              )}
-                            </Badge>
-                          </td>
-                        </tr>
-                      ),
-                    )}
+                        <td className="whitespace-nowrap px-4 py-3">
+                          <Badge
+                            variant={getStatusVariant(transaction.loan.status)}
+                          >
+                            {getStatusLabel(transaction.loan.status)}
+                          </Badge>
+                        </td>
+                      </tr>
+                    ))}
                   </tbody>
                 </table>
               </div>
             </Card>
 
-            <div className="mt-5 space-y-4 md:hidden">
-              {paginatedTransactions.map(
-                (transaction) => (
-                  <Card
-                    key={
-                      transaction.loan.id
-                    }
-                    className="p-5"
-                  >
-                    <div className="flex items-start justify-between gap-3">
-                      <div>
-                        <p className="font-semibold text-slate-900">
-                          {
-                            transaction.loan
-                              .loanNumber
-                          }
-                        </p>
+            <div className="mt-5 space-y-4 xl:hidden">
+              {paginatedTransactions.map((transaction) => (
+                <Card key={transaction.loan.id} className="p-5">
+                  <div className="flex items-start justify-between gap-3">
+                    <div>
+                      <p className="font-semibold text-slate-900">
+                        {transaction.loan.loanNumber}
+                      </p>
 
-                        <p className="mt-1 text-sm text-slate-500">
-                          {transaction.member
-                            ?.name ?? "-"}
-                        </p>
-                      </div>
-
-                      <Badge
-                        variant={getStatusVariant(
-                          transaction.loan
-                            .status,
-                        )}
-                      >
-                        {getStatusLabel(
-                          transaction.loan
-                            .status,
-                        )}
-                      </Badge>
+                      <p className="mt-1 text-sm text-slate-500">
+                        {transaction.member?.name ?? "-"}
+                      </p>
                     </div>
 
-                    <div className="mt-5 space-y-4 text-sm">
+                    <Badge variant={getStatusVariant(transaction.loan.status)}>
+                      {getStatusLabel(transaction.loan.status)}
+                    </Badge>
+                  </div>
+
+                  <div className="mt-5 space-y-4 text-sm">
+                    <div>
+                      <p className="text-slate-500">Buku</p>
+
+                      <p className="mt-1 text-slate-900">
+                        {getBookList(transaction)}
+                      </p>
+                    </div>
+
+                    <div>
+                      <p className="text-slate-500">Petugas</p>
+
+                      <p className="mt-1 text-slate-900">
+                        {transaction.user?.name ?? "-"}
+                      </p>
+                    </div>
+
+                    <div className="grid grid-cols-2 gap-4">
                       <div>
-                        <p className="text-slate-500">
-                          Buku
-                        </p>
+                        <p className="text-slate-500">Peminjaman</p>
 
                         <p className="mt-1 text-slate-900">
-                          {getBookList(
-                            transaction,
-                          )}
+                          {formatDate(transaction.loan.borrowedAt)}
                         </p>
                       </div>
 
                       <div>
-                        <p className="text-slate-500">
-                          Petugas
-                        </p>
+                        <p className="text-slate-500">Jatuh tempo</p>
 
                         <p className="mt-1 text-slate-900">
-                          {transaction.user
-                            ?.name ?? "-"}
-                        </p>
-                      </div>
-
-                      <div className="grid grid-cols-2 gap-4">
-                        <div>
-                          <p className="text-slate-500">
-                            Peminjaman
-                          </p>
-
-                          <p className="mt-1 text-slate-900">
-                            {formatDate(
-                              transaction.loan
-                                .borrowedAt,
-                            )}
-                          </p>
-                        </div>
-
-                        <div>
-                          <p className="text-slate-500">
-                            Jatuh tempo
-                          </p>
-
-                          <p className="mt-1 text-slate-900">
-                            {formatDate(
-                              transaction.loan
-                                .dueAt,
-                            )}
-                          </p>
-                        </div>
-                      </div>
-
-                      <div>
-                        <p className="text-slate-500">
-                          Pengembalian
-                        </p>
-
-                        <p className="mt-1 text-slate-900">
-                          {formatDate(
-                            transaction.loan
-                              .returnedAt,
-                          )}
+                          {formatDate(transaction.loan.dueAt)}
                         </p>
                       </div>
                     </div>
-                  </Card>
-                ),
-              )}
+
+                    <div>
+                      <p className="text-slate-500">Pengembalian</p>
+
+                      <p className="mt-1 text-slate-900">
+                        {formatDate(transaction.loan.returnedAt)}
+                      </p>
+                    </div>
+                  </div>
+                </Card>
+              ))}
             </div>
 
             {totalPages > 1 && (
               <div className="mt-5 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
                 <p className="text-sm text-slate-500">
-                  Halaman {page} dari{" "}
-                  {totalPages}
+                  Halaman {currentPage} dari {totalPages}
                 </p>
 
                 <div className="flex gap-2">
                   <Button
                     type="button"
                     variant="secondary"
-                    disabled={page === 1}
+                    disabled={currentPage === 1}
                     onClick={() =>
-                      setPage(
-                        (current) =>
-                          Math.max(
-                            1,
-                            current - 1,
-                          ),
-                      )
+                      setPage((current) => Math.max(1, current - 1))
                     }
                   >
                     Sebelumnya
@@ -638,17 +501,9 @@ export default function TransactionsPage() {
                   <Button
                     type="button"
                     variant="secondary"
-                    disabled={
-                      page === totalPages
-                    }
+                    disabled={currentPage === totalPages}
                     onClick={() =>
-                      setPage(
-                        (current) =>
-                          Math.min(
-                            totalPages,
-                            current + 1,
-                          ),
-                      )
+                      setPage((current) => Math.min(totalPages, current + 1))
                     }
                   >
                     Berikutnya

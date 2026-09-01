@@ -1,12 +1,17 @@
 import {
   mockBooks,
   mockBookCopies,
-  mockCompany,
-  mockCompanySettings,
-  mockCompanySettings2,
   mockLoanItems,
   mockLoans,
   mockMembers,
+  ensureMockStoreHydrated,
+  persistMockState,
+} from "./mock-store";
+
+import {
+  mockCompany,
+  mockCompanySettings,
+  mockCompanySettings2,
   mockUsers,
 } from "./mock-data";
 
@@ -23,6 +28,8 @@ import type {
   TransactionData,
 } from "./types";
 
+import { getSession } from "./auth";
+
 const MOCK_PASSWORD = "admin123";
 
 /* =========================================================
@@ -32,6 +39,48 @@ const MOCK_PASSWORD = "admin123";
 function delay(ms = 500) {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
+
+/**
+ * Mengambil session user yang sedang login.
+ * Semua operasi data yang terkait user menggunakan companyId dari session.
+ */
+function getCurrentSession() {
+  const session = getSession();
+
+  if (!session) {
+    throw new Error("Sesi pengguna tidak ditemukan.");
+  }
+
+  return session;
+}
+
+/**
+ * Mengambil company aktif berdasarkan companyId user.
+ */
+function getCurrentCompany(): Company {
+  const { user } = getCurrentSession();
+
+  if (user.companyId === mockCompany.id) {
+    return mockCompany;
+  }
+
+  if (user.companyId === "company-002") {
+    return {
+      id: "company-002",
+      code: "BF002",
+      name: "Perpustakaan Semarang",
+      logo: "",
+      address: "Semarang, Jawa Tengah",
+      status: "ACTIVE",
+      timezone: "Asia/Jakarta",
+      createdAt: "2026-08-01T08:00:00+07:00",
+      updatedAt: "2026-08-01T08:00:00+07:00",
+    };
+  }
+
+  throw new Error("Data company pengguna tidak ditemukan.");
+}
+
 
 /**
  * Menghitung jumlah copy berdasarkan status BookCopy.
@@ -126,6 +175,7 @@ export async function login(
   email: string,
   password: string,
 ): Promise<LoginResponse> {
+  ensureMockStoreHydrated();
   await delay();
 
   const user = mockUsers.find(
@@ -195,18 +245,21 @@ export interface DashboardResponse {
 }
 
 export async function getDashboard(): Promise<DashboardResponse> {
+  ensureMockStoreHydrated();
   await delay();
+
+  const companyId = getCurrentSession().user.companyId;
 
   syncAllBooks();
 
   const companyBooks = mockBooks.filter(
     (book) =>
-      book.companyId === mockCompany.id,
+      book.companyId === companyId,
   );
 
   const companyLoans = mockLoans.filter(
     (loan) =>
-      loan.companyId === mockCompany.id,
+      loan.companyId === companyId,
   );
 
   return {
@@ -268,7 +321,10 @@ export async function getDashboard(): Promise<DashboardResponse> {
 export async function searchMembers(
   query: string,
 ): Promise<Member[]> {
+  ensureMockStoreHydrated();
   await delay(300);
+
+  const companyId = getCurrentSession().user.companyId;
 
   const keyword =
     query.trim().toLowerCase();
@@ -280,7 +336,7 @@ export async function searchMembers(
   return mockMembers.filter(
     (member) =>
       member.companyId ===
-        mockCompany.id &&
+        companyId &&
       (
         member.name
           .toLowerCase()
@@ -307,7 +363,10 @@ export async function createMember(
     | "status"
   >,
 ): Promise<Member> {
+  ensureMockStoreHydrated();
   await delay();
+
+  const companyId = getCurrentSession().user.companyId;
 
   const now =
     new Date().toISOString();
@@ -316,12 +375,12 @@ export async function createMember(
     mockMembers.filter(
       (member) =>
         member.companyId ===
-        mockCompany.id,
+        companyId,
     ).length + 1;
 
   const member: Member = {
     id: `member-${Date.now()}`,
-    companyId: mockCompany.id,
+    companyId: companyId,
     memberNumber: `MBR-${String(
       nextMemberNumber,
     ).padStart(3, "0")}`,
@@ -337,6 +396,7 @@ export async function createMember(
   };
 
   mockMembers.push(member);
+  persistMockState();
 
   return member;
 }
@@ -350,7 +410,10 @@ export async function createMember(
  * mempunyai minimal satu copy AVAILABLE.
  */
 export async function getAvailableBooks(): Promise<Book[]> {
+  ensureMockStoreHydrated();
   await delay(300);
+
+  const companyId = getCurrentSession().user.companyId;
 
   syncAllBooks();
 
@@ -358,7 +421,7 @@ export async function getAvailableBooks(): Promise<Book[]> {
     .filter(
       (book) =>
         book.companyId ===
-          mockCompany.id &&
+          companyId &&
         book.status !== "INACTIVE" &&
         book.availableCopies > 0,
     )
@@ -379,9 +442,12 @@ export async function getAvailableBooks(): Promise<Book[]> {
 export async function searchBooks(
   query: string,
 ): Promise<Book[]> {
+  ensureMockStoreHydrated();
   await delay(300);
 
   syncAllBooks();
+
+  const companyId = getCurrentSession().user.companyId;
 
   const keyword =
     query.trim().toLowerCase();
@@ -390,7 +456,7 @@ export async function searchBooks(
     mockBooks.filter(
       (book) =>
         book.companyId ===
-          mockCompany.id &&
+          companyId &&
         book.status !== "INACTIVE" &&
         book.availableCopies > 0,
     );
@@ -431,14 +497,17 @@ export async function searchBooks(
 export async function getBookCopies(
   bookId: string,
 ): Promise<BookCopy[]> {
+  ensureMockStoreHydrated();
   await delay(300);
+
+  const companyId = getCurrentSession().user.companyId;
 
   return mockBookCopies
     .filter(
       (copy) =>
         copy.bookId === bookId &&
         copy.companyId ===
-          mockCompany.id,
+          companyId,
     )
     .map((copy) => ({
       ...copy,
@@ -450,12 +519,15 @@ export async function getBookCopies(
 ========================================================= */
 
 export async function getActiveLoans(): Promise<Loan[]> {
+  ensureMockStoreHydrated();
   await delay();
+
+  const companyId = getCurrentSession().user.companyId;
 
   return mockLoans.filter(
     (loan) =>
       loan.companyId ===
-        mockCompany.id &&
+        companyId &&
       (
         loan.status === "ACTIVE" ||
         loan.status === "OVERDUE"
@@ -529,7 +601,11 @@ function generateLoanNumber(
 export async function createLoan(
   data: CreateLoanData,
 ): Promise<Loan> {
+  ensureMockStoreHydrated();
   await delay();
+
+  const company = getCurrentCompany();
+  const companyId = company.id;
 
   syncAllBooks();
 
@@ -551,7 +627,7 @@ export async function createLoan(
     (item) =>
       item.id === data.memberId &&
       item.companyId ===
-        mockCompany.id &&
+        companyId &&
       item.status === "ACTIVE",
   );
 
@@ -569,7 +645,7 @@ export async function createLoan(
     (item) =>
       item.id === data.bookId &&
       item.companyId ===
-        mockCompany.id,
+        companyId,
   );
 
   if (!book) {
@@ -601,7 +677,7 @@ export async function createLoan(
         copy.bookId ===
           data.bookId &&
         copy.companyId ===
-          mockCompany.id,
+          companyId,
     );
 
   if (
@@ -657,18 +733,18 @@ export async function createLoan(
 
   const loanNumber =
     generateLoanNumber(
-      mockCompany,
+      company,
       data.borrowedAt,
     );
 
   const loan: Loan = {
     id: `loan-${Date.now()}`,
     companyId:
-      mockCompany.id,
+      companyId,
     loanNumber,
     memberId:
       data.memberId,
-    borrowedBy: "user-002",
+    borrowedBy: getCurrentSession().user.id,
     borrowedAt:
       data.borrowedAt,
     dueAt:
@@ -698,7 +774,7 @@ export async function createLoan(
             .toString(36)
             .slice(2)}`,
         companyId:
-          mockCompany.id,
+          companyId,
         loanId:
           loan.id,
         bookId:
@@ -725,6 +801,8 @@ export async function createLoan(
 
   syncBookAvailability(book);
 
+  persistMockState();
+
   return loan;
 }
 
@@ -735,7 +813,10 @@ export async function createLoan(
 export async function getTransactions(): Promise<
   TransactionData[]
 > {
+  ensureMockStoreHydrated();
   await delay();
+
+  const companyId = getCurrentSession().user.companyId;
 
   syncAllBooks();
 
@@ -743,7 +824,7 @@ export async function getTransactions(): Promise<
     .filter(
       (loan) =>
         loan.companyId ===
-        mockCompany.id,
+        companyId,
     )
     .map((loan) => {
       const member =
@@ -829,7 +910,10 @@ export async function returnLoanItems(
   loanId: string,
   loanItemIds: string[],
 ): Promise<Loan> {
+  ensureMockStoreHydrated();
   await delay();
+
+  const companyId = getCurrentSession().user.companyId;
 
   /* -----------------------------------------
      CARI LOAN
@@ -840,7 +924,7 @@ export async function returnLoanItems(
       (item) =>
         item.id === loanId &&
         item.companyId ===
-          mockCompany.id,
+          companyId,
     );
 
   if (!loan) {
@@ -858,7 +942,7 @@ export async function returnLoanItems(
       (item) =>
         item.loanId === loanId &&
         item.companyId ===
-          mockCompany.id &&
+          companyId &&
         loanItemIds.includes(
           item.id,
         ) &&
@@ -904,7 +988,7 @@ export async function returnLoanItems(
             bookCopy.bookId ===
               item.bookId &&
             bookCopy.companyId ===
-              mockCompany.id,
+              companyId,
         );
 
       if (copy) {
@@ -925,7 +1009,7 @@ export async function returnLoanItems(
             bookItem.id ===
               item.bookId &&
             bookItem.companyId ===
-              mockCompany.id,
+              companyId,
         );
 
       if (book) {
@@ -945,7 +1029,7 @@ export async function returnLoanItems(
       (item) =>
         item.loanId === loanId &&
         item.companyId ===
-          mockCompany.id &&
+          companyId &&
         item.status ===
           "BORROWED",
     );
@@ -986,6 +1070,8 @@ export async function returnLoanItems(
   loan.updatedAt =
     now;
 
+  persistMockState();
+
   return loan;
 }
 
@@ -996,7 +1082,10 @@ export async function returnLoanItems(
 export async function getReturnLoans(): Promise<
   ReturnLoanData[]
 > {
+  ensureMockStoreHydrated();
   await delay();
+
+  const companyId = getCurrentSession().user.companyId;
 
   syncAllBooks();
 
@@ -1004,7 +1093,7 @@ export async function getReturnLoans(): Promise<
     .filter(
       (loan) =>
         loan.companyId ===
-          mockCompany.id &&
+          companyId &&
         (
           loan.status ===
             "ACTIVE" ||
@@ -1029,7 +1118,7 @@ export async function getReturnLoans(): Promise<
               item.loanId ===
                 loan.id &&
               item.companyId ===
-                mockCompany.id &&
+                companyId &&
               item.status ===
                 "BORROWED",
           )
@@ -1040,7 +1129,7 @@ export async function getReturnLoans(): Promise<
                   item.id ===
                     loanItem.bookId &&
                   item.companyId ===
-                    mockCompany.id,
+                    companyId,
               );
 
             const bookCopy =
@@ -1051,7 +1140,7 @@ export async function getReturnLoans(): Promise<
                   item.bookId ===
                     loanItem.bookId &&
                   item.companyId ===
-                    mockCompany.id,
+                    companyId,
               );
 
             return {
@@ -1080,12 +1169,15 @@ export async function getReturnLoans(): Promise<
 }
 
 export async function getMembers(): Promise<Member[]> {
+  ensureMockStoreHydrated();
   await delay(300);
+
+  const companyId = getCurrentSession().user.companyId;
 
   return mockMembers
     .filter(
       (member) =>
-        member.companyId === mockCompany.id &&
+        member.companyId === companyId &&
         member.status === "ACTIVE",
     )
     .map((member) => ({
