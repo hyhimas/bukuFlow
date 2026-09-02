@@ -294,7 +294,7 @@ export async function getDashboard(): Promise<DashboardResponse> {
 
   return {
     /**
-     * Jumlah copy yang benar-benar AVAILABLE.
+     * Jumlah copy yang AVAILABLE.
      */
     booksAvailable: companyBooks.reduce(
       (total, book) =>
@@ -323,7 +323,7 @@ export async function getDashboard(): Promise<DashboardResponse> {
     ),
 
     activeLoans: companyLoans.filter(
-      (loan) => loan.status === "ACTIVE",
+      (loan) => loan.status === "ACTIVE" || loan.status === "OVERDUE",
     ).length,
 
     overdueLoans: companyLoans.filter(
@@ -570,12 +570,7 @@ export interface CreateLoanData {
 
 /**
  * Generate nomor transaksi berdasarkan PRD:
- *
  * [company_code]-[tahun]-[nomor_urut]
- *
- * Contoh:
- *
- * BF001-2026-000001
  */
 function generateLoanNumber(
   company: Company,

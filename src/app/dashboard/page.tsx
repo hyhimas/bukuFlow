@@ -105,6 +105,7 @@ export default function DashboardPage() {
 
           <FeedbackPanel tone="error" className="mt-3">
             <p>{error}</p>
+
             <button
               type="button"
               onClick={() => window.location.reload()}
@@ -123,7 +124,9 @@ export default function DashboardPage() {
   return (
     <main className="min-h-screen bg-slate-50">
       <AppHeader
-        subtitle={isCompanyAdmin ? "Dashboard Company" : "Dashboard Operasional"}
+        subtitle={
+          isCompanyAdmin ? "Dashboard Company" : "Dashboard Operasional"
+        }
       />
 
       <div className="page-container py-6">
@@ -137,100 +140,381 @@ export default function DashboardPage() {
           </p>
         </div>
 
+        {/* Statistik */}
         <section
           aria-label="Ringkasan perpustakaan"
           className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4"
         >
-          <Card className="p-5">
-            <p className="text-sm text-slate-500">
-              Buku tersedia
-            </p>
-            <p className="mt-2 text-3xl font-bold text-slate-900">
-              {data.booksAvailable}
-            </p>
+          {/* Buku tersedia */}
+          <Card className="p-5 transition hover:-translate-y-0.5 hover:shadow-md">
+            <div className="flex items-center justify-between gap-4">
+              <div>
+                <p className="text-sm text-slate-500">Buku tersedia</p>
+
+                <p className="mt-2 text-3xl font-bold text-slate-900">
+                  {data.booksAvailable}
+                </p>
+              </div>
+
+              <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-blue-50 text-blue-600">
+                <svg
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="currentColor"
+                  strokeWidth="1.8"
+                  className="h-5 w-5"
+                  aria-hidden="true"
+                >
+                  <path
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    d="M4 5.5A2.5 2.5 0 0 1 6.5 3H20v16H6.5A2.5 2.5 0 0 0 4 21.5v-16Z"
+                  />
+                  <path
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    d="M4 19a2.5 2.5 0 0 1 2.5-2.5H20"
+                  />
+                </svg>
+              </div>
+            </div>
           </Card>
 
-          <Card className="p-5">
-            <p className="text-sm text-slate-500">
-              Buku sedang dipinjam
-            </p>
-            <p className="mt-2 text-3xl font-bold text-slate-900">
-              {data.booksBorrowed}
-            </p>
+          {/* Buku sedang dipinjam */}
+          <Card className="p-5 transition hover:-translate-y-0.5 hover:shadow-md">
+            <div className="flex items-center justify-between gap-4">
+              <div>
+                <p className="text-sm text-slate-500">Buku sedang dipinjam</p>
+
+                <p className="mt-2 text-3xl font-bold text-slate-900">
+                  {data.booksBorrowed}
+                </p>
+              </div>
+
+              <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-blue-50 text-blue-600">
+                <svg
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="currentColor"
+                  strokeWidth="1.8"
+                  className="h-5 w-5"
+                  aria-hidden="true"
+                >
+                  <path
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    d="M5 4.5A2.5 2.5 0 0 1 7.5 2H20v17H7.5A2.5 2.5 0 0 0 5 21.5v-17Z"
+                  />
+                  <path
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    d="M5 18.5A2.5 2.5 0 0 1 7.5 16H20"
+                  />
+                  <path
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    d="M9 6h7M9 9h5"
+                  />
+                </svg>
+              </div>
+            </div>
           </Card>
 
-          <Card className="p-5">
-            <p className="text-sm text-slate-500">
-              Transaksi aktif
-            </p>
-            <p className="mt-2 text-3xl font-bold text-slate-900">
-              {data.activeLoans}
-            </p>
+          {/* Transaksi aktif */}
+          <Card className="p-5 transition hover:-translate-y-0.5 hover:shadow-md">
+            <div className="flex items-center justify-between gap-4">
+              <div>
+                <p className="text-sm text-slate-500">Transaksi aktif</p>
+
+                <p className="mt-2 text-3xl font-bold text-slate-900">
+                  {data.activeLoans}
+                </p>
+              </div>
+
+              <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-blue-50 text-blue-600">
+                <svg
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="currentColor"
+                  strokeWidth="1.8"
+                  className="h-5 w-5"
+                  aria-hidden="true"
+                >
+                  <path
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    d="M7 3h10a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2Z"
+                  />
+                  <path
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    d="M8 8h8M8 12h8M8 16h5"
+                  />
+                </svg>
+              </div>
+            </div>
           </Card>
 
-          <Card className="p-5">
-            <p className="text-sm text-slate-500">
-              Transaksi terlambat
-            </p>
-            <p className="mt-2 text-3xl font-bold text-slate-900">
-              {data.overdueLoans}
-            </p>
+          {/* Transaksi terlambat */}
+          <Card className="p-5 transition hover:-translate-y-0.5 hover:shadow-md">
+            <div className="flex items-center justify-between gap-4">
+              <div>
+                <p className="text-sm text-slate-500">Transaksi terlambat</p>
+
+                <p className="mt-2 text-3xl font-bold text-slate-900">
+                  {data.overdueLoans}
+                </p>
+              </div>
+
+              <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-blue-50 text-blue-600">
+                <svg
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="currentColor"
+                  strokeWidth="1.8"
+                  className="h-5 w-5"
+                  aria-hidden="true"
+                >
+                  <path
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    d="M12 3 21 20H3L12 3Z"
+                  />
+                  <path
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    d="M12 9v4"
+                  />
+                  <path
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    d="M12 16h.01"
+                  />
+                </svg>
+              </div>
+            </div>
           </Card>
         </section>
 
+        {/* Akses cepat */}
         <section className="mt-6">
-          <h2 className="text-lg font-semibold text-slate-900">
-            Akses cepat
-          </h2>
+          <h2 className="text-lg font-semibold text-slate-900">Akses cepat</h2>
 
-          <div className="mt-3 grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+          <div className="mt-3 grid gap-4 md:grid-cols-2 xl:grid-cols-6">
+            {/* Catat Peminjaman */}
             <a
               href="/loans/new"
-              className="rounded-xl border border-slate-200 bg-white p-5 shadow-sm transition hover:border-blue-300 focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-500"
+              className="group rounded-xl border border-slate-200 bg-white p-5 shadow-sm transition hover:-translate-y-0.5 hover:border-blue-300 hover:shadow-md focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 xl:col-span-2"
             >
-              <h3 className="font-semibold text-slate-900">
-                Catat Peminjaman
-              </h3>
+              <div className="flex gap-4">
+                <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-blue-50 text-blue-600">
+                  <svg
+                    viewBox="0 0 24 24"
+                    fill="none"
+                    stroke="currentColor"
+                    strokeWidth="1.8"
+                    className="h-5 w-5"
+                    aria-hidden="true"
+                  >
+                    <path
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                      d="M5 4.5A2.5 2.5 0 0 1 7.5 2H20v17H7.5A2.5 2.5 0 0 0 5 21.5v-17Z"
+                    />
+                    <path
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                      d="M12 7v6M9 10h6"
+                    />
+                  </svg>
+                </div>
 
-              <p className="mt-1 text-sm text-slate-500">
-                Catat transaksi peminjaman buku.
-              </p>
+                <div className="min-w-0">
+                  <h3 className="font-semibold text-slate-900">
+                    Catat Peminjaman
+                  </h3>
+
+                  <p className="mt-1 text-sm text-slate-500">
+                    Catat transaksi peminjaman buku.
+                  </p>
+                </div>
+              </div>
             </a>
 
+            {/* Catat Pengembalian */}
             <a
               href="/returns"
-              className="rounded-xl border border-slate-200 bg-white p-5 shadow-sm transition hover:border-blue-300 focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-500"
+              className="group rounded-xl border border-slate-200 bg-white p-5 shadow-sm transition hover:-translate-y-0.5 hover:border-blue-300 hover:shadow-md focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 xl:col-span-2"
             >
-              <h3 className="font-semibold text-slate-900">
-                Catat Pengembalian
-              </h3>
+              <div className="flex gap-4">
+                <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-blue-50 text-blue-600">
+                  <svg
+                    viewBox="0 0 24 24"
+                    fill="none"
+                    stroke="currentColor"
+                    strokeWidth="1.8"
+                    className="h-5 w-5"
+                    aria-hidden="true"
+                  >
+                    <path
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                      d="M5 4.5A2.5 2.5 0 0 1 7.5 2H20v17H7.5A2.5 2.5 0 0 0 5 21.5v-17Z"
+                    />
+                    <path
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                      d="M12 14V8M9.5 11.5 12 14l2.5-2.5"
+                    />
+                  </svg>
+                </div>
 
-              <p className="mt-1 text-sm text-slate-500">
-                Proses pengembalian buku.
-              </p>
+                <div className="min-w-0">
+                  <h3 className="font-semibold text-slate-900">
+                    Catat Pengembalian
+                  </h3>
+
+                  <p className="mt-1 text-sm text-slate-500">
+                    Proses pengembalian buku.
+                  </p>
+                </div>
+              </div>
             </a>
 
+            {/* Riwayat Transaksi */}
             <a
               href="/transactions"
-              className="rounded-xl border border-slate-200 bg-white p-5 shadow-sm transition hover:border-blue-300 focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-500"
+              className={`group rounded-xl border border-slate-200 bg-white p-5 shadow-sm transition hover:-translate-y-0.5 hover:border-blue-300 hover:shadow-md focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 xl:col-span-2 ${
+                !isCompanyAdmin ? "md:col-span-2" : ""
+              }`}
             >
-              <h3 className="font-semibold text-slate-900">
-                Riwayat Transaksi
-              </h3>
+              <div className="flex gap-4">
+                <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-blue-50 text-blue-600">
+                  <svg
+                    viewBox="0 0 24 24"
+                    fill="none"
+                    stroke="currentColor"
+                    strokeWidth="1.8"
+                    className="h-5 w-5"
+                    aria-hidden="true"
+                  >
+                    <path
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                      d="M12 7v5l3 2"
+                    />
+                    <path
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                      d="M20.5 12a8.5 8.5 0 1 1-2.49-6.01"
+                    />
+                    <path
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                      d="M20 4v5h-5"
+                    />
+                  </svg>
+                </div>
 
-              <p className="mt-1 text-sm text-slate-500">
-                Lihat riwayat transaksi.
-              </p>
+                <div className="min-w-0">
+                  <h3 className="font-semibold text-slate-900">
+                    Riwayat Transaksi
+                  </h3>
+
+                  <p className="mt-1 text-sm text-slate-500">
+                    Lihat riwayat transaksi.
+                  </p>
+                </div>
+              </div>
             </a>
+
+            {isCompanyAdmin && (
+              <>
+                {/* Company */}
+                <a
+                  href="/settings/company"
+                  className="group rounded-xl border border-slate-200 bg-white p-5 shadow-sm transition hover:-translate-y-0.5 hover:border-blue-300 hover:shadow-md focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 xl:col-span-3"
+                >
+                  <div className="flex gap-4">
+                    <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-blue-50 text-blue-600">
+                      <svg
+                        viewBox="0 0 24 24"
+                        fill="none"
+                        stroke="currentColor"
+                        strokeWidth="1.8"
+                        className="h-5 w-5"
+                        aria-hidden="true"
+                      >
+                        <path
+                          strokeLinecap="round"
+                          strokeLinejoin="round"
+                          d="M4 21V5a2 2 0 0 1 2-2h12a2 2 0 0 1 2 2v16"
+                        />
+                        <path
+                          strokeLinecap="round"
+                          strokeLinejoin="round"
+                          d="M8 7h2M14 7h2M8 11h2M14 11h2M8 15h2M14 15h2M10 21v-3h4v3"
+                        />
+                      </svg>
+                    </div>
+
+                    <div className="min-w-0">
+                      <h3 className="font-semibold text-slate-900">Company</h3>
+
+                      <p className="mt-1 text-sm text-slate-500">
+                        Kelola informasi dan pengaturan company.
+                      </p>
+                    </div>
+                  </div>
+                </a>
+
+                {/* Pengguna */}
+                <a
+                  href="/settings/users"
+                  className="group rounded-xl border border-slate-200 bg-white p-5 shadow-sm transition hover:-translate-y-0.5 hover:border-blue-300 hover:shadow-md focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 md:col-span-2 xl:col-span-3"
+                >
+                  <div className="flex gap-4">
+                    <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-blue-50 text-blue-600">
+                      <svg
+                        viewBox="0 0 24 24"
+                        fill="none"
+                        stroke="currentColor"
+                        strokeWidth="1.8"
+                        className="h-5 w-5"
+                        aria-hidden="true"
+                      >
+                        <path
+                          strokeLinecap="round"
+                          strokeLinejoin="round"
+                          d="M16 21v-2a4 4 0 0 0-4-4H7a4 4 0 0 0-4 4v2"
+                        />
+                        <circle cx="9.5" cy="7" r="4" />
+                        <path
+                          strokeLinecap="round"
+                          strokeLinejoin="round"
+                          d="M17 8a4 4 0 0 1 0 7.75M21 21v-2a4 4 0 0 0-3-3.87"
+                        />
+                      </svg>
+                    </div>
+
+                    <div className="min-w-0">
+                      <h3 className="font-semibold text-slate-900">Pengguna</h3>
+
+                      <p className="mt-1 text-sm text-slate-500">
+                        Kelola pengguna dan akses sistem.
+                      </p>
+                    </div>
+                  </div>
+                </a>
+              </>
+            )}
           </div>
         </section>
 
-
+        {/* Aktivitas Terbaru */}
         <Card className="mt-6 overflow-hidden">
           <div className="border-b border-slate-200 p-5">
-            <h2 className="font-semibold text-slate-900">
-              Aktivitas Terbaru
-            </h2>
+            <h2 className="font-semibold text-slate-900">Aktivitas Terbaru</h2>
           </div>
 
           {data.recentLoans.length === 0 ? (
@@ -256,8 +540,7 @@ export default function DashboardPage() {
                     </p>
 
                     <p className="mt-1 text-sm text-slate-500">
-                      Jatuh tempo{" "}
-                      {formatDate(loan.dueAt)}
+                      Jatuh tempo {formatDate(loan.dueAt)}
                     </p>
                   </div>
 

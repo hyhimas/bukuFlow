@@ -2,6 +2,9 @@
 
 import { useEffect, useRef, useState } from "react";
 
+import { useRouter } from "next/navigation";
+import { getSession } from "@/lib/auth";
+
 import Button from "@/components/ui/Button";
 import Card from "@/components/ui/Card";
 import Input from "@/components/ui/Input";
@@ -21,6 +24,8 @@ import {
 import type { ReturnLoanData, Loan } from "@/lib/types";
 
 export default function ReturnsPage() {
+  const router = useRouter();
+
   const detailRef = useRef<HTMLDivElement>(null);
   const successRef = useRef<HTMLDivElement>(null);
   const [loans, setLoans] = useState<ReturnLoanData[]>([]);
@@ -60,6 +65,14 @@ export default function ReturnsPage() {
           year: "numeric",
         });
   }
+
+  useEffect(() => {
+  const session = getSession();
+
+  if (!session) {
+    router.replace("/login");
+  }
+}, [router]);
 
   useEffect(() => {
     async function loadLoans() {

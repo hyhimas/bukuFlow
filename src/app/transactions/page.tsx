@@ -12,6 +12,9 @@ import EmptyState from "@/components/ui/EmptyState";
 import FeedbackPanel from "@/components/ui/FeedbackPanel";
 import LoadingState from "@/components/ui/LoadingState";
 
+import { useRouter } from "next/navigation";
+import { getSession } from "@/lib/auth";
+
 import { getTransactions } from "@/lib/mock-api";
 
 import type { Loan, TransactionData } from "@/lib/types";
@@ -20,7 +23,10 @@ type TransactionStatus = "ACTIVE" | "OVERDUE" | "COMPLETED";
 
 const PAGE_SIZE = 5;
 
+
 export default function TransactionsPage() {
+  const router = useRouter();
+  
   const [transactions, setTransactions] = useState<TransactionData[]>([]);
 
   const [loading, setLoading] = useState(true);
@@ -35,6 +41,14 @@ export default function TransactionsPage() {
   const [endDate, setEndDate] = useState("");
 
   const [page, setPage] = useState(1);
+
+  useEffect(() => {
+  const session = getSession();
+
+  if (!session) {
+    router.replace("/login");
+  }
+}, [router]);
 
   useEffect(() => {
     async function loadTransactions() {
