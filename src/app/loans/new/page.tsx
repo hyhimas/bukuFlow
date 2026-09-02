@@ -1118,7 +1118,7 @@ export default function NewLoanPage() {
                         <Button
                           type="button"
                           className="mt-4"
-                          disabled={unavailable}
+                          disabled={unavailable || selected}
                           loading={
                             selected && copyLoading
                           }

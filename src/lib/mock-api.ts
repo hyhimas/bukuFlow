@@ -152,15 +152,44 @@ function syncBookAvailability(book: Book) {
   return counts;
 }
 
-/**
- * Sinkronisasi semua buku.
- */
+
 function syncAllBooks() {
   mockBooks.forEach((book) => {
     syncBookAvailability(book);
   });
 }
 
+
+function syncLoanStatuses() {
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+
+  let changed = false;
+
+  mockLoans.forEach((loan) => {
+    if (loan.status !== "ACTIVE") {
+      return;
+    }
+
+    const dueDate = new Date(
+      `${loan.dueAt.slice(0, 10)}T00:00:00`,
+    );
+
+    if (Number.isNaN(dueDate.getTime())) {
+      return;
+    }
+
+    if (dueDate < today) {
+      loan.status = "OVERDUE";
+      loan.updatedAt = new Date().toISOString();
+      changed = true;
+    }
+  });
+
+  if (changed) {
+    persistMockState();
+  }
+}
 /* =========================================================
    LOGIN
 ========================================================= */
@@ -250,6 +279,7 @@ export async function getDashboard(): Promise<DashboardResponse> {
 
   const companyId = getCurrentSession().user.companyId;
 
+  syncLoanStatuses();
   syncAllBooks();
 
   const companyBooks = mockBooks.filter(
@@ -487,13 +517,7 @@ export async function searchBooks(
     }));
 }
 
-/**
- * Mengambil seluruh copy dari sebuah buku.
- *
- * Copy dengan status BORROWED,
- * INACTIVE, dan LOST tetap dikembalikan
- * supaya UI dapat menampilkan statusnya.
- */
+
 export async function getBookCopies(
   bookId: string,
 ): Promise<BookCopy[]> {
@@ -519,11 +543,12 @@ export async function getBookCopies(
 ========================================================= */
 
 export async function getActiveLoans(): Promise<Loan[]> {
-  ensureMockStoreHydrated();
+ ensureMockStoreHydrated();
   await delay();
 
   const companyId = getCurrentSession().user.companyId;
 
+  syncLoanStatuses();
   return mockLoans.filter(
     (loan) =>
       loan.companyId ===
@@ -818,6 +843,7 @@ export async function getTransactions(): Promise<
 
   const companyId = getCurrentSession().user.companyId;
 
+  syncLoanStatuses();
   syncAllBooks();
 
   return mockLoans
@@ -914,6 +940,7 @@ export async function returnLoanItems(
   await delay();
 
   const companyId = getCurrentSession().user.companyId;
+  syncLoanStatuses();
 
   /* -----------------------------------------
      CARI LOAN
