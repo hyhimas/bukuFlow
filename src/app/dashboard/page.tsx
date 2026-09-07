@@ -31,8 +31,9 @@ const statusLabel: Record<Loan["status"], string> = {
 function getStatusVariant(
   status: Loan["status"],
 ): "success" | "warning" | "danger" | "neutral" {
-  if (status === "ACTIVE") return "success";
-  if (status === "OVERDUE") return "warning";
+  if (status === "ACTIVE") return "warning";
+  if (status === "OVERDUE") return "danger";
+  if (status === "COMPLETED") return "success";
   if (status === "CANCELLED") return "danger";
 
   return "neutral";
