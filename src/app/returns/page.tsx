@@ -16,10 +16,7 @@ import EmptyState from "@/components/ui/EmptyState";
 import FeedbackPanel from "@/components/ui/FeedbackPanel";
 import LoadingState from "@/components/ui/LoadingState";
 
-import {
-  getReturnLoans,
-  returnLoanItems,
-} from "@/lib/mock-api";
+import { getReturnLoans, returnLoanItems } from "@/lib/mock-api";
 
 import type { ReturnLoanData, Loan } from "@/lib/types";
 
@@ -29,26 +26,20 @@ export default function ReturnsPage() {
   const detailRef = useRef<HTMLDivElement>(null);
   const successModalCloseRef = useRef<HTMLButtonElement>(null);
   const [loans, setLoans] = useState<ReturnLoanData[]>([]);
-  const [filteredLoans, setFilteredLoans] =
-    useState<ReturnLoanData[]>([]);
+  const [filteredLoans, setFilteredLoans] = useState<ReturnLoanData[]>([]);
 
   const [query, setQuery] = useState("");
-  const [selectedLoan, setSelectedLoan] =
-    useState<ReturnLoanData | null>(null);
+  const [selectedLoan, setSelectedLoan] = useState<ReturnLoanData | null>(null);
 
-  const [selectedItemIds, setSelectedItemIds] =
-    useState<string[]>([]);
+  const [selectedItemIds, setSelectedItemIds] = useState<string[]>([]);
 
   const [loading, setLoading] = useState(true);
-  const [returnLoading, setReturnLoading] =
-    useState(false);
+  const [returnLoading, setReturnLoading] = useState(false);
 
   const [error, setError] = useState("");
-  const [returnError, setReturnError] =
-    useState("");
+  const [returnError, setReturnError] = useState("");
 
-  const [successLoan, setSuccessLoan] =
-    useState<Loan | null>(null);
+  const [successLoan, setSuccessLoan] = useState<Loan | null>(null);
   const [returnedCopies, setReturnedCopies] = useState<string[]>([]);
   const [showConfirmation, setShowConfirmation] = useState(false);
 
@@ -67,12 +58,12 @@ export default function ReturnsPage() {
   }
 
   useEffect(() => {
-  const session = getSession();
+    const session = getSession();
 
-  if (!session) {
-    router.replace("/login");
-  }
-}, [router]);
+    if (!session) {
+      router.replace("/login");
+    }
+  }, [router]);
 
   useEffect(() => {
     async function loadLoans() {
@@ -85,9 +76,7 @@ export default function ReturnsPage() {
         setLoans(result);
         setFilteredLoans(result);
       } catch {
-        setError(
-          "Transaksi aktif gagal dimuat.",
-        );
+        setError("Transaksi aktif gagal dimuat.");
       } finally {
         setLoading(false);
       }
@@ -117,19 +106,12 @@ export default function ReturnsPage() {
 
       const result = loans.filter(
         ({ loan, member, items }) =>
-          loan.loanNumber
-            .toLowerCase()
-            .includes(keyword) ||
-          member.name
-            .toLowerCase()
-            .includes(keyword) ||
-          items.some((item) =>
-            item.book.title
-              .toLowerCase()
-              .includes(keyword) ||
-            item.bookCopy.code
-              .toLowerCase()
-              .includes(keyword),
+          loan.loanNumber.toLowerCase().includes(keyword) ||
+          member.name.toLowerCase().includes(keyword) ||
+          items.some(
+            (item) =>
+              item.book.title.toLowerCase().includes(keyword) ||
+              item.bookCopy.code.toLowerCase().includes(keyword),
           ),
       );
 
@@ -178,9 +160,7 @@ export default function ReturnsPage() {
   function toggleItem(itemId: string) {
     setSelectedItemIds((current) => {
       if (current.includes(itemId)) {
-        return current.filter(
-          (id) => id !== itemId,
-        );
+        return current.filter((id) => id !== itemId);
       }
 
       return [...current, itemId];
@@ -191,26 +171,19 @@ export default function ReturnsPage() {
     setReturnError("");
 
     if (!selectedLoan) {
-      setReturnError(
-        "Transaksi belum dipilih.",
-      );
+      setReturnError("Transaksi belum dipilih.");
       return;
     }
 
     if (selectedItemIds.length === 0) {
-      setReturnError(
-        "Pilih minimal satu buku yang dikembalikan.",
-      );
+      setReturnError("Pilih minimal satu buku yang dikembalikan.");
       return;
     }
 
     setReturnLoading(true);
 
     try {
-      const loan = await returnLoanItems(
-        selectedLoan.loan.id,
-        selectedItemIds,
-      );
+      const loan = await returnLoanItems(selectedLoan.loan.id, selectedItemIds);
 
       setSuccessLoan(loan);
       setReturnedCopies(
@@ -233,8 +206,7 @@ export default function ReturnsPage() {
         })
         .filter(
           (item) =>
-            item.loan.status === "ACTIVE" ||
-            item.loan.status === "OVERDUE",
+            item.loan.status === "ACTIVE" || item.loan.status === "OVERDUE",
         );
 
       setLoans(updatedLoans);
@@ -242,9 +214,7 @@ export default function ReturnsPage() {
       setSelectedLoan(null);
     } catch (error) {
       setReturnError(
-        error instanceof Error
-          ? error.message
-          : "Pengembalian gagal diproses.",
+        error instanceof Error ? error.message : "Pengembalian gagal diproses.",
       );
     } finally {
       setReturnLoading(false);
@@ -274,17 +244,12 @@ export default function ReturnsPage() {
     const borrowedCount = items.filter(
       ({ loanItem }) => loanItem.status === "BORROWED",
     ).length;
+
     const returnedCount = items.filter(
       ({ loanItem }) => loanItem.status === "RETURNED",
     ).length;
 
-    if (returnedCount > 0 && borrowedCount > 0) {
-      return {
-        label: "Sebagian dikembalikan",
-        className: "border-amber-200 bg-amber-50 text-amber-800",
-      };
-    }
-
+    // Semua buku sudah dikembalikan
     if (borrowedCount === 0) {
       return {
         label: "Selesai",
@@ -292,10 +257,21 @@ export default function ReturnsPage() {
       };
     }
 
+    // Masih ada buku yang dipinjam dan transaksi terlambat
     if (loanData.loan.status === "OVERDUE") {
+      // Status transaksi tetap ringkas. Pengembalian sebagian
+      // sudah terlihat dari jumlah dan status tiap buku di bawah.
       return {
         label: "Terlambat",
-        className: "border-amber-200 bg-amber-50 text-amber-800",
+        className: "border-red-200 bg-red-50 text-red-800",
+      };
+    }
+
+    // Sebagian buku sudah dikembalikan
+    if (returnedCount > 0 && borrowedCount > 0) {
+      return {
+        label: "Sebagian dikembalikan",
+        className: "border-blue-200 bg-blue-50 text-blue-800",
       };
     }
 
@@ -303,16 +279,6 @@ export default function ReturnsPage() {
       label: "Dipinjam",
       className: "border-amber-200 bg-amber-50 text-amber-800",
     };
-  }
-
-  if (loading) {
-    return (
-      <main className="min-h-screen bg-slate-50">
-        <div className="page-container py-8">
-          <LoadingState label="Memuat transaksi aktif..." />
-        </div>
-      </main>
-    );
   }
 
   return (
@@ -332,118 +298,121 @@ export default function ReturnsPage() {
 
         <div className="mt-5 grid gap-5 lg:grid-cols-[minmax(0,1.55fr)_minmax(360px,0.85fr)] lg:items-start">
           <div className="min-w-0">
-          <Card className="p-4 sm:p-5">
-            <div>
-              <h3 className="text-lg font-semibold text-slate-900">
-                1. Cari Transaksi
-              </h3>
-              <p className="mt-1 text-sm text-slate-500">
-                Cari berdasarkan nomor transaksi, nama anggota, judul buku, atau kode copy.
-              </p>
-            </div>
-  
-            <div className="mt-4">
-              <Input
-                id="return-search"
-                label="Cari transaksi"
-                value={query}
-                onChange={(event) => setQuery(event.target.value)}
-                placeholder="Contoh: TRX-001, Budi, Laskar Pelangi..."
-              />
-            </div>
-  
-            {error && (
-              <FeedbackPanel tone="error" className="mt-4">
-                <p>{error}</p>
-                <button
-                  type="button"
-                  onClick={() => window.location.reload()}
-                  className="mt-3 min-h-10 rounded-lg border border-red-300 bg-white px-4 py-2 text-sm font-semibold text-red-700 transition hover:bg-red-50 focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 focus-visible:ring-offset-2"
-                >
-                  Coba lagi
-                </button>
-              </FeedbackPanel>
-            )}
-          </Card>
-
-          <Card className="mt-5 p-4 sm:p-5">
-            <div className="flex items-center justify-between gap-3">
+            <Card className="p-4 sm:p-5">
               <div>
                 <h3 className="text-lg font-semibold text-slate-900">
-                  2. Daftar Transaksi
+                  1. Cari Transaksi
                 </h3>
                 <p className="mt-1 text-sm text-slate-500">
-                  Pilih transaksi untuk melihat detail pengembalian.
+                  Cari berdasarkan nomor transaksi, nama anggota, judul buku,
+                  atau kode copy.
                 </p>
               </div>
-              {filteredLoans.length > 0 && (
-                <p className="shrink-0 text-xs text-slate-500">
-                  {filteredLoans.length} transaksi
-                </p>
-              )}
-            </div>
 
-            {!error && filteredLoans.length === 0 && (
               <div className="mt-4">
-                <EmptyState
-                  title={
-                    query.trim()
-                      ? "Transaksi tidak ditemukan"
-                      : "Belum ada transaksi aktif"
-                  }
-                  description={
-                    query.trim()
-                      ? `Tidak ada transaksi yang sesuai dengan "${query.trim()}". Coba gunakan nomor transaksi, nama anggota, judul buku, atau kode copy lain.`
-                      : "Belum ada transaksi aktif yang dapat diproses. Transaksi akan muncul di sini selama masih ada buku yang belum dikembalikan."
-                  }
+                <Input
+                  id="return-search"
+                  label="Cari transaksi"
+                  value={query}
+                  onChange={(event) => setQuery(event.target.value)}
+                  placeholder="Contoh: TRX-001, Budi, Laskar Pelangi..."
                 />
               </div>
-            )}
 
-            {filteredLoans.length > 0 && (
-              <div className="mt-4 space-y-2">
-                {filteredLoans.map((item) => {
-                  const overallStatus = getOverallStatus(item);
+              {error && (
+                <FeedbackPanel tone="error" className="mt-4">
+                  <p>{error}</p>
+                  <button
+                    type="button"
+                    onClick={() => window.location.reload()}
+                    className="mt-3 min-h-10 rounded-lg border border-red-300 bg-white px-4 py-2 text-sm font-semibold text-red-700 transition hover:bg-red-50 focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 focus-visible:ring-offset-2"
+                  >
+                    Coba lagi
+                  </button>
+                </FeedbackPanel>
+              )}
+            </Card>
 
-                  return (
-                    <button
-                      key={item.loan.id}
-                      type="button"
-                      onClick={() => selectLoan(item)}
-                      aria-pressed={selectedLoan?.loan.id === item.loan.id}
-                      className={`w-full rounded-xl border p-3 text-left transition focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 ${
-                        selectedLoan?.loan.id === item.loan.id
-                          ? "border-blue-500 bg-blue-50 ring-1 ring-blue-200"
-                          : "border-slate-200 bg-white hover:border-blue-300 hover:bg-blue-50"
-                      }`}
-                    >
-                      <div className="flex items-center justify-between gap-3">
-                        <div className="min-w-0">
-                          <p className="truncate font-semibold text-slate-900">
-                            {item.loan.loanNumber}
-                          </p>
-                          <p className="mt-1 truncate text-sm text-slate-600">
-                            {item.member.name}
-                          </p>
-                          <p className="mt-1 text-xs text-slate-500">
-                            {item.items.length} item ·{" "}
-                            {formatDate(item.loan.borrowedAt)}
-                          </p>
-                        </div>
-
-                        <span
-                          className={`shrink-0 rounded-full border px-2.5 py-1 text-xs font-semibold ${overallStatus.className}`}
-                        >
-                          {overallStatus.label}
-                        </span>
-                      </div>
-                    </button>
-                  );
-                })}
+            <Card className="mt-5 p-4 sm:p-5">
+              <div className="flex items-center justify-between gap-3">
+                <div>
+                  <h3 className="text-lg font-semibold text-slate-900">
+                    2. Daftar Transaksi
+                  </h3>
+                  <p className="mt-1 text-sm text-slate-500">
+                    Pilih transaksi untuk melihat detail pengembalian.
+                  </p>
+                </div>
+                {filteredLoans.length > 0 && (
+                  <p className="shrink-0 text-xs text-slate-500">
+                    {filteredLoans.length} transaksi
+                  </p>
+                )}
               </div>
-            )}
-          </Card>
 
+              {!error && filteredLoans.length === 0 && (
+                <div className="mt-4">
+                  <EmptyState
+                    title={
+                      query.trim()
+                        ? "Transaksi tidak ditemukan"
+                        : "Belum ada transaksi aktif"
+                    }
+                    description={
+                      query.trim()
+                        ? `Tidak ada transaksi yang sesuai dengan "${query.trim()}". Coba gunakan nomor transaksi, nama anggota, judul buku, atau kode copy lain.`
+                        : "Belum ada transaksi aktif yang dapat diproses. Transaksi akan muncul di sini selama masih ada buku yang belum dikembalikan."
+                    }
+                  />
+                </div>
+              )}
+
+              {filteredLoans.length > 0 && (
+                <div className="mt-4 space-y-2">
+                  {filteredLoans.map((item) => {
+                    const overallStatus = getOverallStatus(item);
+
+                    return (
+                      <button
+                        key={item.loan.id}
+                        type="button"
+                        onClick={() => selectLoan(item)}
+                        aria-pressed={selectedLoan?.loan.id === item.loan.id}
+                        className={`w-full rounded-xl border p-3 text-left transition focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 ${
+                          selectedLoan?.loan.id === item.loan.id
+                            ? "border-blue-500 bg-blue-50 ring-1 ring-blue-200"
+                            : "border-slate-200 bg-white hover:border-blue-300 hover:bg-blue-50"
+                        }`}
+                      >
+                        <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+                          <div className="min-w-0">
+                            <p className="truncate font-semibold text-slate-900">
+                              {item.loan.loanNumber}
+                            </p>
+
+                            <p className="mt-1 truncate text-sm text-slate-600">
+                              {item.member.name}
+                            </p>
+
+                            <p className="mt-1 text-xs text-slate-500">
+                              {item.items.length} item ·{" "}
+                              {formatDate(item.loan.borrowedAt)} →{" "}
+                              {formatDate(item.loan.dueAt)}
+                            </p>
+                          </div>
+
+                          <span
+                            className={`w-fit max-w-full rounded-full border px-2.5 py-1 text-center text-xs font-semibold leading-tight sm:shrink-0 ${overallStatus.className}`}
+                          >
+                            {overallStatus.label}
+                          </span>
+                        </div>
+                      </button>
+                    );
+                  })}
+                </div>
+              )}
+            </Card>
           </div>
 
           <div
@@ -463,34 +432,42 @@ export default function ReturnsPage() {
 
                   return (
                     <>
-                      <div className="relative border-b border-slate-200 pb-4">
-                        <div className="min-w-0 pr-[165px]">
-                          <p className="whitespace-nowrap text-xs font-medium uppercase tracking-wide text-slate-500">
-                            3. Detail Pengembalian
-                          </p>
-                          <h3 className="mt-1 whitespace-nowrap text-xl font-bold leading-tight text-slate-900">
-                            {selectedLoan.loan.loanNumber}
-                          </h3>
-                          <p className="mt-1 whitespace-nowrap text-sm text-slate-600">
-                            {selectedLoan.member.name} ·{" "}
-                            {selectedLoan.member.memberNumber}
-                          </p>
-                        </div>
+                      <div className="border-b border-slate-200 pb-4">
+                        <p className="text-xs font-medium uppercase tracking-wide text-slate-500">
+                          3. Detail Pengembalian
+                        </p>
 
-                        <div className="absolute right-0 top-[46%] -translate-y-1/2">
+                        <div className="mt-2 flex items-start gap-3">
+                          <div className="min-w-0 flex-1">
+                            <h3
+                              className="break-words text-xl font-bold leading-tight text-slate-900"
+                              title={selectedLoan.loan.loanNumber}
+                            >
+                              {selectedLoan.loan.loanNumber}
+                            </h3>
+
+                            <p
+                              className="mt-1 break-words text-sm text-slate-600"
+                              title={`${selectedLoan.member.name} · ${selectedLoan.member.memberNumber}`}
+                            >
+                              {selectedLoan.member.name} ·{" "}
+                              {selectedLoan.member.memberNumber}
+                            </p>
+                          </div>
+
                           <span
-                            className={`flex w-[150px] items-center justify-center rounded-full border px-2 py-1.5 text-center text-[10px] font-semibold leading-tight ${overallStatus.className}`}
+                            className={`mt-0.5 inline-flex shrink-0 items-center justify-center rounded-full border px-2.5 py-1 text-center text-[11px] font-semibold leading-tight ${overallStatus.className}`}
                           >
-                            <span className="w-full text-center">
-                              Status: {overallStatus.label}
-                            </span>
+                            {overallStatus.label}
                           </span>
                         </div>
                       </div>
 
                       <div className="mt-4 grid gap-3 sm:grid-cols-2">
                         <div className="rounded-lg bg-slate-50 p-3">
-                          <p className="text-xs text-slate-500">Tanggal pinjam</p>
+                          <p className="text-xs text-slate-500">
+                            Tanggal pinjam
+                          </p>
                           <p className="mt-1 font-semibold text-slate-900">
                             {formatDate(selectedLoan.loan.borrowedAt)}
                           </p>
@@ -537,48 +514,56 @@ export default function ReturnsPage() {
 
                               return (
                                 <label
-                                  key={loanItem.id}
-                                  className={`grid grid-cols-[auto_minmax(0,1fr)_minmax(90px,1fr)_auto] items-center gap-3 rounded-xl border p-3 transition ${
-                                    isBorrowed
-                                      ? selected
-                                        ? "border-blue-500 bg-blue-50"
-                                        : "border-slate-200 bg-white hover:border-blue-300"
-                                      : "border-green-200 bg-green-50/40"
-                                  } ${
-                                    isBorrowed
-                                      ? "cursor-pointer"
-                                      : "cursor-default"
-                                  }`}
-                                >
-                                  <input
-                                    type="checkbox"
-                                    checked={selected}
-                                    disabled={!isBorrowed || returnLoading}
-                                    onChange={() => toggleItem(loanItem.id)}
-                                    className="h-4 w-4 rounded border-slate-300 focus:ring-2 focus:ring-blue-500 disabled:cursor-not-allowed"
-                                  />
+  key={loanItem.id}
+  className={`grid grid-cols-[auto_minmax(0,1fr)_auto] items-center gap-3 rounded-xl border p-3 transition ${
+    isBorrowed
+      ? selected
+        ? "border-blue-500 bg-blue-50"
+        : "border-slate-200 bg-white hover:border-blue-300"
+      : "border-green-200 bg-green-50/40"
+  } ${
+    isBorrowed
+      ? "cursor-pointer"
+      : "cursor-default"
+  }`}
+>
+  <input
+    type="checkbox"
+    checked={selected}
+    disabled={!isBorrowed || returnLoading}
+    onChange={() => toggleItem(loanItem.id)}
+    className="h-4 w-4 self-center rounded border-slate-300 focus:ring-2 focus:ring-blue-500 disabled:cursor-not-allowed"
+  />
 
-                                  <div className="min-w-0">
-                                    <p className="truncate font-medium text-slate-900">
-                                      {book.title}
-                                    </p>
-                                    <p className="mt-1 text-xs text-slate-500">
-                                      {book.code}
-                                    </p>
-                                  </div>
+  <div className="min-w-0 self-center">
+    <p
+      className="truncate font-medium leading-tight text-slate-900"
+      title={book.title}
+    >
+      {book.title}
+    </p>
 
-                                  <p className="min-w-0 text-center text-sm font-semibold text-slate-700">
-                                    {bookCopy.code}
-                                  </p>
+    <div className="mt-1 flex min-w-0 items-center gap-1.5 text-xs text-slate-500">
+      <span className="truncate">
+        {book.code}
+      </span>
 
-                                  <span
-                                    className={`min-w-[108px] justify-center rounded-full border px-2.5 py-1 text-center text-xs font-semibold ${getItemStatusClass(
-                                      loanItem.status,
-                                    )}`}
-                                  >
-                                    {getItemStatusLabel(loanItem.status)}
-                                  </span>
-                                </label>
+      <span aria-hidden="true">·</span>
+
+      <span className="shrink-0 font-semibold text-slate-700">
+        {bookCopy.code}
+      </span>
+    </div>
+  </div>
+
+  <span
+  className={`flex min-w-[108px] items-center justify-center self-center rounded-full border px-2.5 py-1 text-center text-xs font-semibold ${getItemStatusClass(
+    loanItem.status,
+  )}`}
+>
+  {getItemStatusLabel(loanItem.status)}
+</span>
+</label>
                               );
                             },
                           )}
@@ -679,7 +664,9 @@ export default function ReturnsPage() {
                 onClick={() => setSuccessLoan(null)}
                 className="rounded-md p-2 text-slate-500 transition hover:bg-slate-100 hover:text-slate-700 focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-500"
               >
-                <span aria-hidden="true" className="text-xl leading-none">×</span>
+                <span aria-hidden="true" className="text-xl leading-none">
+                  ×
+                </span>
               </button>
             </div>
 
@@ -702,7 +689,9 @@ export default function ReturnsPage() {
 
               <div className="grid gap-4 text-sm sm:grid-cols-2">
                 <div>
-                  <p className="text-xs text-slate-500">Buku/copy dikembalikan</p>
+                  <p className="text-xs text-slate-500">
+                    Buku/copy dikembalikan
+                  </p>
                   <p className="mt-1 font-medium text-slate-900">
                     {returnedCopies.join(", ") || "-"}
                   </p>

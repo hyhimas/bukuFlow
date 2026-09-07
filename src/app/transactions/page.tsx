@@ -179,16 +179,16 @@ export default function TransactionsPage() {
   }
 
   function getStatusVariant(loanStatus: Loan["status"]) {
-    if (loanStatus === "OVERDUE") {
-      return "warning" as const;
-    }
-
-    if (loanStatus === "COMPLETED") {
-      return "success" as const;
-    }
-
-    return "neutral" as const;
+  if (loanStatus === "OVERDUE") {
+    return "danger" as const;
   }
+
+  if (loanStatus === "COMPLETED") {
+    return "success" as const;
+  }
+
+  return "warning" as const;
+}
 
   function getBookList(transaction: TransactionData) {
     if (transaction.items.length === 0) {
@@ -395,7 +395,21 @@ export default function TransactionsPage() {
                         </td>
 
                         <td className="max-w-xs px-4 py-3 leading-5 text-slate-700">
-                          {getBookList(transaction)}
+                          {transaction.items.length === 0 ? (
+                            "-"
+                          ) : (
+                            <ul className="space-y-0.5">
+                              {transaction.items.map(({ book, bookCopy }) => (
+                                <li
+                                  key={`${transaction.loan.id}-${book?.id ?? "book"}-${bookCopy?.id ?? "copy"}`}
+                                  className="break-words"
+                                >
+                                  • {book?.title ?? "-"}
+                                  {bookCopy?.code ? ` (${bookCopy.code})` : ""}
+                                </li>
+                              ))}
+                            </ul>
+                          )}
                         </td>
 
                         <td className="whitespace-nowrap px-4 py-3 text-slate-700">
@@ -428,16 +442,16 @@ export default function TransactionsPage() {
               </div>
             </Card>
 
-            <div className="mt-5 space-y-4 xl:hidden">
+            <div className="mt-5 space-y-3 xl:hidden">
               {paginatedTransactions.map((transaction) => (
-                <Card key={transaction.loan.id} className="p-5">
+                <Card key={transaction.loan.id} className="p-4 sm:p-5">
                   <div className="flex items-start justify-between gap-3">
-                    <div>
-                      <p className="font-semibold text-slate-900">
+                    <div className="min-w-0 flex-1">
+                      <p className="truncate font-semibold text-slate-900">
                         {transaction.loan.loanNumber}
                       </p>
 
-                      <p className="mt-1 text-sm text-slate-500">
+                      <p className="mt-1 truncate text-sm text-slate-500">
                         {transaction.member?.name ?? "-"}
                       </p>
                     </div>
@@ -447,45 +461,58 @@ export default function TransactionsPage() {
                     </Badge>
                   </div>
 
-                  <div className="mt-5 space-y-4 text-sm">
-                    <div>
+                  <div className="mt-3 grid grid-cols-2 gap-x-5 gap-y-3 text-sm sm:grid-cols-3 sm:gap-x-6">
+                    <div className="col-span-2 min-w-0 sm:col-span-1">
                       <p className="text-slate-500">Buku</p>
 
-                      <p className="mt-1 text-slate-900">
-                        {getBookList(transaction)}
-                      </p>
+                      {transaction.items.length === 0 ? (
+                        <p className="mt-0.5 text-slate-900">-</p>
+                      ) : (
+                        <ul className="mt-1 space-y-0.5 text-slate-900">
+                          {transaction.items.map(({ book, bookCopy }) => (
+                            <li
+                              key={`${transaction.loan.id}-${book?.id ?? "book"}-${bookCopy?.id ?? "copy"}`}
+                              className="break-words"
+                            >
+                              • {book?.title ?? "-"}
+                              {bookCopy?.code ? ` (${bookCopy.code})` : ""}
+                            </li>
+                          ))}
+                        </ul>
+                      )}
                     </div>
 
-                    <div>
+                    <div className="min-w-0">
                       <p className="text-slate-500">Petugas</p>
 
-                      <p className="mt-1 text-slate-900">
+                      <p
+                        className="mt-0.5 truncate text-slate-900"
+                        title={transaction.user?.name ?? "-"}
+                      >
                         {transaction.user?.name ?? "-"}
                       </p>
                     </div>
 
-                    <div className="grid grid-cols-2 gap-4">
-                      <div>
-                        <p className="text-slate-500">Peminjaman</p>
+                    <div>
+                      <p className="text-slate-500">Peminjaman</p>
 
-                        <p className="mt-1 text-slate-900">
-                          {formatDate(transaction.loan.borrowedAt)}
-                        </p>
-                      </div>
+                      <p className="mt-0.5 text-slate-900">
+                        {formatDate(transaction.loan.borrowedAt)}
+                      </p>
+                    </div>
 
-                      <div>
-                        <p className="text-slate-500">Jatuh tempo</p>
+                    <div>
+                      <p className="text-slate-500">Jatuh tempo</p>
 
-                        <p className="mt-1 text-slate-900">
-                          {formatDate(transaction.loan.dueAt)}
-                        </p>
-                      </div>
+                      <p className="mt-0.5 text-slate-900">
+                        {formatDate(transaction.loan.dueAt)}
+                      </p>
                     </div>
 
                     <div>
                       <p className="text-slate-500">Pengembalian</p>
 
-                      <p className="mt-1 text-slate-900">
+                      <p className="mt-0.5 text-slate-900">
                         {formatDate(transaction.loan.returnedAt)}
                       </p>
                     </div>
