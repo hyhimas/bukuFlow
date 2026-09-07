@@ -283,7 +283,7 @@ export default function NewLoanPage() {
       cancelled = true;
       window.clearTimeout(timer);
     };
-  }, [memberQuery, selectedMember, showMemberForm]);
+  }, [memberQuery, selectedMember, showMemberForm, router]);
 
   // =====================================================
   // BOOK SEARCH WITH DEBOUNCE

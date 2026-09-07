@@ -190,25 +190,6 @@ export default function TransactionsPage() {
   return "warning" as const;
 }
 
-  function getBookList(transaction: TransactionData) {
-    if (transaction.items.length === 0) {
-      return "-";
-    }
-
-    return transaction.items
-      .map(({ book, bookCopy }) => {
-        if (!book) {
-          return "-";
-        }
-
-        if (!bookCopy) {
-          return book.title;
-        }
-
-        return `${book.title} (${bookCopy.code})`;
-      })
-      .join(", ");
-  }
 
   function resetFilters() {
     setSearch("");
