@@ -270,7 +270,7 @@ export interface DashboardResponse {
   booksBorrowed: number;
   activeLoans: number;
   overdueLoans: number;
-  recentLoans: Loan[];
+  recentLoans: Array<Loan & { memberName: string }>;
 }
 
 export async function getDashboard(): Promise<DashboardResponse> {
@@ -330,17 +330,25 @@ export async function getDashboard(): Promise<DashboardResponse> {
       (loan) => loan.status === "OVERDUE",
     ).length,
 
-    recentLoans: [...companyLoans]
-      .sort(
-        (a, b) =>
-          new Date(
-            b.borrowedAt,
-          ).getTime() -
-          new Date(
-            a.borrowedAt,
-          ).getTime(),
-      )
-      .slice(0, 5),
+   recentLoans: [...companyLoans]
+  .sort(
+    (a, b) =>
+      new Date(b.updatedAt).getTime() -
+      new Date(a.updatedAt).getTime(),
+  )
+  .slice(0, 5)
+  .map((loan) => {
+    const member = mockMembers.find(
+      (item) =>
+        item.id === loan.memberId &&
+        item.companyId === loan.companyId,
+    );
+
+    return {
+      ...loan,
+      memberName: member?.name ?? "-",
+    };
+  }),
   };
 }
 

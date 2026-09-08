@@ -295,30 +295,12 @@ export default function ReturnsPage() {
   }
 
   if (loading) {
-    return (
-      <main className="min-h-screen bg-slate-50">
-        <AppHeader subtitle="Catat Pengembalian" />
-
-        <div className="page-container py-5 sm:py-6">
-          <div className="mb-5">
-            <BackLink href="/dashboard" />
-
-            <h1 className="mt-2 text-2xl font-bold text-slate-900">
-              Pengembalian Buku
-            </h1>
-
-            <p className="mt-1 text-sm text-slate-500">
-              Cari transaksi aktif untuk memproses pengembalian.
-            </p>
-          </div>
-
-          <Card className="p-6">
-            <LoadingState label="Memuat transaksi aktif..." />
-          </Card>
-        </div>
-      </main>
-    );
-  }
+  return (
+    <main className="min-h-screen bg-slate-50">
+      <LoadingState label="Memuat pengembalian..." />
+    </main>
+  );
+}
 
   return (
     <main className="min-h-screen bg-slate-50">

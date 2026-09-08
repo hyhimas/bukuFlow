@@ -89,3 +89,14 @@ select {
     max-width: 80rem;
   }
 }
+
+@keyframes bookPulse {
+  0%,
+  100% {
+    transform: translateY(0) scale(1);
+  }
+
+  50% {
+    transform: translateY(-3px) scale(1.08);
+  }
+}

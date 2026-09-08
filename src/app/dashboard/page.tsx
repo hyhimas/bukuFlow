@@ -18,7 +18,7 @@ interface DashboardData {
   booksBorrowed: number;
   activeLoans: number;
   overdueLoans: number;
-  recentLoans: Loan[];
+  recentLoans: Array<Loan & { memberName: string }>;
 }
 
 const statusLabel: Record<Loan["status"], string> = {
@@ -48,6 +48,17 @@ function formatDate(value: string) {
         day: "2-digit",
         month: "2-digit",
         year: "numeric",
+      });
+}
+
+function formatShortDate(value: string) {
+  const date = new Date(`${value.slice(0, 10)}T00:00:00`);
+
+  return Number.isNaN(date.getTime())
+    ? "-"
+    : date.toLocaleDateString("id-ID", {
+        day: "2-digit",
+        month: "2-digit",
       });
 }
 
@@ -87,14 +98,12 @@ export default function DashboardPage() {
   }, [router]);
 
   if (loading) {
-    return (
-      <main className="min-h-screen bg-slate-50">
-        <div className="page-container py-8">
-          <LoadingState label="Memuat dashboard..." />
-        </div>
-      </main>
-    );
-  }
+  return (
+    <main className="min-h-screen bg-slate-50">
+      <LoadingState label="Memuat dashboard..." />
+    </main>
+  );
+}
 
   if (error || !data) {
     return (
@@ -530,27 +539,55 @@ export default function DashboardPage() {
             </div>
           ) : (
             <div className="divide-y divide-slate-100">
-              {data.recentLoans.map((loan) => (
-                <div
-                  key={loan.id}
-                  className="flex flex-col gap-3 p-5 sm:flex-row sm:items-center sm:justify-between"
-                >
-                  <div>
-                    <p className="font-medium text-slate-900">
-                      {loan.loanNumber}
-                    </p>
+ {data.recentLoans.map((loan) => (
+  <div
+    key={loan.id}
+    className="grid grid-cols-[minmax(0,1fr)_auto] grid-rows-[auto_auto] items-center gap-x-4 gap-y-1 px-5 py-4 xl:grid-cols-[260px_minmax(180px,1fr)_minmax(280px,1fr)_120px] xl:grid-rows-1 xl:gap-x-6"
+  >
+    {/* Nomor transaksi */}
+    <div className="min-w-0">
+      <p className="whitespace-nowrap text-sm font-medium text-slate-900 xl:text-base">
+        {loan.loanNumber}
+      </p>
+    </div>
 
-                    <p className="mt-1 text-sm text-slate-500">
-                      Jatuh tempo {formatDate(loan.dueAt)}
-                    </p>
-                  </div>
+    {/* Nama member */}
+    <div className="min-w-0">
+      <p className="truncate text-xs text-slate-500 xl:text-sm">
+        {loan.memberName}
+      </p>
+    </div>
 
-                  <Badge variant={getStatusVariant(loan.status)}>
-                    {statusLabel[loan.status]}
-                  </Badge>
-                </div>
-              ))}
-            </div>
+    {/* Tanggal */}
+    <div className="min-w-0 text-right">
+      <p className="hidden whitespace-nowrap text-sm text-slate-500 sm:block">
+        {formatDate(loan.borrowedAt)} -{" "}
+        {formatDate(
+          loan.status === "COMPLETED" && loan.returnedAt
+            ? loan.returnedAt
+            : loan.dueAt,
+        )}
+      </p>
+
+      <p className="whitespace-nowrap text-xs text-slate-500 sm:hidden">
+        {formatShortDate(loan.borrowedAt)} -{" "}
+        {formatShortDate(
+          loan.status === "COMPLETED" && loan.returnedAt
+            ? loan.returnedAt
+            : loan.dueAt,
+        )}
+      </p>
+    </div>
+
+{/* Status */}
+<div className="col-start-2 row-start-1 flex justify-center xl:col-start-4 xl:row-start-1">
+  <Badge variant={getStatusVariant(loan.status)}>
+    {statusLabel[loan.status]}
+  </Badge>
+</div>
+  </div>
+))}
+</div>
           )}
         </Card>
       </div>

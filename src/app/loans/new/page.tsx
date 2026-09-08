@@ -20,6 +20,7 @@ import {
 } from "@/lib/mock-api";
 
 import type { Book, BookCopy, Loan, Member } from "@/lib/types";
+import LoadingState from "@/components/ui/LoadingState";
 
 type MemberFormErrors = {
   name: string;
@@ -60,6 +61,7 @@ export default function NewLoanPage() {
   const successModalCloseRef = useRef<HTMLButtonElement>(null);
   const memberModalCloseRef = useRef<HTMLButtonElement>(null);
   const bookModalCloseRef = useRef<HTMLButtonElement>(null);
+  const [pageLoading, setPageLoading] = useState(true);
 
   // =====================================================
   // MEMBER SEARCH
@@ -224,12 +226,15 @@ export default function NewLoanPage() {
   }, [creationSuccess]);
 
   useEffect(() => {
-    const session = getSession();
+  const session = getSession();
 
-    if (!session) {
-      router.replace("/login");
-    }
-  }, [router]);
+  if (!session) {
+    router.replace("/login");
+    return;
+  }
+
+  setPageLoading(false);
+}, [router]);
 
   // =====================================================
   // SEARCH MEMBER WITH DEBOUNCE
@@ -856,7 +861,13 @@ export default function NewLoanPage() {
     setSubmitError("");
     setSuccessLoan(null);
   }
-
+if (pageLoading) {
+  return (
+    <main className="min-h-screen bg-slate-50">
+      <LoadingState label="Memuat peminjaman..." />
+    </main>
+  );
+}
   // =====================================================
   // RENDER
   // =====================================================
