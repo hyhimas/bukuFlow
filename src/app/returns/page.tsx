@@ -9,16 +9,14 @@ import Button from "@/components/ui/Button";
 import Card from "@/components/ui/Card";
 import Input from "@/components/ui/Input";
 import Badge from "@/components/ui/Badge";
-import AppHeader from "@/components/ui/AppHeader";
 import BackLink from "@/components/ui/BackLink";
 import ConfirmationDialog from "@/components/ui/ConfirmationDialog";
 import EmptyState from "@/components/ui/EmptyState";
 import FeedbackPanel from "@/components/ui/FeedbackPanel";
 import LoadingState from "@/components/ui/LoadingState";
-
+import type { ReturnLoanData, Loan } from "@/lib/types";
 import { getReturnLoans, returnLoanItems } from "@/lib/mock-api";
 
-import type { ReturnLoanData, Loan } from "@/lib/types";
 
 export default function ReturnsPage() {
   const router = useRouter();
@@ -304,7 +302,6 @@ export default function ReturnsPage() {
 
   return (
     <main className="min-h-screen bg-slate-50">
-      <AppHeader subtitle="Catat Pengembalian" />
 
       <div className="page-container py-5 sm:py-6">
         <div className="mb-5">

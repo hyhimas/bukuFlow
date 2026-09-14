@@ -1,12 +1,27 @@
+"use client";
+
+import { useEffect } from "react";
+import { useRouter } from "next/navigation";
+
 import Card from "@/components/ui/Card";
-import AppHeader from "@/components/ui/AppHeader";
 import BackLink from "@/components/ui/BackLink";
 
+import { getSession } from "@/lib/auth";
+import { canAccessCompanySettings } from "@/lib/authorization";
+
 export default function CompanySettingsPage() {
+  const router = useRouter();
+
+  useEffect(() => {
+    const session = getSession();
+
+    if (!session || !canAccessCompanySettings(session.user.role)) {
+      router.replace("/dashboard");
+    }
+  }, [router]);
+
   return (
     <main className="min-h-screen bg-slate-50">
-      <AppHeader subtitle="Pengaturan Company" />
-
       <div className="page-container py-6">
         <BackLink href="/dashboard" />
 

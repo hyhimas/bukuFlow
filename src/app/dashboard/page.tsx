@@ -5,7 +5,6 @@ import { useRouter } from "next/navigation";
 
 import Card from "@/components/ui/Card";
 import Badge from "@/components/ui/Badge";
-import AppHeader from "@/components/ui/AppHeader";
 import FeedbackPanel from "@/components/ui/FeedbackPanel";
 import LoadingState from "@/components/ui/LoadingState";
 
@@ -133,11 +132,7 @@ export default function DashboardPage() {
 
   return (
     <main className="min-h-screen bg-slate-50">
-      <AppHeader
-        subtitle={
-          isCompanyAdmin ? "Dashboard Company" : "Dashboard Operasional"
-        }
-      />
+      
 
       <div className="page-container py-6">
         <div className="mb-6">

@@ -6,7 +6,6 @@ import Badge from "@/components/ui/Badge";
 import Button from "@/components/ui/Button";
 import Card from "@/components/ui/Card";
 import Input from "@/components/ui/Input";
-import AppHeader from "@/components/ui/AppHeader";
 import BackLink from "@/components/ui/BackLink";
 import EmptyState from "@/components/ui/EmptyState";
 import FeedbackPanel from "@/components/ui/FeedbackPanel";
@@ -23,23 +22,84 @@ type TransactionStatus = "ACTIVE" | "OVERDUE" | "COMPLETED";
 
 const PAGE_SIZE = 5;
 
+const STATUS_OPTIONS: {
+  value: TransactionStatus | "";
+  label: string;
+}[] = [
+  {
+    value: "",
+    label: "Semua",
+  },
+  {
+    value: "ACTIVE",
+    label: "Aktif",
+  },
+  {
+    value: "OVERDUE",
+    label: "Terlambat",
+  },
+  {
+    value: "COMPLETED",
+    label: "Selesai",
+  },
+];
+
 export default function TransactionsPage() {
   const router = useRouter();
 
-  const [transactions, setTransactions] = useState<TransactionData[]>([]);
+  // =========================================================
+  // DATA
+  // =========================================================
+
+  const [transactions, setTransactions] = useState<TransactionData[]>(
+    [],
+  );
 
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
 
+  // =========================================================
+  // SEARCH
+  // Search memang langsung diterapkan
+  // =========================================================
+
   const [search, setSearch] = useState("");
   const [debouncedSearch, setDebouncedSearch] = useState("");
 
-  const [status, setStatus] = useState<TransactionStatus | "">("");
+  // =========================================================
+  // APPLIED FILTERS
+  // Filter yang benar-benar sedang digunakan tabel
+  // =========================================================
 
+  const [status, setStatus] = useState<TransactionStatus | "">("");
   const [startDate, setStartDate] = useState("");
   const [endDate, setEndDate] = useState("");
 
+  // =========================================================
+  // TEMPORARY FILTERS
+  // Filter yang sedang diedit di drawer
+  //
+  // TIDAK memengaruhi tabel sampai klik:
+  // "Terapkan Filter"
+  // =========================================================
+
+  const [filterStatus, setFilterStatus] =
+    useState<TransactionStatus | "">("");
+
+  const [filterStartDate, setFilterStartDate] = useState("");
+  const [filterEndDate, setFilterEndDate] = useState("");
+
+  const [isFilterOpen, setIsFilterOpen] = useState(false);
+
+  // =========================================================
+  // PAGINATION
+  // =========================================================
+
   const [page, setPage] = useState(1);
+
+  // =========================================================
+  // SESSION CHECK
+  // =========================================================
 
   useEffect(() => {
     const session = getSession();
@@ -48,6 +108,10 @@ export default function TransactionsPage() {
       router.replace("/login");
     }
   }, [router]);
+
+  // =========================================================
+  // LOAD TRANSACTIONS
+  // =========================================================
 
   useEffect(() => {
     async function loadTransactions() {
@@ -68,6 +132,10 @@ export default function TransactionsPage() {
     void loadTransactions();
   }, []);
 
+  // =========================================================
+  // DEBOUNCE SEARCH
+  // =========================================================
+
   useEffect(() => {
     const timer = window.setTimeout(() => {
       setDebouncedSearch(search);
@@ -78,10 +146,26 @@ export default function TransactionsPage() {
     };
   }, [search]);
 
+  // =========================================================
+  // FILTER
+  //
+  // Hanya menggunakan APPLIED FILTERS:
+  // status
+  // startDate
+  // endDate
+  //
+  // filterStatus / filterStartDate / filterEndDate
+  // TIDAK digunakan di sini karena masih temporary.
+  // =========================================================
+
   const filteredTransactions = useMemo(() => {
     const keyword = debouncedSearch.trim().toLowerCase();
 
     return transactions.filter(({ loan, member, items }) => {
+      // -------------------------------------------------------
+      // SEARCH
+      // -------------------------------------------------------
+
       const matchesSearch =
         keyword === "" ||
         loan.loanNumber.toLowerCase().includes(keyword) ||
@@ -92,17 +176,27 @@ export default function TransactionsPage() {
             bookCopy?.code.toLowerCase().includes(keyword),
         );
 
+      // -------------------------------------------------------
+      // STATUS
+      // -------------------------------------------------------
+
+      const matchesStatus =
+        status === "" || loan.status === status;
+
+      // -------------------------------------------------------
+      // DATE
+      // -------------------------------------------------------
+
       const borrowedDate = getDateOnly(loan.borrowedAt);
-
-      const matchesStatus = status === "" || loan.status === status;
-
       const dueDate = getDateOnly(loan.dueAt);
 
       const matchesStartDate =
-        startDate === "" || (borrowedDate !== "" && borrowedDate >= startDate);
+        startDate === "" ||
+        (borrowedDate !== "" && borrowedDate >= startDate);
 
       const matchesEndDate =
-        endDate === "" || (dueDate !== "" && dueDate <= endDate);
+        endDate === "" ||
+        (dueDate !== "" && dueDate <= endDate);
 
       return (
         matchesSearch &&
@@ -111,7 +205,17 @@ export default function TransactionsPage() {
         matchesEndDate
       );
     });
-  }, [transactions, debouncedSearch, status, startDate, endDate]);
+  }, [
+    transactions,
+    debouncedSearch,
+    status,
+    startDate,
+    endDate,
+  ]);
+
+  // =========================================================
+  // PAGINATION
+  // =========================================================
 
   function resetPagination() {
     setPage(1);
@@ -129,12 +233,18 @@ export default function TransactionsPage() {
     currentPage * PAGE_SIZE,
   );
 
+  // =========================================================
+  // DATE HELPERS
+  // =========================================================
+
   function getDateOnly(value?: string) {
     if (!value) {
       return "";
     }
 
-    const isoDateMatch = value.match(/^(\d{4})-(\d{2})-(\d{2})/);
+    const isoDateMatch = value.match(
+      /^(\d{4})-(\d{2})-(\d{2})/,
+    );
 
     if (isoDateMatch) {
       return isoDateMatch[0];
@@ -165,6 +275,10 @@ export default function TransactionsPage() {
     return `${day}/${month}/${year}`;
   }
 
+  // =========================================================
+  // STATUS HELPERS
+  // =========================================================
+
   function getStatusLabel(loanStatus: Loan["status"]) {
     if (loanStatus === "ACTIVE") {
       return "Aktif";
@@ -193,13 +307,111 @@ export default function TransactionsPage() {
     return "warning" as const;
   }
 
+  // =========================================================
+  // ACTIVE FILTER CHECK
+  // =========================================================
+
+  const hasActiveFilters =
+    status !== "" ||
+    startDate !== "" ||
+    endDate !== "";
+
+  // =========================================================
+  // RESET APPLIED FILTERS
+  //
+  // Ini benar-benar mengubah tabel.
+  // =========================================================
+
   function resetFilters() {
     setSearch("");
     setStatus("");
     setStartDate("");
     setEndDate("");
+
     resetPagination();
   }
+
+  // =========================================================
+  // OPEN FILTER DRAWER
+  //
+  // Applied filter disalin ke temporary filter.
+  // =========================================================
+
+  function openFilter() {
+    setFilterStatus(status);
+    setFilterStartDate(startDate);
+    setFilterEndDate(endDate);
+
+    setIsFilterOpen(true);
+  }
+
+  // =========================================================
+  // CLOSE FILTER DRAWER
+  //
+  // Temporary changes otomatis dibuang karena tidak pernah
+  // masuk ke applied state.
+  // =========================================================
+
+  function closeFilter() {
+    setIsFilterOpen(false);
+  }
+
+  // =========================================================
+  // APPLY FILTER
+  //
+  // Temporary -> Applied
+  // Baru setelah ini tabel berubah.
+  // =========================================================
+
+  function applyFilters() {
+    setStatus(filterStatus);
+    setStartDate(filterStartDate);
+    setEndDate(filterEndDate);
+
+    resetPagination();
+    setIsFilterOpen(false);
+  }
+
+  // =========================================================
+  // RESET TEMPORARY FILTER
+  //
+  // Hanya mengubah isi drawer.
+  // Tabel BELUM berubah.
+  // =========================================================
+
+  function resetDrawerFilters() {
+    setFilterStatus("");
+    setFilterStartDate("");
+    setFilterEndDate("");
+  }
+
+  // =========================================================
+  // REMOVE INDIVIDUAL FILTER CHIP
+  // =========================================================
+
+  function removeSearchFilter() {
+    setSearch("");
+    resetPagination();
+  }
+
+  function removeStartDateFilter() {
+    setStartDate("");
+    resetPagination();
+  }
+
+  function removeEndDateFilter() {
+    setEndDate("");
+    resetPagination();
+  }
+
+  function removeStatusFilter() {
+    setStatus("");
+    resetPagination();
+  }
+
+  // =========================================================
+  // LOADING
+  // =========================================================
 
   if (loading) {
     return (
@@ -209,12 +421,19 @@ export default function TransactionsPage() {
     );
   }
 
+  // =========================================================
+  // PAGE
+  // =========================================================
+
   return (
     <main className="min-h-screen bg-slate-50">
-      <AppHeader subtitle="Riwayat Transaksi" />
 
       <div className="page-container py-5 sm:py-6">
-        {/* HEADER */}
+
+        {/* =====================================================
+            HEADER
+        ====================================================== */}
+
         <div className="mb-5 sm:mb-6">
           <BackLink href="/dashboard" />
 
@@ -227,7 +446,10 @@ export default function TransactionsPage() {
           </p>
         </div>
 
-        {/* ERROR */}
+        {/* =====================================================
+            ERROR
+        ====================================================== */}
+
         {error && (
           <FeedbackPanel tone="error" className="mb-5">
             <div>
@@ -244,35 +466,15 @@ export default function TransactionsPage() {
           </FeedbackPanel>
         )}
 
-        {/* FILTER */}
-        <Card className="overflow-hidden">
-          {/* FILTER HEADER */}
-          <div className="px-4 py-4 sm:px-5 sm:py-5 xl:flex xl:items-center xl:justify-between xl:px-6 xl:py-5">
-            <div>
-              <h2 className="text-lg font-semibold tracking-tight text-slate-900 sm:text-xl">
-                Filter Transaksi
-              </h2>
+        {/* =====================================================
+            SEARCH + FILTER TOOLBAR
+        ====================================================== */}
 
-              <p className="mt-1 text-sm text-slate-500">
-                Gunakan filter untuk menemukan transaksi dengan lebih cepat.
-              </p>
-            </div>
+        <div className="mb-5">
+<div className="grid grid-cols-[minmax(0,1fr)_auto] items-end gap-2.5 sm:gap-3">
+            {/* SEARCH */}
 
-            {/* DESKTOP RESET */}
-            <div className="hidden xl:block">
-              <Button
-                type="button"
-                variant="secondary"
-                onClick={resetFilters}
-              >
-                Reset Filter
-              </Button>
-            </div>
-          </div>
-
-          {/* FILTER CONTENT */}
-          <div className="border-t border-slate-100 bg-slate-50/50 p-4 sm:p-5 xl:px-6 xl:py-5">
-            <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4 xl:gap-5">
+            <div className="min-w-0">
               <Input
                 id="transaction-search"
                 label="Pencarian"
@@ -283,68 +485,335 @@ export default function TransactionsPage() {
                 }}
                 placeholder="Nomor, anggota, buku, copy..."
               />
+            </div>
 
-              <div>
-                <label
-                  htmlFor="transaction-status"
-                  className="block text-sm font-medium text-slate-700"
-                >
-                  Status
-                </label>
+            {/* FILTER BUTTON */}
 
-                <select
-                  id="transaction-status"
-                  value={status}
-                  onChange={(event) => {
-                    setStatus(event.target.value as TransactionStatus | "");
-                    resetPagination();
-                  }}
-                  className="mt-2 block min-h-11 w-full rounded-lg border border-slate-200 bg-white px-3 py-2.5 text-sm text-slate-900 shadow-sm outline-none transition hover:border-slate-300 focus:border-blue-500 focus:ring-2 focus:ring-blue-500"
+            <Button
+  type="button"
+  variant="secondary"
+  onClick={openFilter}
+  className="!w-[92px] !shrink-0 !px-3"
+>
+  <span className="flex items-center justify-center gap-1.5 whitespace-nowrap">
+    <svg
+      viewBox="0 0 24 24"
+      fill="none"
+      className="h-4 w-4 shrink-0"
+      aria-hidden="true"
+    >
+      <path
+        d="M4 6h16M7 12h10M10 18h4"
+        stroke="currentColor"
+        strokeWidth="1.8"
+        strokeLinecap="round"
+      />
+    </svg>
+
+    <span>Filter</span>
+  </span>
+</Button>
+          </div>
+
+          {/* ===================================================
+              ACTIVE FILTER CHIPS
+          ==================================================== */}
+
+          {(hasActiveFilters || search.trim() !== "") && (
+            <div className="mt-3 flex flex-wrap items-center gap-2">
+
+              {search.trim() !== "" && (
+                <button
+                  type="button"
+                  onClick={removeSearchFilter}
+                  className="inline-flex min-h-8 items-center gap-1.5 rounded-full border border-slate-200 bg-white px-3 py-1 text-xs font-medium text-slate-700 transition hover:border-slate-300 hover:bg-slate-50 sm:text-sm"
                 >
-                  <option value="">Semua status</option>
-                  <option value="ACTIVE">Aktif</option>
-                  <option value="OVERDUE">Terlambat</option>
-                  <option value="COMPLETED">Selesai</option>
-                </select>
+                  <span className="max-w-[220px] truncate">
+                    Pencarian: {search}
+                  </span>
+
+                  <span className="text-slate-400" aria-hidden="true">
+                    ×
+                  </span>
+                </button>
+              )}
+
+              {startDate !== "" && (
+                <button
+                  type="button"
+                  onClick={removeStartDateFilter}
+                  className="inline-flex min-h-8 items-center gap-1.5 rounded-full border border-slate-200 bg-white px-3 py-1 text-xs font-medium text-slate-700 transition hover:border-slate-300 hover:bg-slate-50 sm:text-sm"
+                >
+                  Dari: {formatDate(startDate)}
+
+                  <span className="text-slate-400" aria-hidden="true">
+                    ×
+                  </span>
+                </button>
+              )}
+
+              {endDate !== "" && (
+                <button
+                  type="button"
+                  onClick={removeEndDateFilter}
+                  className="inline-flex min-h-8 items-center gap-1.5 rounded-full border border-slate-200 bg-white px-3 py-1 text-xs font-medium text-slate-700 transition hover:border-slate-300 hover:bg-slate-50 sm:text-sm"
+                >
+                  Sampai: {formatDate(endDate)}
+
+                  <span className="text-slate-400" aria-hidden="true">
+                    ×
+                  </span>
+                </button>
+              )}
+
+              {status !== "" && (
+                <button
+                  type="button"
+                  onClick={removeStatusFilter}
+                  className="inline-flex min-h-8 items-center gap-1.5 rounded-full border border-slate-200 bg-white px-3 py-1 text-xs font-medium text-slate-700 transition hover:border-slate-300 hover:bg-slate-50 sm:text-sm"
+                >
+                  Status: {getStatusLabel(status)}
+
+                  <span className="text-slate-400" aria-hidden="true">
+                    ×
+                  </span>
+                </button>
+              )}
+
+              <button
+  type="button"
+  onClick={resetFilters}
+  className="inline-flex min-h-8 items-center gap-1.5 rounded-lg px-2.5 text-xs font-medium text-slate-500 transition-colors hover:bg-slate-100 hover:text-slate-900 focus:outline-none focus-visible:ring-2 focus-visible:ring-brand focus-visible:ring-offset-1 sm:text-sm"
+>
+  <svg
+    viewBox="0 0 24 24"
+    fill="none"
+    className="h-3.5 w-3.5"
+    aria-hidden="true"
+  >
+    <path
+      d="M4 4v5h5M20 20v-5h-5M5.5 9A7.5 7.5 0 0 1 18 6.5M18.5 15A7.5 7.5 0 0 1 6 17.5"
+      stroke="currentColor"
+      strokeWidth="1.8"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+    />
+  </svg>
+
+  <span>Reset semua</span>
+</button>
+            </div>
+          )}
+        </div>
+
+        {/* =====================================================
+            FILTER DRAWER
+        ====================================================== */}
+
+        {isFilterOpen && (
+          <div
+            className="fixed inset-0 z-50"
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="filter-title"
+          >
+
+            {/* OVERLAY */}
+
+            <button
+              type="button"
+              aria-label="Tutup filter"
+              onClick={closeFilter}
+              className="absolute inset-0 bg-slate-900/30 backdrop-blur-[1px]"
+            />
+
+            {/* DRAWER */}
+
+            <aside
+              className="
+                absolute right-0 top-0
+                flex h-full w-full max-w-md
+                flex-col bg-white shadow-2xl
+              "
+            >
+
+              {/* =================================================
+                  DRAWER HEADER
+              ================================================== */}
+
+              <div className="flex items-start justify-between border-b border-slate-200 px-5 py-4 sm:px-6">
+                <div>
+                  <h2
+                    id="filter-title"
+                    className="text-lg font-semibold tracking-tight text-slate-900"
+                  >
+                    Filter Transaksi
+                  </h2>
+
+                  <p className="mt-1 text-sm leading-5 text-slate-500">
+                    Atur filter untuk menemukan transaksi.
+                  </p>
+                </div>
+
+                <button
+                  type="button"
+                  onClick={closeFilter}
+                  aria-label="Tutup filter"
+                  className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg text-slate-500 transition hover:bg-slate-100 hover:text-slate-900"
+                >
+                  <svg
+                    viewBox="0 0 24 24"
+                    fill="none"
+                    className="h-5 w-5"
+                    aria-hidden="true"
+                  >
+                    <path
+                      d="m6 6 12 12M18 6 6 18"
+                      stroke="currentColor"
+                      strokeWidth="1.8"
+                      strokeLinecap="round"
+                    />
+                  </svg>
+                </button>
               </div>
 
-              <Input
-                id="transaction-start-date"
-                label="Dari tanggal"
-                type="date"
-                value={startDate}
-                onChange={(event) => {
-                  setStartDate(event.target.value);
-                  resetPagination();
-                }}
-              />
+              {/* =================================================
+                  DRAWER CONTENT
+              ================================================== */}
 
-              <Input
-                id="transaction-end-date"
-                label="Sampai tanggal"
-                type="date"
-                value={endDate}
-                onChange={(event) => {
-                  setEndDate(event.target.value);
-                  resetPagination();
-                }}
-              />
-            </div>
+              <div className="flex-1 overflow-y-auto px-5 py-5 sm:px-6 sm:py-6">
 
-            {/* MOBILE + TABLET RESET */}
-            <div className="mt-4 flex justify-start md:justify-end xl:hidden">
-              <Button
-                type="button"
-                variant="secondary"
-                onClick={resetFilters}
-              >
-                Reset Filter
-              </Button>
-            </div>
+                {/* =================================================
+                    PERIODE
+                ================================================== */}
+
+                <section>
+                  <h3 className="text-sm font-semibold text-slate-900">
+                    Periode
+                  </h3>
+
+                  <p className="mt-1 text-sm text-slate-500">
+                    Pilih rentang tanggal transaksi.
+                  </p>
+
+                  <div className="mt-4 grid gap-4 sm:grid-cols-2">
+
+                    {/* DARI */}
+
+                    <Input
+                      id="transaction-start-date"
+                      label="Dari tanggal"
+                      type="date"
+                      value={filterStartDate}
+                      onChange={(event) => {
+                        const value = event.target.value;
+
+                        setFilterStartDate(value);
+
+                        // Kalau tanggal awal digeser melewati
+                        // tanggal akhir, kosongkan tanggal akhir.
+                        if (
+                          filterEndDate !== "" &&
+                          value !== "" &&
+                          filterEndDate < value
+                        ) {
+                          setFilterEndDate("");
+                        }
+                      }}
+                    />
+
+                    {/* SAMPAI */}
+
+                    <Input
+                      id="transaction-end-date"
+                      label="Sampai tanggal"
+                      type="date"
+                      value={filterEndDate}
+                      min={filterStartDate || undefined}
+                      onChange={(event) => {
+                        setFilterEndDate(event.target.value);
+                      }}
+                    />
+                  </div>
+                </section>
+
+                {/* DIVIDER */}
+
+                <div className="my-6 border-t border-slate-100" />
+
+                {/* =================================================
+                    STATUS
+                ================================================== */}
+
+                <section>
+                  <h3 className="text-sm font-semibold text-slate-900">
+                    Status
+                  </h3>
+
+                  <div className="mt-3 flex flex-wrap gap-2">
+                    {STATUS_OPTIONS.map((option) => {
+                      const selected =
+                        filterStatus === option.value;
+
+                      return (
+                        <button
+                          key={option.value || "all"}
+                          type="button"
+                          onClick={() => {
+                            setFilterStatus(option.value);
+                          }}
+                          className={[
+                            "min-h-10 rounded-lg border px-4 py-2 text-sm font-medium transition",
+                            selected
+                              ? "border-blue-600 bg-blue-600 text-white"
+                              : "border-slate-200 bg-white text-slate-700 hover:border-slate-300 hover:bg-slate-50",
+                          ].join(" ")}
+                        >
+                          {option.label}
+                        </button>
+                      );
+                    })}
+                  </div>
+                </section>
+              </div>
+
+              {/* =================================================
+                  DRAWER FOOTER
+              ================================================== */}
+
+              <div className="border-t border-slate-200 bg-white px-5 py-4 sm:px-6">
+                <div className="flex gap-2.5 sm:gap-3">
+
+                  {/* RESET */}
+
+                  <Button
+                    type="button"
+                    variant="secondary"
+                    className="flex-1 px-3"
+                    onClick={resetDrawerFilters}
+                  >
+                    Reset Filter
+                  </Button>
+
+                  {/* APPLY */}
+
+                  <Button
+                    type="button"
+                    className="flex-1 px-3"
+                    onClick={applyFilters}
+                  >
+                    Terapkan Filter
+                  </Button>
+                </div>
+              </div>
+            </aside>
           </div>
-        </Card>
+        )}
 
-        {/* EMPTY */}
+        {/* =====================================================
+            EMPTY STATE
+        ====================================================== */}
+
         {filteredTransactions.length === 0 ? (
           <Card className="mt-5 p-4 sm:p-5">
             <EmptyState
@@ -354,7 +823,10 @@ export default function TransactionsPage() {
           </Card>
         ) : (
           <>
-            {/* DESKTOP TABLE */}
+            {/* =================================================
+                DESKTOP TABLE
+            ================================================== */}
+
             <Card className="mt-5 hidden overflow-hidden xl:block">
               <table className="w-full table-fixed border-collapse text-left text-sm">
                 <colgroup>
@@ -369,51 +841,56 @@ export default function TransactionsPage() {
                 </colgroup>
 
                 {/* TABLE HEADER */}
+
                 <thead>
                   <tr className="border-b border-slate-200 bg-slate-50">
-                    <th className="px-4 py-4 text-center text-xs font-semibold tracking-wide text-slate-500">
+
+                    <th className="px-4 py-3 text-center text-xs font-semibold tracking-wide text-slate-500">
                       Nomor transaksi
                     </th>
 
-                    <th className="px-4 py-4 text-center text-xs font-semibold tracking-wide text-slate-500">
+                    <th className="px-4 py-3 text-center text-xs font-semibold tracking-wide text-slate-500">
                       Anggota
                     </th>
 
-                    <th className="px-4 py-4 text-center text-xs font-semibold tracking-wide text-slate-500">
+                    <th className="px-4 py-3 text-center text-xs font-semibold tracking-wide text-slate-500">
                       Buku
                     </th>
 
-                    <th className="px-4 py-4 text-center text-xs font-semibold tracking-wide text-slate-500">
+                    <th className="px-4 py-3 text-center text-xs font-semibold tracking-wide text-slate-500">
                       Petugas
                     </th>
 
-                    <th className="px-4 py-4 text-center text-xs font-semibold tracking-wide text-slate-500">
+                    <th className="px-4 py-3 text-center text-xs font-semibold tracking-wide text-slate-500">
                       Peminjaman
                     </th>
 
-                    <th className="px-4 py-4 text-center text-xs font-semibold tracking-wide text-slate-500">
+                    <th className="px-4 py-3 text-center text-xs font-semibold tracking-wide text-slate-500">
                       Jatuh tempo
                     </th>
 
-                    <th className="px-4 py-4 text-center text-xs font-semibold tracking-wide text-slate-500">
+                    <th className="px-4 py-3 text-center text-xs font-semibold tracking-wide text-slate-500">
                       Pengembalian
                     </th>
 
-                    <th className="px-5 py-4 text-center text-xs font-semibold tracking-wide text-slate-500">
+                    <th className="px-4 py-3 text-center text-xs font-semibold tracking-wide text-slate-500">
                       Status
                     </th>
                   </tr>
                 </thead>
 
                 {/* TABLE BODY */}
+
                 <tbody>
                   {paginatedTransactions.map((transaction) => (
                     <tr
                       key={transaction.loan.id}
                       className="border-b border-slate-100 last:border-b-0 hover:bg-slate-50/70"
                     >
+
                       {/* NOMOR TRANSAKSI */}
-                      <td className="min-w-0 px-4 py-5 align-middle">
+
+                      <td className="min-w-0 px-4 py-3.5 align-middle">
                         <p
                           className="truncate whitespace-nowrap font-semibold tracking-tight text-slate-900"
                           title={transaction.loan.loanNumber}
@@ -423,7 +900,8 @@ export default function TransactionsPage() {
                       </td>
 
                       {/* ANGGOTA */}
-                      <td className="min-w-0 px-4 py-5 align-middle">
+
+                      <td className="min-w-0 px-4 py-3.5 align-middle">
                         <p
                           className="truncate text-slate-700"
                           title={transaction.member?.name ?? "-"}
@@ -433,36 +911,41 @@ export default function TransactionsPage() {
                       </td>
 
                       {/* BUKU */}
-                      <td className="min-w-0 px-4 py-5 align-middle">
+
+                      <td className="min-w-0 px-4 py-3.5 align-middle">
                         {transaction.items.length === 0 ? (
-                          <span className="text-slate-400">-</span>
+                          <span className="text-slate-400">
+                            -
+                          </span>
                         ) : (
-                          <ul className="min-w-0 space-y-1.5">
+                          <ul className="min-w-0 space-y-1">
                             {transaction.items.map(
                               ({ book, bookCopy }) => (
                                 <li
                                   key={`${transaction.loan.id}-${book?.id ?? "book"}-${bookCopy?.id ?? "copy"}`}
-                                  className="min-w-0 leading-5"
+                                  className="grid min-w-0 grid-cols-[10px_minmax(0,1fr)]"
                                 >
                                   <span
-                                    className="mr-1 text-slate-300"
+                                    className="text-slate-300"
                                     aria-hidden="true"
                                   >
                                     •
                                   </span>
 
                                   <span
-                                    className="font-medium text-slate-700"
-                                    title={book?.title ?? "-"}
+                                    className="min-w-0 leading-5 text-slate-700"
+                                    title={`${book?.title ?? "-"}${bookCopy?.code ? ` (${bookCopy.code})` : ""}`}
                                   >
-                                    {book?.title ?? "-"}
-                                  </span>
-
-                                  {bookCopy?.code && (
-                                    <span className="ml-1 whitespace-nowrap text-slate-400">
-                                      ({bookCopy.code})
+                                    <span className="font-medium">
+                                      {book?.title ?? "-"}
                                     </span>
-                                  )}
+
+                                    {bookCopy?.code && (
+                                      <span className="ml-1 text-slate-400">
+                                        ({bookCopy.code})
+                                      </span>
+                                    )}
+                                  </span>
                                 </li>
                               ),
                             )}
@@ -471,7 +954,8 @@ export default function TransactionsPage() {
                       </td>
 
                       {/* PETUGAS */}
-                      <td className="min-w-0 px-4 py-5 align-middle">
+
+                      <td className="min-w-0 px-4 py-3.5 align-middle">
                         <p
                           className="truncate text-slate-700"
                           title={transaction.user?.name ?? "-"}
@@ -481,38 +965,48 @@ export default function TransactionsPage() {
                       </td>
 
                       {/* PEMINJAMAN */}
-                      <td className="px-4 py-5 text-center align-middle">
+
+                      <td className="px-4 py-3.5 text-center align-middle">
                         <span className="whitespace-nowrap text-slate-700">
-                          {formatDate(transaction.loan.borrowedAt)}
+                          {formatDate(
+                            transaction.loan.borrowedAt,
+                          )}
                         </span>
                       </td>
 
                       {/* JATUH TEMPO */}
-                      <td className="px-4 py-5 text-center align-middle">
+
+                      <td className="px-4 py-3.5 text-center align-middle">
                         <span className="whitespace-nowrap text-slate-700">
-                          {formatDate(transaction.loan.dueAt)}
+                          {formatDate(
+                            transaction.loan.dueAt,
+                          )}
                         </span>
                       </td>
 
                       {/* PENGEMBALIAN */}
-                      <td className="px-4 py-5 text-center align-middle">
+
+                      <td className="px-4 py-3.5 text-center align-middle">
                         <span className="whitespace-nowrap text-slate-700">
-                          {formatDate(transaction.loan.returnedAt)}
+                          {formatDate(
+                            transaction.loan.returnedAt,
+                          )}
                         </span>
                       </td>
 
                       {/* STATUS */}
-                      <td className="px-5 py-5 align-middle">
+
+                      <td className="px-4 py-3.5 align-middle">
                         <div className="flex justify-center">
-                          <div className="flex min-w-[88px] justify-center">
-                            <Badge
-                              variant={getStatusVariant(
-                                transaction.loan.status,
-                              )}
-                            >
-                              {getStatusLabel(transaction.loan.status)}
-                            </Badge>
-                          </div>
+                          <Badge
+                            variant={getStatusVariant(
+                              transaction.loan.status,
+                            )}
+                          >
+                            {getStatusLabel(
+                              transaction.loan.status,
+                            )}
+                          </Badge>
                         </div>
                       </td>
                     </tr>
@@ -521,25 +1015,34 @@ export default function TransactionsPage() {
               </table>
             </Card>
 
-            {/* TABLET + MOBILE */}
+            {/* =================================================
+                TABLET + MOBILE
+            ================================================== */}
+
             <div className="mt-5 space-y-3 xl:hidden">
               {paginatedTransactions.map((transaction) => (
                 <Card
                   key={transaction.loan.id}
                   className="p-4 sm:p-5"
                 >
-                  {/* TRANSACTION HEADER */}
+
+                  {/* =================================================
+                      TRANSACTION HEADER
+                  ================================================== */}
+
                   <div className="flex items-start justify-between gap-3">
+
                     <div className="min-w-0 flex-1">
+
                       <p
-                        className="truncate text-sm font-semibold text-slate-900 sm:text-base"
+                        className="truncate text-sm font-semibold tracking-tight text-slate-900 sm:text-base"
                         title={transaction.loan.loanNumber}
                       >
                         {transaction.loan.loanNumber}
                       </p>
 
                       <p
-                        className="mt-1 truncate text-sm text-slate-500"
+                        className="mt-0.5 truncate text-sm text-slate-500"
                         title={transaction.member?.name ?? "-"}
                       >
                         {transaction.member?.name ?? "-"}
@@ -548,91 +1051,127 @@ export default function TransactionsPage() {
 
                     <div className="shrink-0">
                       <Badge
-                        variant={getStatusVariant(transaction.loan.status)}
+                        variant={getStatusVariant(
+                          transaction.loan.status,
+                        )}
                       >
-                        {getStatusLabel(transaction.loan.status)}
+                        {getStatusLabel(
+                          transaction.loan.status,
+                        )}
                       </Badge>
                     </div>
                   </div>
 
-                  {/* TRANSACTION DETAILS */}
-                  <div className="mt-4 grid grid-cols-2 gap-x-5 gap-y-3 text-sm sm:gap-x-6 sm:gap-y-4 md:grid-cols-3">
-                    {/* BUKU */}
-                    <div className="col-span-2 min-w-0 md:col-span-1">
-                      <p className="text-xs font-medium text-slate-500 sm:text-sm">
-                        Buku
-                      </p>
+                  {/* =================================================
+                      BUKU
+                  ================================================== */}
 
-                      {transaction.items.length === 0 ? (
-                        <p className="mt-1 text-slate-900">-</p>
-                      ) : (
-                        <ul className="mt-1 space-y-1 leading-5 text-slate-900">
-                          {transaction.items.map(
-                            ({ book, bookCopy }) => (
-                              <li
-                                key={`${transaction.loan.id}-${book?.id ?? "book"}-${bookCopy?.id ?? "copy"}`}
-                                className="break-words"
+                  <div className="mt-4">
+                    <p className="text-xs font-medium text-slate-500 sm:text-sm">
+                      Buku
+                    </p>
+
+                    {transaction.items.length === 0 ? (
+                      <p className="mt-1 text-sm text-slate-900">
+                        -
+                      </p>
+                    ) : (
+                      <ul className="mt-1 space-y-0.5 text-sm leading-5 text-slate-900 sm:text-base">
+                        {transaction.items.map(
+                          ({ book, bookCopy }) => (
+                            <li
+                              key={`${transaction.loan.id}-${book?.id ?? "book"}-${bookCopy?.id ?? "copy"}`}
+                              className="break-words"
+                            >
+                              <span
+                                aria-hidden="true"
+                                className="mr-1 text-slate-400"
                               >
-                                <span aria-hidden="true">
-                                  •{" "}
-                                </span>
+                                •
+                              </span>
 
+                              <span className="font-medium">
                                 {book?.title ?? "-"}
+                              </span>
 
-                                {bookCopy?.code
-                                  ? ` (${bookCopy.code})`
-                                  : ""}
-                              </li>
-                            ),
-                          )}
-                        </ul>
-                      )}
-                    </div>
+                              {bookCopy?.code && (
+                                <span className="ml-1 text-slate-400">
+                                  ({bookCopy.code})
+                                </span>
+                              )}
+                            </li>
+                          ),
+                        )}
+                      </ul>
+                    )}
+                  </div>
 
-                    {/* PETUGAS */}
-                    <div className="min-w-0">
-                      <p className="text-xs font-medium text-slate-500 sm:text-sm">
-                        Petugas
-                      </p>
+                  {/* DIVIDER */}
 
-                      <p
-                        className="mt-1 truncate text-slate-900"
-                        title={transaction.user?.name ?? "-"}
-                      >
-                        {transaction.user?.name ?? "-"}
-                      </p>
-                    </div>
+                  <div className="my-4 border-t border-slate-100" />
+
+                  {/* =================================================
+                      PETUGAS
+                  ================================================== */}
+
+                  <div className="mb-4">
+                    <p className="text-xs font-medium text-slate-500 sm:text-sm">
+                      Petugas
+                    </p>
+
+                    <p
+                      className="mt-0.5 truncate text-sm text-slate-900 sm:text-base"
+                      title={transaction.user?.name ?? "-"}
+                    >
+                      {transaction.user?.name ?? "-"}
+                    </p>
+                  </div>
+
+                  {/* =================================================
+                      DATE INFORMATION
+                  ================================================== */}
+
+                  <div className="grid grid-cols-2 gap-x-5 gap-y-3">
 
                     {/* PEMINJAMAN */}
+
                     <div className="min-w-0">
                       <p className="text-xs font-medium text-slate-500 sm:text-sm">
                         Peminjaman
                       </p>
 
-                      <p className="mt-1 whitespace-nowrap text-slate-900">
-                        {formatDate(transaction.loan.borrowedAt)}
+                      <p className="mt-0.5 whitespace-nowrap text-sm text-slate-900 sm:text-base">
+                        {formatDate(
+                          transaction.loan.borrowedAt,
+                        )}
                       </p>
                     </div>
 
                     {/* JATUH TEMPO */}
+
                     <div className="min-w-0">
                       <p className="text-xs font-medium text-slate-500 sm:text-sm">
                         Jatuh tempo
                       </p>
 
-                      <p className="mt-1 whitespace-nowrap text-slate-900">
-                        {formatDate(transaction.loan.dueAt)}
+                      <p className="mt-0.5 whitespace-nowrap text-sm text-slate-900 sm:text-base">
+                        {formatDate(
+                          transaction.loan.dueAt,
+                        )}
                       </p>
                     </div>
 
                     {/* PENGEMBALIAN */}
+
                     <div className="min-w-0">
                       <p className="text-xs font-medium text-slate-500 sm:text-sm">
                         Pengembalian
                       </p>
 
-                      <p className="mt-1 whitespace-nowrap text-slate-900">
-                        {formatDate(transaction.loan.returnedAt)}
+                      <p className="mt-0.5 whitespace-nowrap text-sm text-slate-900 sm:text-base">
+                        {formatDate(
+                          transaction.loan.returnedAt,
+                        )}
                       </p>
                     </div>
                   </div>
@@ -640,23 +1179,34 @@ export default function TransactionsPage() {
               ))}
             </div>
 
-            {/* PAGINATION */}
+            {/* =================================================
+                PAGINATION
+            ================================================== */}
+
             {totalPages > 1 && (
               <div className="mt-5 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+
                 <p className="text-sm text-slate-500">
                   Halaman {currentPage} dari {totalPages}
                 </p>
 
                 <div className="grid grid-cols-2 gap-2 sm:flex">
+
                   <Button
                     type="button"
                     variant="secondary"
                     disabled={currentPage === 1}
                     onClick={() =>
-                      setPage((current) => Math.max(1, current - 1))
+                      setPage((current) =>
+                        Math.max(1, current - 1),
+                      )
                     }
                   >
-                    Sebelumnya
+                    <span aria-hidden="true">←</span>
+
+                    <span className="ml-2">
+                      Sebelumnya
+                    </span>
                   </Button>
 
                   <Button
@@ -665,11 +1215,18 @@ export default function TransactionsPage() {
                     disabled={currentPage === totalPages}
                     onClick={() =>
                       setPage((current) =>
-                        Math.min(totalPages, current + 1),
+                        Math.min(
+                          totalPages,
+                          current + 1,
+                        ),
                       )
                     }
                   >
-                    Berikutnya
+                    <span className="mr-2">
+                      Berikutnya
+                    </span>
+
+                    <span aria-hidden="true">→</span>
                   </Button>
                 </div>
               </div>

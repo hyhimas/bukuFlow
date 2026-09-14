@@ -6,7 +6,6 @@ import { getSession } from "@/lib/auth";
 import Card from "@/components/ui/Card";
 import Input from "@/components/ui/Input";
 import Button from "@/components/ui/Button";
-import AppHeader from "@/components/ui/AppHeader";
 import BackLink from "@/components/ui/BackLink";
 
 import {
@@ -233,6 +232,11 @@ export default function NewLoanPage() {
     return;
   }
 
+  if (session.user.role !== "STAFF") {
+    router.replace("/dashboard");
+    return;
+  }
+  
   setPageLoading(false);
 }, [router]);
 
@@ -878,7 +882,6 @@ if (pageLoading) {
           HEADER
       ================================================= */}
 
-      <AppHeader subtitle="Catat Peminjaman" />
 
       <div className="page-container py-6">
         {/* =================================================
