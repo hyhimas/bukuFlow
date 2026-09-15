@@ -5,11 +5,7 @@ import { usePathname, useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
 
 import { clearSession, getSession, type Session } from "@/lib/auth";
-import {
-  canAccessCompanySettings,
-  canAccessMasterData,
-  canAccessUserManagement,
-} from "@/lib/authorization";
+import { canAccessMasterData } from "@/lib/authorization";
 
 interface SidebarProps {
   open: boolean;
@@ -92,26 +88,30 @@ export default function Sidebar({
               onClick={onClose}
             />
 
-            <NavItem
-              href="/loans/new"
-              label="Peminjaman"
-              active={isActive("/loans/new")}
-              onClick={onClose}
-            />
+            {role && (
+              <>
+                <NavItem
+                  href={role === "COMPANY_ADMIN" ? "/loans" : "/loans/new"}
+                  label="Peminjaman"
+                  active={isActive("/loans")}
+                  onClick={onClose}
+                />
 
-            <NavItem
-              href="/returns"
-              label="Pengembalian"
-              active={isActive("/returns")}
-              onClick={onClose}
-            />
+                <NavItem
+                  href="/returns"
+                  label="Pengembalian"
+                  active={isActive("/returns")}
+                  onClick={onClose}
+                />
 
-            <NavItem
-              href="/transactions"
-              label="Riwayat Transaksi"
-              active={isActive("/transactions")}
-              onClick={onClose}
-            />
+                <NavItem
+                  href="/transactions"
+                  label="Riwayat Transaksi"
+                  active={isActive("/transactions")}
+                  onClick={onClose}
+                />
+              </>
+            )}
           </div>
 
           {/* Master Data */}
@@ -139,36 +139,6 @@ export default function Sidebar({
             </div>
           )}
 
-          {/* Pengaturan */}
-          {role &&
-            (canAccessCompanySettings(role) ||
-              canAccessUserManagement(role)) && (
-              <div className="mt-7">
-                <p className="px-3 pb-2 text-xs font-semibold uppercase tracking-wider text-slate-400">
-                  Pengaturan
-                </p>
-
-                <div className="space-y-1">
-                  {canAccessCompanySettings(role) && (
-                    <NavItem
-                      href="/settings/company"
-                      label="Company"
-                      active={isActive("/settings/company")}
-                      onClick={onClose}
-                    />
-                  )}
-
-                  {canAccessUserManagement(role) && (
-                    <NavItem
-                      href="/settings/users"
-                      label="Pengguna"
-                      active={isActive("/settings/users")}
-                      onClick={onClose}
-                    />
-                  )}
-                </div>
-              </div>
-            )}
         </nav>
 
         {/* User & Logout */}

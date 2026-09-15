@@ -15,7 +15,7 @@ export default function UsersSettingsPage() {
   useEffect(() => {
     const session = getSession();
 
-    if (!session || !canAccessUserManagement(session.user.role)) {
+    if (!session || !canAccessUserManagement()) {
       router.replace("/dashboard");
     }
   }, [router]);

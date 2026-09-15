@@ -4,6 +4,7 @@ import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 
 import { getSession } from "@/lib/auth";
+import { canAccessLoans } from "@/lib/authorization";
 import { getTransactions } from "@/lib/mock-api";
 
 import type { Loan, TransactionData } from "@/lib/types";
@@ -20,8 +21,9 @@ export default function LoansPage() {
   const router = useRouter();
 
   const [transactions, setTransactions] = useState<TransactionData[]>([]);
-  const [selectedLoan, setSelectedLoan] =
-    useState<TransactionData | null>(null);
+  const [selectedLoan, setSelectedLoan] = useState<TransactionData | null>(
+    null,
+  );
 
   const [search, setSearch] = useState("");
   const [loading, setLoading] = useState(true);
@@ -46,7 +48,7 @@ export default function LoansPage() {
       return;
     }
 
-    if (session.user.role !== "COMPANY_ADMIN") {
+    if (!canAccessLoans(session.user.role)) {
       router.replace("/dashboard");
       return;
     }
@@ -65,7 +67,12 @@ export default function LoansPage() {
 
       try {
         const result = await getTransactions();
-        setTransactions(result);
+
+        const activeLoans = result.filter(
+          ({ loan }) => loan.status === "ACTIVE" || loan.status === "OVERDUE",
+        );
+
+        setTransactions(activeLoans);
       } catch {
         setError("Daftar peminjaman gagal dimuat.");
       } finally {
@@ -90,13 +97,9 @@ export default function LoansPage() {
     }
 
     return transactions.filter(({ loan, member, items }) => {
-      const matchesLoanNumber = loan.loanNumber
-        .toLowerCase()
-        .includes(keyword);
+      const matchesLoanNumber = loan.loanNumber.toLowerCase().includes(keyword);
 
-      const matchesMember = member?.name
-        .toLowerCase()
-        .includes(keyword);
+      const matchesMember = member?.name.toLowerCase().includes(keyword);
 
       const matchesBook = items.some(
         ({ book, bookCopy }) =>
@@ -314,8 +317,8 @@ export default function LoansPage() {
                       </p>
 
                       <p className="mt-1 text-sm text-slate-500">
-                        Tidak ada transaksi yang sesuai dengan "
-                        {search.trim()}".
+                        Tidak ada transaksi yang sesuai dengan "{search.trim()}
+                        ".
                       </p>
                     </div>
                   )}
@@ -587,10 +590,7 @@ function LoanDetail({
             value={formatDate(loan.borrowedAt)}
           />
 
-          <DetailItem
-            label="Jatuh Tempo"
-            value={formatDate(loan.dueAt)}
-          />
+          <DetailItem label="Jatuh Tempo" value={formatDate(loan.dueAt)} />
         </div>
       </div>
 
@@ -618,25 +618,9 @@ function LoanDetail({
               </p>
 
               <div className="mt-2 grid gap-2 sm:grid-cols-2">
-                <DetailItem
-                  label="Kode Buku"
-                  value={book?.code ?? "-"}
-                />
+                <DetailItem label="Kode Buku" value={book?.code ?? "-"} />
 
-                <DetailItem
-                  label="Kode Copy"
-                  value={bookCopy?.code ?? "-"}
-                />
-
-                <DetailItem
-                  label="Status"
-                  value={loanItem.status ?? "-"}
-                />
-
-                <DetailItem
-                  label="Dikembalikan"
-                  value={formatDate(loanItem.returnedAt)}
-                />
+                <DetailItem label="Kode Copy" value={bookCopy?.code ?? "-"} />
               </div>
             </div>
           ))}

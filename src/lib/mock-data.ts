@@ -228,6 +228,33 @@ export const mockMembers: Member[] = [
     createdAt: "2026-08-09T08:00:00+07:00",
     updatedAt: "2026-08-09T08:00:00+07:00",
   },
+
+  {
+      id: "member-009",
+      companyId: "company-001",
+      memberNumber: "MBR-009",
+      name: "Galih Prakoso",
+      memberType: "MAHASISWA",
+      identityNumber: "3372010909090009",
+      phone: "081234567898",
+      email: "galih@example.com",
+      status: "ACTIVE",
+      createdAt: "2026-08-10T08:00:00+07:00",
+      updatedAt: "2026-08-10T08:00:00+07:00",
+    },
+    {
+      id: "member-010",
+      companyId: "company-001",
+      memberNumber: "MBR-010",
+      name: "Nadia Permata",
+      memberType: "UMUM",
+      identityNumber: "3372011010100010",
+      phone: "081234567899",
+      email: "nadia@example.com",
+      status: "ACTIVE",
+      createdAt: "2026-08-11T08:00:00+07:00",
+      updatedAt: "2026-08-11T08:00:00+07:00",
+    },
 ];
 
 /* =========================================================
@@ -373,6 +400,24 @@ export const mockBooks: Book[] = [
     createdAt: "2026-08-07T08:00:00+07:00",
     updatedAt: "2026-08-07T08:00:00+07:00",
   },
+
+  {
+    id: "book-009",
+    companyId: "company-001",
+    code: "BK-009",
+    isbn: "9786020633183",
+    title: "Dasar Pemrograman JavaScript",
+    author: "Rizal Hidayat",
+    publisher: "Informatika",
+    publicationYear: 2023,
+    category: "Teknologi",
+    coverUrl: "",
+    status: "AVAILABLE",
+    totalCopies: 3,
+    availableCopies: 3,
+    createdAt: "2026-08-10T08:00:00+07:00",
+    updatedAt: "2026-08-10T08:00:00+07:00",
+  }
 ];
 
 /* =========================================================
@@ -654,6 +699,34 @@ export const mockBookCopies: BookCopy[] = [
     createdAt: "2026-08-07T08:00:00+07:00",
     updatedAt: "2026-08-07T08:00:00+07:00",
   },
+
+  {
+      id: "book-copy-030",
+      companyId: "company-001",
+      bookId: "book-009",
+      code: "BK-009-01",
+      status: "BORROWED",
+      createdAt: "2026-08-10T08:00:00+07:00",
+      updatedAt: "2026-09-10T10:00:00+07:00",
+    },
+    {
+      id: "book-copy-031",
+      companyId: "company-001",
+      bookId: "book-009",
+      code: "BK-009-02",
+      status: "AVAILABLE",
+      createdAt: "2026-08-10T08:00:00+07:00",
+      updatedAt: "2026-08-10T08:00:00+07:00",
+    },
+    {
+      id: "book-copy-032",
+      companyId: "company-001",
+      bookId: "book-009",
+      code: "BK-009-03",
+      status: "AVAILABLE",
+      createdAt: "2026-08-10T08:00:00+07:00",
+      updatedAt: "2026-08-10T08:00:00+07:00",
+    },
 ];
 
 /* =========================================================
@@ -788,6 +861,54 @@ export const mockLoans: Loan[] = [
     createdAt: "2026-08-28T10:00:00+07:00",
     updatedAt: "2026-08-28T10:00:00+07:00",
   },
+
+  // Active, belum pernah dikembalikan
+    {
+      id: "loan-009",
+      companyId: "company-001",
+      loanNumber: "BF001-2026-000009",
+      memberId: "member-009",
+      borrowedBy: "user-002",
+      borrowedAt: "2026-09-10T09:00:00+07:00",
+      dueAt: "2026-09-20T09:00:00+07:00",
+      returnedAt: undefined,
+      status: "ACTIVE",
+      notes: "",
+      createdAt: "2026-09-10T09:00:00+07:00",
+      updatedAt: "2026-09-10T09:00:00+07:00",
+    },
+  
+    // Partial return, masih ada copy yang belum dikembalikan
+    {
+      id: "loan-010",
+      companyId: "company-001",
+      loanNumber: "BF001-2026-000010",
+      memberId: "member-010",
+      borrowedBy: "user-004",
+      borrowedAt: "2026-09-08T10:00:00+07:00",
+      dueAt: "2026-09-18T10:00:00+07:00",
+      returnedAt: undefined,
+      status: "ACTIVE",
+      notes: "",
+      createdAt: "2026-09-08T10:00:00+07:00",
+      updatedAt: "2026-09-08T10:00:00+07:00",
+    },
+  
+    // Partial return + overdue
+    {
+      id: "loan-011",
+      companyId: "company-001",
+      loanNumber: "BF001-2026-000011",
+      memberId: "member-003",
+      borrowedBy: "user-002",
+      borrowedAt: "2026-08-20T10:00:00+07:00",
+      dueAt: "2026-08-27T10:00:00+07:00",
+      returnedAt: undefined,
+      status: "OVERDUE",
+      notes: "",
+      createdAt: "2026-08-20T10:00:00+07:00",
+      updatedAt: "2026-08-27T10:00:00+07:00",
+    },
 ];
 
 /* =========================================================
@@ -909,7 +1030,79 @@ export const mockLoanItems: LoanItem[] = [
     createdAt: "2026-08-28T10:00:00+07:00",
     updatedAt: "2026-08-28T10:00:00+07:00",
   },
+
+  // loan-009
+    {
+      id: "loan-item-010",
+      companyId: "company-001",
+      loanId: "loan-009",
+      bookId: "book-009",
+      bookCopyId: "book-copy-030",
+      returnedAt: undefined,
+      status: "BORROWED",
+      createdAt: "2026-09-10T09:00:00+07:00",
+      updatedAt: "2026-09-10T09:00:00+07:00",
+    },
+  
+    // loan-010, copy pertama sudah kembali
+    {
+      id: "loan-item-011",
+      companyId: "company-001",
+      loanId: "loan-010",
+      bookId: "book-001",
+      bookCopyId: "book-copy-003",
+      returnedAt: "2026-09-12T14:00:00+07:00",
+      status: "RETURNED",
+      createdAt: "2026-09-08T10:00:00+07:00",
+      updatedAt: "2026-09-12T14:00:00+07:00",
+    },
+  
+    // loan-010, copy kedua masih dipinjam
+    {
+      id: "loan-item-012",
+      companyId: "company-001",
+      loanId: "loan-010",
+      bookId: "book-003",
+      bookCopyId: "book-copy-009",
+      returnedAt: undefined,
+      status: "BORROWED",
+      createdAt: "2026-09-08T10:00:00+07:00",
+      updatedAt: "2026-09-08T10:00:00+07:00",
+    },
+  
+    // loan-011, copy pertama sudah kembali
+    {
+      id: "loan-item-013",
+      companyId: "company-001",
+      loanId: "loan-011",
+      bookId: "book-001",
+      bookCopyId: "book-copy-006",
+      returnedAt: "2026-08-25T15:00:00+07:00",
+      status: "RETURNED",
+      createdAt: "2026-08-20T10:00:00+07:00",
+      updatedAt: "2026-08-25T15:00:00+07:00",
+    },
+  
+    // loan-011, copy kedua masih dipinjam
+    {
+      id: "loan-item-014",
+      companyId: "company-001",
+      loanId: "loan-011",
+      bookId: "book-003",
+      bookCopyId: "book-copy-010",
+      returnedAt: undefined,
+      status: "BORROWED",
+      createdAt: "2026-08-20T10:00:00+07:00",
+      updatedAt: "2026-08-20T10:00:00+07:00",
+    },
 ];
+
+
+/* Additional book */
+
+
+/* Additional loans */
+
 
 /* =========================================================
    AUDIT LOG

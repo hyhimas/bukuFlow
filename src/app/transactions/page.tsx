@@ -13,6 +13,7 @@ import LoadingState from "@/components/ui/LoadingState";
 
 import { useRouter } from "next/navigation";
 import { getSession } from "@/lib/auth";
+import { canAccessTransactions } from "@/lib/authorization";
 
 import { getTransactions } from "@/lib/mock-api";
 
@@ -106,6 +107,11 @@ export default function TransactionsPage() {
 
     if (!session) {
       router.replace("/login");
+      return;
+    }
+
+    if (!canAccessTransactions(session.user.role)) {
+      router.replace("/dashboard");
     }
   }, [router]);
 

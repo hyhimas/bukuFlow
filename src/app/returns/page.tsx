@@ -4,6 +4,7 @@ import { useEffect, useRef, useState } from "react";
 
 import { useRouter } from "next/navigation";
 import { getSession } from "@/lib/auth";
+import { canAccessReturns, canManageReturns } from "@/lib/authorization";
 
 import Button from "@/components/ui/Button";
 import Card from "@/components/ui/Card";
@@ -17,7 +18,6 @@ import LoadingState from "@/components/ui/LoadingState";
 import type { ReturnLoanData, Loan } from "@/lib/types";
 import { getReturnLoans, returnLoanItems } from "@/lib/mock-api";
 
-
 export default function ReturnsPage() {
   const router = useRouter();
 
@@ -28,14 +28,13 @@ export default function ReturnsPage() {
   const [filteredLoans, setFilteredLoans] = useState<ReturnLoanData[]>([]);
 
   const [query, setQuery] = useState("");
-  const [selectedLoan, setSelectedLoan] = useState<ReturnLoanData | null>(
-    null,
-  );
+  const [selectedLoan, setSelectedLoan] = useState<ReturnLoanData | null>(null);
 
   const [selectedItemIds, setSelectedItemIds] = useState<string[]>([]);
 
   const [loading, setLoading] = useState(true);
   const [returnLoading, setReturnLoading] = useState(false);
+  const [isStaff, setIsStaff] = useState(false);
 
   const [error, setError] = useState("");
   const [returnError, setReturnError] = useState("");
@@ -63,7 +62,15 @@ export default function ReturnsPage() {
 
     if (!session) {
       router.replace("/login");
+      return;
     }
+
+    if (!canAccessReturns(session.user.role)) {
+      router.replace("/dashboard");
+      return;
+    }
+
+    setIsStaff(canManageReturns(session.user.role));
   }, [router]);
 
   useEffect(() => {
@@ -185,20 +192,14 @@ export default function ReturnsPage() {
     setReturnLoading(true);
 
     try {
-      const loan = await returnLoanItems(
-        selectedLoan.loan.id,
-        selectedItemIds,
-      );
+      const loan = await returnLoanItems(selectedLoan.loan.id, selectedItemIds);
 
       setSuccessLoan(loan);
 
       setReturnedCopies(
         selectedLoan.items
           .filter(({ loanItem }) => selectedItemIds.includes(loanItem.id))
-          .map(
-            ({ book, bookCopy }) =>
-              `${book.title} (${bookCopy.code})`,
-          ),
+          .map(({ book, bookCopy }) => `${book.title} (${bookCopy.code})`),
       );
 
       setSelectedItemIds([]);
@@ -216,8 +217,7 @@ export default function ReturnsPage() {
         })
         .filter(
           (item) =>
-            item.loan.status === "ACTIVE" ||
-            item.loan.status === "OVERDUE",
+            item.loan.status === "ACTIVE" || item.loan.status === "OVERDUE",
         );
 
       setLoans(updatedLoans);
@@ -225,9 +225,7 @@ export default function ReturnsPage() {
       setSelectedLoan(null);
     } catch (error) {
       setReturnError(
-        error instanceof Error
-          ? error.message
-          : "Pengembalian gagal diproses.",
+        error instanceof Error ? error.message : "Pengembalian gagal diproses.",
       );
     } finally {
       setReturnLoading(false);
@@ -293,16 +291,15 @@ export default function ReturnsPage() {
   }
 
   if (loading) {
-  return (
-    <main className="min-h-screen bg-slate-50">
-      <LoadingState label="Memuat pengembalian..." />
-    </main>
-  );
-}
+    return (
+      <main className="min-h-screen bg-slate-50">
+        <LoadingState label="Memuat pengembalian..." />
+      </main>
+    );
+  }
 
   return (
     <main className="min-h-screen bg-slate-50">
-
       <div className="page-container py-5 sm:py-6">
         <div className="mb-5">
           <BackLink href="/dashboard" />
@@ -408,7 +405,7 @@ export default function ReturnsPage() {
                             : "border-slate-200 bg-white hover:border-blue-300 hover:bg-blue-50"
                         }`}
                       >
-                        <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+                        <div className="grid grid-cols-[minmax(0,1fr)_auto] items-start gap-3">
                           <div className="min-w-0">
                             <p className="truncate font-semibold text-slate-900">
                               {item.loan.loanNumber}
@@ -425,11 +422,11 @@ export default function ReturnsPage() {
                             </p>
                           </div>
 
-                          <span className="w-fit max-w-full sm:shrink-0">
+                          <div className="flex shrink-0 items-center">
                             <Badge variant={overallStatus.variant}>
                               {overallStatus.label}
                             </Badge>
-                          </span>
+                          </div>
                         </div>
                       </button>
                     );
@@ -501,9 +498,7 @@ export default function ReturnsPage() {
                         </div>
 
                         <div className="rounded-lg bg-slate-50 p-3">
-                          <p className="text-xs text-slate-500">
-                            Jatuh tempo
-                          </p>
+                          <p className="text-xs text-slate-500">Jatuh tempo</p>
 
                           <p className="mt-1 font-semibold text-slate-900">
                             {formatDate(selectedLoan.loan.dueAt)}
@@ -511,9 +506,7 @@ export default function ReturnsPage() {
                         </div>
 
                         <div className="rounded-lg bg-slate-50 p-3">
-                          <p className="text-xs text-slate-500">
-                            Dipinjam
-                          </p>
+                          <p className="text-xs text-slate-500">Dipinjam</p>
 
                           <p className="mt-1 font-semibold text-amber-700">
                             {borrowedCount} buku
@@ -521,9 +514,7 @@ export default function ReturnsPage() {
                         </div>
 
                         <div className="rounded-lg bg-slate-50 p-3">
-                          <p className="text-xs text-slate-500">
-                            Dikembalikan
-                          </p>
+                          <p className="text-xs text-slate-500">Dikembalikan</p>
 
                           <p className="mt-1 font-semibold text-green-700">
                             {returnedCount} buku
@@ -544,8 +535,7 @@ export default function ReturnsPage() {
                         <div className="mt-3 space-y-2">
                           {selectedLoan.items.map(
                             ({ loanItem, book, bookCopy }) => {
-                              const isBorrowed =
-                                loanItem.status === "BORROWED";
+                              const isBorrowed = loanItem.status === "BORROWED";
 
                               const selected = selectedItemIds.includes(
                                 loanItem.id,
@@ -554,27 +544,33 @@ export default function ReturnsPage() {
                               return (
                                 <label
                                   key={loanItem.id}
-                                  className={`grid grid-cols-[auto_minmax(0,1fr)_auto] items-center gap-3 rounded-xl border p-3 transition ${
+                                  className={`grid items-center gap-3 rounded-xl border p-3 transition ${
+                                    isStaff
+                                      ? "grid-cols-[auto_minmax(0,1fr)_auto]"
+                                      : "grid-cols-[minmax(0,1fr)_auto]"
+                                  } ${
                                     isBorrowed
                                       ? selected
                                         ? "border-blue-500 bg-blue-50"
                                         : "border-slate-200 bg-white hover:border-blue-300"
                                       : "border-green-200 bg-green-50/40"
                                   } ${
-                                    isBorrowed
+                                    isStaff && isBorrowed
                                       ? "cursor-pointer"
                                       : "cursor-default"
                                   }`}
                                 >
-                                  <input
-                                    type="checkbox"
-                                    checked={selected}
-                                    disabled={!isBorrowed || returnLoading}
-                                    onChange={() => toggleItem(loanItem.id)}
-                                    className="h-4 w-4 self-center rounded border-slate-300 focus:ring-2 focus:ring-blue-500 disabled:cursor-not-allowed"
-                                  />
+                                  {isStaff && (
+                                    <input
+                                      type="checkbox"
+                                      checked={selected}
+                                      disabled={!isBorrowed || returnLoading}
+                                      onChange={() => toggleItem(loanItem.id)}
+                                      className="h-4 w-4 rounded border-slate-300 focus:ring-2 focus:ring-blue-500 disabled:cursor-not-allowed"
+                                    />
+                                  )}
 
-                                  <div className="min-w-0 self-center">
+                                  <div className="min-w-0">
                                     <p
                                       className="truncate font-medium leading-tight text-slate-900"
                                       title={book.title}
@@ -595,7 +591,7 @@ export default function ReturnsPage() {
                                     </div>
                                   </div>
 
-                                  <span className="flex min-w-[108px] justify-center self-center">
+                                  <div className="flex min-w-24 shrink-0 flex-col items-center justify-center text-center">
                                     <Badge
                                       variant={getItemStatusVariant(
                                         loanItem.status,
@@ -603,7 +599,14 @@ export default function ReturnsPage() {
                                     >
                                       {getItemStatusLabel(loanItem.status)}
                                     </Badge>
-                                  </span>
+
+                                    {loanItem.status === "RETURNED" &&
+                                      loanItem.returnedAt && (
+                                        <span className="mt-1 text-xs text-green-700">
+                                          {formatDate(loanItem.returnedAt)}
+                                        </span>
+                                      )}
+                                  </div>
                                 </label>
                               );
                             },
@@ -620,29 +623,31 @@ export default function ReturnsPage() {
                         </p>
                       )}
 
-                      <div className="mt-5 flex flex-col-reverse gap-2 border-t border-slate-200 pt-4 sm:flex-row sm:justify-end">
-                        <Button
-                          type="button"
-                          variant="secondary"
-                          disabled={returnLoading}
-                          onClick={() => {
-                            setSelectedLoan(null);
-                            setSelectedItemIds([]);
-                            setReturnError("");
-                          }}
-                        >
-                          Batal
-                        </Button>
+                      {isStaff && (
+                        <div className="mt-5 flex flex-col-reverse gap-2 border-t border-slate-200 pt-4 sm:flex-row sm:justify-end">
+                          <Button
+                            type="button"
+                            variant="secondary"
+                            disabled={returnLoading}
+                            onClick={() => {
+                              setSelectedLoan(null);
+                              setSelectedItemIds([]);
+                              setReturnError("");
+                            }}
+                          >
+                            Batal
+                          </Button>
 
-                        <Button
-                          type="button"
-                          loading={returnLoading}
-                          disabled={selectedItemIds.length === 0}
-                          onClick={() => setShowConfirmation(true)}
-                        >
-                          Konfirmasi Pengembalian
-                        </Button>
-                      </div>
+                          <Button
+                            type="button"
+                            loading={returnLoading}
+                            disabled={selectedItemIds.length === 0}
+                            onClick={() => setShowConfirmation(true)}
+                          >
+                            Konfirmasi Pengembalian
+                          </Button>
+                        </div>
+                      )}
                     </>
                   );
                 })()}
@@ -707,10 +712,7 @@ export default function ReturnsPage() {
                 onClick={() => setSuccessLoan(null)}
                 className="rounded-md p-2 text-slate-500 transition hover:bg-slate-100 hover:text-slate-700 focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-500"
               >
-                <span
-                  aria-hidden="true"
-                  className="text-xl leading-none"
-                >
+                <span aria-hidden="true" className="text-xl leading-none">
                   ×
                 </span>
               </button>
@@ -719,9 +721,7 @@ export default function ReturnsPage() {
             <div className="space-y-4 p-5">
               <div className="flex items-center justify-between gap-3 rounded-lg border border-green-200 bg-green-50 px-4 py-3">
                 <div>
-                  <p className="text-xs text-slate-500">
-                    Nomor transaksi
-                  </p>
+                  <p className="text-xs text-slate-500">Nomor transaksi</p>
 
                   <p className="mt-1 font-semibold text-slate-900">
                     {successLoan.loanNumber}
@@ -757,9 +757,7 @@ export default function ReturnsPage() {
                 </div>
 
                 <div>
-                  <p className="text-xs text-slate-500">
-                    Tanggal pengembalian
-                  </p>
+                  <p className="text-xs text-slate-500">Tanggal pengembalian</p>
 
                   <p className="mt-1 font-medium text-slate-900">
                     {formatDate(successLoan.returnedAt)}
@@ -769,10 +767,7 @@ export default function ReturnsPage() {
             </div>
 
             <div className="flex justify-end border-t border-slate-200 px-5 py-4">
-              <Button
-                type="button"
-                onClick={() => setSuccessLoan(null)}
-              >
+              <Button type="button" onClick={() => setSuccessLoan(null)}>
                 Selesai
               </Button>
             </div>

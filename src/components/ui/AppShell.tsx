@@ -1,7 +1,7 @@
 "use client";
 
 import { usePathname } from "next/navigation";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 
 import Sidebar from "@/components/ui/Sidebar";
 
@@ -14,6 +14,12 @@ export default function AppShell({ children }: AppShellProps) {
   const [sidebarOpen, setSidebarOpen] = useState(false);
 
   const isLoginPage = pathname === "/login";
+
+  useEffect(() => {
+  if (isLoginPage) {
+    setSidebarOpen(false);
+  }
+}, [isLoginPage]);
 
   if (isLoginPage) {
     return <>{children}</>;

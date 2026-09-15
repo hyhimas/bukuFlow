@@ -15,7 +15,7 @@ export default function CompanySettingsPage() {
   useEffect(() => {
     const session = getSession();
 
-    if (!session || !canAccessCompanySettings(session.user.role)) {
+    if (!session || !canAccessCompanySettings()) {
       router.replace("/dashboard");
     }
   }, [router]);

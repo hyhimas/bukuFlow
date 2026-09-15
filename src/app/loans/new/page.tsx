@@ -3,6 +3,7 @@
 import { FormEvent, useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { getSession } from "@/lib/auth";
+import { canManageLoans } from "@/lib/authorization";
 import Card from "@/components/ui/Card";
 import Input from "@/components/ui/Input";
 import Button from "@/components/ui/Button";
@@ -232,7 +233,7 @@ export default function NewLoanPage() {
     return;
   }
 
-  if (session.user.role !== "STAFF") {
+  if (!canManageLoans(session.user.role)) {
     router.replace("/dashboard");
     return;
   }
