@@ -355,6 +355,9 @@ export async function getDashboard(): Promise<DashboardResponse> {
 /* =========================================================
    MEMBER
 ========================================================= */
+/* =========================================================
+   MEMBER
+========================================================= */
 
 export async function searchMembers(
   query: string,
@@ -363,32 +366,24 @@ export async function searchMembers(
   await delay(300);
 
   const companyId = getCurrentSession().user.companyId;
+  const keyword = query.trim().toLowerCase();
 
-  const keyword =
-    query.trim().toLowerCase();
-
-  if (!keyword) {
-    return [];
-  }
-
-  return mockMembers.filter(
-    (member) =>
-      member.companyId ===
-        companyId &&
-      (
-        member.name
-          .toLowerCase()
-          .includes(keyword) ||
-        member.memberNumber
-          .toLowerCase()
-          .includes(keyword) ||
-        member.identityNumber.includes(
-          keyword,
-        ) ||
-        member.phone.includes(keyword)
-      ),
-  );
+  return mockMembers
+    .filter(
+      (member) =>
+        member.companyId === companyId &&
+        (
+          !keyword ||
+          member.name.toLowerCase().includes(keyword) ||
+          member.memberNumber.toLowerCase().includes(keyword) ||
+          member.identityNumber.includes(keyword)
+        ),
+    )
+    .map((member) => ({
+      ...member,
+    }));
 }
+
 
 export async function createMember(
   data: Pick<
@@ -406,26 +401,37 @@ export async function createMember(
 
   const companyId = getCurrentSession().user.companyId;
 
-  // Defense-in-depth validation. Tidak mengubah kontrak data existing.
+  // Defense-in-depth validation.
   const name = data.name.trim();
   const identityNumber = data.identityNumber.trim();
   const phone = data.phone.trim();
   const email = data.email?.trim() || undefined;
 
   if (name.length < 2) {
-    throw new Error("Nama anggota wajib diisi minimal 2 karakter.");
+    throw new Error(
+      "Nama anggota wajib diisi minimal 2 karakter.",
+    );
   }
 
   if (!/^\d{16}$/.test(identityNumber)) {
-    throw new Error("NIK harus terdiri dari 16 digit angka.");
+    throw new Error(
+      "NIK harus terdiri dari 16 digit angka.",
+    );
   }
 
   if (!/^\d{10,15}$/.test(phone)) {
-    throw new Error("Nomor HP harus terdiri dari 10-15 digit angka.");
+    throw new Error(
+      "Nomor HP harus terdiri dari 10-15 digit angka.",
+    );
   }
 
-  if (email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
-    throw new Error("Format email tidak valid.");
+  if (
+    email &&
+    !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)
+  ) {
+    throw new Error(
+      "Format email tidak valid.",
+    );
   }
 
   const duplicateNik = mockMembers.some(
@@ -435,20 +441,38 @@ export async function createMember(
   );
 
   if (duplicateNik) {
-    throw new Error("NIK tersebut sudah terdaftar sebagai anggota.");
+    throw new Error(
+      "NIK tersebut sudah terdaftar sebagai anggota.",
+    );
   }
 
   const now = new Date().toISOString();
 
-  const nextMemberNumber =
-    mockMembers.filter(
-      (member) =>
-        member.companyId === companyId,
-    ).length + 1;
+  const companyMembers = mockMembers.filter(
+  (member) => member.companyId === companyId,
+);
+
+const usedMemberNumbers = companyMembers
+  .map((member) => {
+    const match = member.memberNumber.match(
+      /^MBR-(\d+)$/,
+    );
+
+    return match ? Number(match[1]) : 0;
+  })
+  .filter((number) => number > 0);
+
+const highestMemberNumber =
+  usedMemberNumbers.length > 0
+    ? Math.max(...usedMemberNumbers)
+    : 0;
+
+const nextMemberNumber =
+  highestMemberNumber + 1;
 
   const member: Member = {
     id: `member-${Date.now()}`,
-    companyId: companyId,
+    companyId,
     memberNumber: `MBR-${String(
       nextMemberNumber,
     ).padStart(3, "0")}`,
@@ -465,7 +489,168 @@ export async function createMember(
   mockMembers.push(member);
   persistMockState();
 
-  return member;
+  return {
+    ...member,
+  };
+}
+
+
+export async function getMemberById(
+  memberId: string,
+): Promise<Member> {
+  ensureMockStoreHydrated();
+  await delay(300);
+
+  const companyId = getCurrentSession().user.companyId;
+
+  const member = mockMembers.find(
+    (item) =>
+      item.id === memberId &&
+      item.companyId === companyId,
+  );
+
+  if (!member) {
+    throw new Error(
+      "Data anggota tidak ditemukan.",
+    );
+  }
+
+  return {
+    ...member,
+  };
+}
+
+
+export interface UpdateMemberData {
+  name: string;
+  identityNumber: string;
+  phone: string;
+  email?: string;
+}
+
+
+export async function updateMember(
+  memberId: string,
+  data: UpdateMemberData,
+): Promise<Member> {
+  ensureMockStoreHydrated();
+  await delay();
+
+  const companyId = getCurrentSession().user.companyId;
+
+  const member = mockMembers.find(
+    (item) =>
+      item.id === memberId &&
+      item.companyId === companyId,
+  );
+
+  if (!member) {
+    throw new Error(
+      "Data anggota tidak ditemukan.",
+    );
+  }
+
+  const name = data.name.trim();
+  const identityNumber =
+    data.identityNumber.trim();
+  const phone = data.phone.trim();
+  const email =
+    data.email?.trim() || undefined;
+
+  if (name.length < 2) {
+    throw new Error(
+      "Nama anggota wajib diisi minimal 2 karakter.",
+    );
+  }
+
+  if (!/^\d{16}$/.test(identityNumber)) {
+    throw new Error(
+      "NIK harus terdiri dari 16 digit angka.",
+    );
+  }
+
+  if (!/^\d{10,15}$/.test(phone)) {
+    throw new Error(
+      "Nomor HP harus terdiri dari 10-15 digit angka.",
+    );
+  }
+
+  if (
+    email &&
+    !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)
+  ) {
+    throw new Error(
+      "Format email tidak valid.",
+    );
+  }
+
+  const duplicateNik = mockMembers.some(
+    (item) =>
+      item.companyId === companyId &&
+      item.id !== memberId &&
+      item.identityNumber === identityNumber,
+  );
+
+  if (duplicateNik) {
+    throw new Error(
+      "NIK tersebut sudah terdaftar sebagai anggota.",
+    );
+  }
+
+  member.name = name;
+  member.identityNumber = identityNumber;
+  member.phone = phone;
+  member.email = email;
+  member.updatedAt =
+    new Date().toISOString();
+
+  persistMockState();
+
+  return {
+    ...member,
+  };
+}
+
+
+export async function changeMemberStatus(
+  memberId: string,
+  status: Member["status"],
+): Promise<Member> {
+  ensureMockStoreHydrated();
+  await delay();
+
+  const companyId = getCurrentSession().user.companyId;
+
+  if (
+    status !== "ACTIVE" &&
+    status !== "INACTIVE"
+  ) {
+    throw new Error(
+      "Status anggota tidak valid.",
+    );
+  }
+
+  const member = mockMembers.find(
+    (item) =>
+      item.id === memberId &&
+      item.companyId === companyId,
+  );
+
+  if (!member) {
+    throw new Error(
+      "Data anggota tidak ditemukan.",
+    );
+  }
+
+  member.status = status;
+  member.updatedAt =
+    new Date().toISOString();
+
+  persistMockState();
+
+  return {
+    ...member,
+  };
 }
 
 /* =========================================================
@@ -1279,3 +1464,4 @@ export async function getMembers(): Promise<Member[]> {
       ...member,
     }));
 }
+

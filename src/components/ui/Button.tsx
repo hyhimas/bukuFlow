@@ -1,4 +1,7 @@
-import type { ButtonHTMLAttributes } from "react";
+import type {
+  ButtonHTMLAttributes,
+  Ref,
+} from "react";
 
 type ButtonVariant =
   | "primary"
@@ -8,6 +11,7 @@ type ButtonVariant =
 type ButtonProps = ButtonHTMLAttributes<HTMLButtonElement> & {
   variant?: ButtonVariant;
   loading?: boolean;
+  ref?: Ref<HTMLButtonElement>;
 };
 
 export default function Button({
@@ -16,12 +20,16 @@ export default function Button({
   disabled,
   children,
   className = "",
+  ref,
   ...props
 }: ButtonProps) {
   const variantClass = {
-    primary: "bg-brand text-white hover:bg-brand-strong",
+    primary:
+      "bg-brand text-white hover:bg-brand-strong",
+
     secondary:
       "border border-app-border bg-app-surface text-app-text-muted hover:bg-neutral-surface",
+
     destructive:
       "bg-danger text-white hover:bg-red-800",
   };
@@ -29,6 +37,7 @@ export default function Button({
   return (
     <button
       {...props}
+      ref={ref}
       disabled={disabled || loading}
       aria-busy={loading || undefined}
       className={`min-h-11 rounded-lg px-4 py-3 text-sm font-semibold transition

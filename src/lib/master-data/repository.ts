@@ -4,6 +4,9 @@ import {
   getBookCopies,
   searchMembers,
   searchBooks,
+  getMemberById,
+  updateMember,
+  changeMemberStatus,
 } from "@/lib/mock-api";
 
 import type {
@@ -60,9 +63,11 @@ export const masterDataRepository = {
   },
 
   async getMember(id: string): Promise<Member | null> {
-    const members = await searchMembers("");
-
-    return members.find((member) => member.id === id) ?? null;
+    try {
+      return await getMemberById(id);
+    } catch {
+      return null;
+    }
   },
 
   async createMember(
@@ -81,22 +86,31 @@ export const masterDataRepository = {
   },
 
   async updateMember(
-    id: string,
-    input: UpdateMemberInput,
-  ): Promise<MutationResult<Member>> {
-    throw new Error(
-      `Update member ${id} belum tersedia di mock API.`,
-    );
-  },
+  id: string,
+  input: UpdateMemberInput,
+): Promise<MutationResult<Member>> {
+  const member = await updateMember(id, input);
+
+  return {
+    data: member,
+    message: "Member berhasil diperbarui.",
+  };
+},
 
   async changeMemberStatus(
-    id: string,
-    input: ChangeMemberStatusInput,
-  ): Promise<MutationResult<Member>> {
-    throw new Error(
-      `Perubahan status member ${id} belum tersedia di mock API.`,
-    );
-  },
+  id: string,
+  input: ChangeMemberStatusInput,
+): Promise<MutationResult<Member>> {
+  const member = await changeMemberStatus(id, input.status);
+
+  return {
+    data: member,
+    message:
+      input.status === "ACTIVE"
+        ? "Member berhasil diaktifkan."
+        : "Member berhasil dinonaktifkan.",
+  };
+},
 
   /**
    * BOOK
