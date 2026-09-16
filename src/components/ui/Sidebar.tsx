@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
-import { useEffect, useState } from "react";
+import { useEffect,useRef, useState } from "react";
 
 import { clearSession, getSession, type Session } from "@/lib/auth";
 import { canAccessMasterData } from "@/lib/authorization";
@@ -22,12 +22,52 @@ export default function Sidebar({
 }: SidebarProps) {
   const pathname = usePathname();
   const router = useRouter();
-
+  const sidebarRef = useRef<HTMLElement>(null);
   const [session, setSession] = useState<Session | null>(null);
 
   useEffect(() => {
     setSession(getSession());
   }, []);
+
+  useEffect(() => {
+  if (!open) return;
+
+  const sidebar = sidebarRef.current;
+  if (!sidebar) return;
+
+  const handleKeyDown = (event: KeyboardEvent) => {
+    if (event.key !== "Tab") return;
+
+    const focusableElements = sidebar.querySelectorAll<HTMLElement>(
+      'a[href], button:not([disabled]), input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])',
+    );
+
+    const focusable = Array.from(focusableElements);
+
+    if (focusable.length === 0) return;
+
+    const first = focusable[0];
+    const last = focusable[focusable.length - 1];
+
+    if (event.shiftKey) {
+      if (document.activeElement === first) {
+        event.preventDefault();
+        last.focus();
+      }
+    } else {
+      if (document.activeElement === last) {
+        event.preventDefault();
+        first.focus();
+      }
+    }
+  };
+
+  document.addEventListener("keydown", handleKeyDown);
+
+  return () => {
+    document.removeEventListener("keydown", handleKeyDown);
+  };
+}, [open]);
 
   const role = session?.user.role;
 
@@ -54,6 +94,7 @@ export default function Sidebar({
 
       {/* Sidebar */}
       <aside
+        ref = {sidebarRef}
         className={`fixed inset-y-0 left-0 z-50 flex w-72 max-w-[85vw] flex-col border-r border-slate-200 bg-white shadow-xl transition-transform duration-200 ${
           open ? "translate-x-0" : "-translate-x-full"
         }`}
@@ -63,6 +104,7 @@ export default function Sidebar({
           <Link
             href="/dashboard"
             onClick={onClose}
+            tabIndex={open ? 0 : -1}
             className="text-xl font-bold text-slate-900"
           >
             BukuFlow
@@ -71,6 +113,7 @@ export default function Sidebar({
           <button
             type="button"
             onClick={onToggle}
+            tabIndex={open ? 0 : -1}
             aria-label="Tutup menu"
             className="flex h-10 w-10 items-center justify-center rounded-lg text-slate-500 transition hover:bg-slate-100 hover:text-slate-900 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-slate-400"
           >
@@ -86,6 +129,7 @@ export default function Sidebar({
               label="Dashboard"
               active={isActive("/dashboard")}
               onClick={onClose}
+              disabled={!open}
             />
 
             {role && (
@@ -95,6 +139,7 @@ export default function Sidebar({
                   label="Peminjaman"
                   active={isActive("/loans")}
                   onClick={onClose}
+                  disabled={!open}
                 />
 
                 <NavItem
@@ -102,6 +147,7 @@ export default function Sidebar({
                   label="Pengembalian"
                   active={isActive("/returns")}
                   onClick={onClose}
+                  disabled={!open}
                 />
 
                 <NavItem
@@ -109,6 +155,7 @@ export default function Sidebar({
                   label="Riwayat Transaksi"
                   active={isActive("/transactions")}
                   onClick={onClose}
+                  disabled={!open}
                 />
               </>
             )}
@@ -127,6 +174,7 @@ export default function Sidebar({
                   label="Member"
                   active={isActive("/master/members")}
                   onClick={onClose}
+                  disabled={!open}
                 />
 
                 <NavItem
@@ -134,6 +182,7 @@ export default function Sidebar({
                   label="Buku"
                   active={isActive("/master/books")}
                   onClick={onClose}
+                  disabled={!open}
                 />
               </div>
             </div>
@@ -158,6 +207,7 @@ export default function Sidebar({
           <button
             type="button"
             onClick={handleLogout}
+            tabIndex={open ? 0 : -1}
             className="flex w-full items-center gap-3 rounded-xl border border-slate-200 px-3 py-3 text-left text-sm font-semibold text-slate-700 transition hover:bg-slate-50 hover:text-slate-900 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-slate-400"
           >
             <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-slate-100">
@@ -182,13 +232,17 @@ interface NavItemProps {
   label: string;
   active: boolean;
   onClick: () => void;
+  disabled?: boolean;
 }
 
-function NavItem({ href, label, active, onClick }: NavItemProps) {
+
+
+function NavItem({ href, label, active, onClick, disabled = false, }: NavItemProps) {
   return (
     <Link
       href={href}
       onClick={onClick}
+      tabIndex={disabled ? -1 : 0}
       className={`flex items-center gap-3 rounded-xl px-3 py-3 text-sm font-medium transition ${
         active
           ? "bg-slate-100 text-slate-900"

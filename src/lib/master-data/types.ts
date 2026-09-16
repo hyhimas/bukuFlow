@@ -58,6 +58,7 @@ export interface BookListInput extends PaginationInput {
 }
 
 export interface CreateBookInput {
+  code: string;
   title: string;
   isbn?: string;
   author?: string;
@@ -77,8 +78,10 @@ export interface UpdateBookInput {
 }
 
 export interface ChangeBookStatusInput {
-  status: BookStatus;
+  status: Extract<BookStatus, "AVAILABLE" | "INACTIVE">;
 }
+
+
 
 /**
  * Book Copy

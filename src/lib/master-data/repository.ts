@@ -2,6 +2,12 @@ import {
   createMember,
   createBook,
   getBookCopies,
+  getBookById,
+  getBookCopy,
+  updateBook,
+  changeBookStatus,
+  createBookCopy,
+  changeBookCopyStatus,
   searchMembers,
   searchBooks,
   getMemberById,
@@ -134,10 +140,12 @@ export const masterDataRepository = {
   },
 
   async getBook(id: string): Promise<Book | null> {
-    const books = await searchBooks("");
-
-    return books.find((book) => book.id === id) ?? null;
-  },
+  try {
+    return await getBookById(id);
+  } catch {
+    return null;
+  }
+},
 
   async createBook(
     input: CreateBookInput,
@@ -151,70 +159,108 @@ export const masterDataRepository = {
   },
 
   async updateBook(
-    id: string,
-    input: UpdateBookInput,
-  ): Promise<MutationResult<Book>> {
-    throw new Error(
-      `Update buku ${id} belum tersedia di mock API.`,
-    );
-  },
+  id: string,
+  input: UpdateBookInput,
+): Promise<MutationResult<Book>> {
+  const book = await updateBook(id, input);
 
-  async changeBookStatus(
-    id: string,
-    input: ChangeBookStatusInput,
-  ): Promise<MutationResult<Book>> {
-    throw new Error(
-      `Perubahan status buku ${id} belum tersedia di mock API.`,
-    );
-  },
+  return {
+    data: book,
+    message: "Buku berhasil diperbarui.",
+  };
+},
+
+async changeBookStatus(
+  id: string,
+  input: ChangeBookStatusInput,
+): Promise<MutationResult<Book>> {
+  const book = await changeBookStatus(
+    id,
+    input.status,
+  );
+
+  return {
+    data: book,
+    message:
+      input.status === "AVAILABLE"
+        ? "Buku berhasil diaktifkan."
+        : "Buku berhasil diarsipkan.",
+  };
+},
 
   /**
    * BOOK COPY
    */
 
-  async listBookCopies(
-    input: BookCopyListInput = {},
-  ): Promise<PaginatedResult<BookCopy>> {
-    if (!input.bookId) {
-      return paginate([], input.page ?? 1, input.pageSize ?? 10);
-    }
+  /**
+ * BOOK COPY
+ */
 
-    const copies = await getBookCopies(input.bookId);
-
-    const filtered =
-      input.status !== undefined
-        ? copies.filter((copy) => copy.status === input.status)
-        : copies;
-
+async listBookCopies(
+  input: BookCopyListInput = {},
+): Promise<PaginatedResult<BookCopy>> {
+  if (!input.bookId) {
     return paginate(
-      filtered,
+      [],
       input.page ?? 1,
       input.pageSize ?? 10,
     );
-  },
+  }
 
-  async getBookCopy(id: string): Promise<BookCopy | null> {
-    throw new Error(
-      `Detail copy ${id} belum tersedia di mock API.`,
-    );
-  },
+  const copies = await getBookCopies(
+    input.bookId,
+  );
 
-  async createBookCopy(
-    input: CreateBookCopyInput,
-  ): Promise<MutationResult<BookCopy>> {
-    throw new Error(
-      `Penambahan copy untuk buku ${input.bookId} belum tersedia di mock API.`,
-    );
-  },
+  const filtered =
+    input.status !== undefined
+      ? copies.filter(
+          (copy) => copy.status === input.status,
+        )
+      : copies;
 
-  async changeBookCopyStatus(
-    id: string,
-    input: ChangeBookCopyStatusInput,
-  ): Promise<MutationResult<BookCopy>> {
-    throw new Error(
-      `Perubahan status copy ${id} belum tersedia di mock API.`,
-    );
-  },
+  return paginate(
+    filtered,
+    input.page ?? 1,
+    input.pageSize ?? 10,
+  );
+},
+
+async getBookCopy(
+  id: string,
+): Promise<BookCopy | null> {
+  try {
+    return await getBookCopy(id);
+  } catch {
+    return null;
+  }
+},
+
+async createBookCopy(
+  input: CreateBookCopyInput,
+): Promise<MutationResult<BookCopy>> {
+  const copy = await createBookCopy(input.bookId);
+
+  return {
+    data: copy,
+    message: `Copy ${copy.code} berhasil ditambahkan.`,
+  };
+},
+
+async changeBookCopyStatus(
+  id: string,
+  input: ChangeBookCopyStatusInput,
+): Promise<MutationResult<BookCopy>> {
+  const copy = await changeBookCopyStatus(
+    id,
+    input.status,
+  );
+
+  return {
+    data: copy,
+    message: `Status copy ${copy.code} berhasil diubah.`,
+  };
+},
+
 };
 
 /**

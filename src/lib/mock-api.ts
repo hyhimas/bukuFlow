@@ -18,6 +18,8 @@ import {
 import type {
   Book,
   BookCopy,
+  BookStatus,
+  BookCopyStatus,
   Company,
   CompanySettings,
   Loan,
@@ -81,7 +83,6 @@ function getCurrentCompany(): Company {
   throw new Error("Data company pengguna tidak ditemukan.");
 }
 
-
 /**
  * Menghitung jumlah copy berdasarkan status BookCopy.
  *
@@ -90,34 +91,22 @@ function getCurrentCompany(): Company {
  * INACTIVE   = tidak digunakan
  * LOST       = hilang
  */
-function getBookCopyCounts(
-  bookId: string,
-  companyId: string,
-) {
+function getBookCopyCounts(bookId: string, companyId: string) {
   const copies = mockBookCopies.filter(
-    (copy) =>
-      copy.bookId === bookId &&
-      copy.companyId === companyId,
+    (copy) => copy.bookId === bookId && copy.companyId === companyId,
   );
 
   return {
     totalCopies: copies.length,
 
-    availableCopies: copies.filter(
-      (copy) => copy.status === "AVAILABLE",
-    ).length,
+    availableCopies: copies.filter((copy) => copy.status === "AVAILABLE")
+      .length,
 
-    borrowedCopies: copies.filter(
-      (copy) => copy.status === "BORROWED",
-    ).length,
+    borrowedCopies: copies.filter((copy) => copy.status === "BORROWED").length,
 
-    inactiveCopies: copies.filter(
-      (copy) => copy.status === "INACTIVE",
-    ).length,
+    inactiveCopies: copies.filter((copy) => copy.status === "INACTIVE").length,
 
-    lostCopies: copies.filter(
-      (copy) => copy.status === "LOST",
-    ).length,
+    lostCopies: copies.filter((copy) => copy.status === "LOST").length,
   };
 }
 
@@ -130,35 +119,25 @@ function getBookCopyCounts(
  * Sumber sebenarnya adalah mockBookCopies.
  */
 function syncBookAvailability(book: Book) {
-  const counts = getBookCopyCounts(
-    book.id,
-    book.companyId,
-  );
+  const counts = getBookCopyCounts(book.id, book.companyId);
 
   book.totalCopies = counts.totalCopies;
-  book.availableCopies =
-    counts.availableCopies;
+  book.availableCopies = counts.availableCopies;
 
   if (book.status !== "INACTIVE") {
-    book.status =
-      counts.availableCopies > 0
-        ? "AVAILABLE"
-        : "BORROWED";
+    book.status = counts.availableCopies > 0 ? "AVAILABLE" : "BORROWED";
   }
 
-  book.updatedAt =
-    new Date().toISOString();
+  book.updatedAt = new Date().toISOString();
 
   return counts;
 }
-
 
 function syncAllBooks() {
   mockBooks.forEach((book) => {
     syncBookAvailability(book);
   });
 }
-
 
 function syncLoanStatuses() {
   const today = new Date();
@@ -171,9 +150,7 @@ function syncLoanStatuses() {
       return;
     }
 
-    const dueDate = new Date(
-      `${loan.dueAt.slice(0, 10)}T00:00:00`,
-    );
+    const dueDate = new Date(`${loan.dueAt.slice(0, 10)}T00:00:00`);
 
     if (Number.isNaN(dueDate.getTime())) {
       return;
@@ -209,15 +186,12 @@ export async function login(
 
   const user = mockUsers.find(
     (item) =>
-      item.email?.toLowerCase() ===
-        email.trim().toLowerCase() &&
+      item.email?.toLowerCase() === email.trim().toLowerCase() &&
       item.status === "ACTIVE",
   );
 
   if (!user || password !== MOCK_PASSWORD) {
-    throw new Error(
-      "Email atau password yang kamu masukkan salah.",
-    );
+    throw new Error("Email atau password yang kamu masukkan salah.");
   }
 
   const company =
@@ -232,26 +206,20 @@ export async function login(
             address: "Semarang, Jawa Tengah",
             status: "ACTIVE" as const,
             timezone: "Asia/Jakarta",
-            createdAt:
-              "2026-08-01T08:00:00+07:00",
-            updatedAt:
-              "2026-08-01T08:00:00+07:00",
+            createdAt: "2026-08-01T08:00:00+07:00",
+            updatedAt: "2026-08-01T08:00:00+07:00",
           }
         : undefined;
 
   const companySettings =
-    user.companyId ===
-    mockCompanySettings.companyId
+    user.companyId === mockCompanySettings.companyId
       ? mockCompanySettings
-      : user.companyId ===
-          mockCompanySettings2.companyId
+      : user.companyId === mockCompanySettings2.companyId
         ? mockCompanySettings2
         : undefined;
 
   if (!company || !companySettings) {
-    throw new Error(
-      "Data company pengguna tidak ditemukan.",
-    );
+    throw new Error("Data company pengguna tidak ditemukan.");
   }
 
   return {
@@ -282,23 +250,16 @@ export async function getDashboard(): Promise<DashboardResponse> {
   syncLoanStatuses();
   syncAllBooks();
 
-  const companyBooks = mockBooks.filter(
-    (book) =>
-      book.companyId === companyId,
-  );
+  const companyBooks = mockBooks.filter((book) => book.companyId === companyId);
 
-  const companyLoans = mockLoans.filter(
-    (loan) =>
-      loan.companyId === companyId,
-  );
+  const companyLoans = mockLoans.filter((loan) => loan.companyId === companyId);
 
   return {
     /**
      * Jumlah copy yang AVAILABLE.
      */
     booksAvailable: companyBooks.reduce(
-      (total, book) =>
-        total + book.availableCopies,
+      (total, book) => total + book.availableCopies,
       0,
     ),
 
@@ -308,47 +269,36 @@ export async function getDashboard(): Promise<DashboardResponse> {
      * LOST dan INACTIVE tidak dihitung
      * sebagai sedang dipinjam.
      */
-    booksBorrowed: companyBooks.reduce(
-      (total, book) => {
-        const counts = getBookCopyCounts(
-          book.id,
-          book.companyId,
-        );
+    booksBorrowed: companyBooks.reduce((total, book) => {
+      const counts = getBookCopyCounts(book.id, book.companyId);
 
-        return (
-          total + counts.borrowedCopies
-        );
-      },
-      0,
-    ),
+      return total + counts.borrowedCopies;
+    }, 0),
 
     activeLoans: companyLoans.filter(
       (loan) => loan.status === "ACTIVE" || loan.status === "OVERDUE",
     ).length,
 
-    overdueLoans: companyLoans.filter(
-      (loan) => loan.status === "OVERDUE",
-    ).length,
+    overdueLoans: companyLoans.filter((loan) => loan.status === "OVERDUE")
+      .length,
 
-   recentLoans: [...companyLoans]
-  .sort(
-    (a, b) =>
-      new Date(b.updatedAt).getTime() -
-      new Date(a.updatedAt).getTime(),
-  )
-  .slice(0, 5)
-  .map((loan) => {
-    const member = mockMembers.find(
-      (item) =>
-        item.id === loan.memberId &&
-        item.companyId === loan.companyId,
-    );
+    recentLoans: [...companyLoans]
+      .sort(
+        (a, b) =>
+          new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime(),
+      )
+      .slice(0, 5)
+      .map((loan) => {
+        const member = mockMembers.find(
+          (item) =>
+            item.id === loan.memberId && item.companyId === loan.companyId,
+        );
 
-    return {
-      ...loan,
-      memberName: member?.name ?? "-",
-    };
-  }),
+        return {
+          ...loan,
+          memberName: member?.name ?? "-",
+        };
+      }),
   };
 }
 
@@ -359,9 +309,7 @@ export async function getDashboard(): Promise<DashboardResponse> {
    MEMBER
 ========================================================= */
 
-export async function searchMembers(
-  query: string,
-): Promise<Member[]> {
+export async function searchMembers(query: string): Promise<Member[]> {
   ensureMockStoreHydrated();
   await delay(300);
 
@@ -372,28 +320,21 @@ export async function searchMembers(
     .filter(
       (member) =>
         member.companyId === companyId &&
-        (
-          !keyword ||
+        (!keyword ||
           member.name.toLowerCase().includes(keyword) ||
           member.memberNumber.toLowerCase().includes(keyword) ||
-          member.identityNumber.includes(keyword)
-        ),
+          member.identityNumber.includes(keyword) ||
+          member.email?.includes(keyword)),
     )
     .map((member) => ({
       ...member,
     }));
 }
 
-
 export async function createMember(
   data: Pick<
     Member,
-    | "name"
-    | "memberType"
-    | "identityNumber"
-    | "phone"
-    | "email"
-    | "status"
+    "name" | "memberType" | "identityNumber" | "phone" | "email" | "status"
   >,
 ): Promise<Member> {
   ensureMockStoreHydrated();
@@ -408,30 +349,19 @@ export async function createMember(
   const email = data.email?.trim() || undefined;
 
   if (name.length < 2) {
-    throw new Error(
-      "Nama anggota wajib diisi minimal 2 karakter.",
-    );
+    throw new Error("Nama anggota wajib diisi minimal 2 karakter.");
   }
 
   if (!/^\d{16}$/.test(identityNumber)) {
-    throw new Error(
-      "NIK harus terdiri dari 16 digit angka.",
-    );
+    throw new Error("NIK harus terdiri dari 16 digit angka.");
   }
 
   if (!/^\d{10,15}$/.test(phone)) {
-    throw new Error(
-      "Nomor HP harus terdiri dari 10-15 digit angka.",
-    );
+    throw new Error("Nomor HP harus terdiri dari 10-15 digit angka.");
   }
 
-  if (
-    email &&
-    !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)
-  ) {
-    throw new Error(
-      "Format email tidak valid.",
-    );
+  if (email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+    throw new Error("Format email tidak valid.");
   }
 
   const duplicateNik = mockMembers.some(
@@ -441,41 +371,32 @@ export async function createMember(
   );
 
   if (duplicateNik) {
-    throw new Error(
-      "NIK tersebut sudah terdaftar sebagai anggota.",
-    );
+    throw new Error("NIK tersebut sudah terdaftar sebagai anggota.");
   }
 
   const now = new Date().toISOString();
 
   const companyMembers = mockMembers.filter(
-  (member) => member.companyId === companyId,
-);
+    (member) => member.companyId === companyId,
+  );
 
-const usedMemberNumbers = companyMembers
-  .map((member) => {
-    const match = member.memberNumber.match(
-      /^MBR-(\d+)$/,
-    );
+  const usedMemberNumbers = companyMembers
+    .map((member) => {
+      const match = member.memberNumber.match(/^MBR-(\d+)$/);
 
-    return match ? Number(match[1]) : 0;
-  })
-  .filter((number) => number > 0);
+      return match ? Number(match[1]) : 0;
+    })
+    .filter((number) => number > 0);
 
-const highestMemberNumber =
-  usedMemberNumbers.length > 0
-    ? Math.max(...usedMemberNumbers)
-    : 0;
+  const highestMemberNumber =
+    usedMemberNumbers.length > 0 ? Math.max(...usedMemberNumbers) : 0;
 
-const nextMemberNumber =
-  highestMemberNumber + 1;
+  const nextMemberNumber = highestMemberNumber + 1;
 
   const member: Member = {
     id: `member-${Date.now()}`,
     companyId,
-    memberNumber: `MBR-${String(
-      nextMemberNumber,
-    ).padStart(3, "0")}`,
+    memberNumber: `MBR-${String(nextMemberNumber).padStart(3, "0")}`,
     name,
     memberType: data.memberType,
     identityNumber,
@@ -494,25 +415,18 @@ const nextMemberNumber =
   };
 }
 
-
-export async function getMemberById(
-  memberId: string,
-): Promise<Member> {
+export async function getMemberById(memberId: string): Promise<Member> {
   ensureMockStoreHydrated();
   await delay(300);
 
   const companyId = getCurrentSession().user.companyId;
 
   const member = mockMembers.find(
-    (item) =>
-      item.id === memberId &&
-      item.companyId === companyId,
+    (item) => item.id === memberId && item.companyId === companyId,
   );
 
   if (!member) {
-    throw new Error(
-      "Data anggota tidak ditemukan.",
-    );
+    throw new Error("Data anggota tidak ditemukan.");
   }
 
   return {
@@ -520,14 +434,12 @@ export async function getMemberById(
   };
 }
 
-
 export interface UpdateMemberData {
   name: string;
   identityNumber: string;
   phone: string;
   email?: string;
 }
-
 
 export async function updateMember(
   memberId: string,
@@ -539,49 +451,32 @@ export async function updateMember(
   const companyId = getCurrentSession().user.companyId;
 
   const member = mockMembers.find(
-    (item) =>
-      item.id === memberId &&
-      item.companyId === companyId,
+    (item) => item.id === memberId && item.companyId === companyId,
   );
 
   if (!member) {
-    throw new Error(
-      "Data anggota tidak ditemukan.",
-    );
+    throw new Error("Data anggota tidak ditemukan.");
   }
 
   const name = data.name.trim();
-  const identityNumber =
-    data.identityNumber.trim();
+  const identityNumber = data.identityNumber.trim();
   const phone = data.phone.trim();
-  const email =
-    data.email?.trim() || undefined;
+  const email = data.email?.trim() || undefined;
 
   if (name.length < 2) {
-    throw new Error(
-      "Nama anggota wajib diisi minimal 2 karakter.",
-    );
+    throw new Error("Nama anggota wajib diisi minimal 2 karakter.");
   }
 
   if (!/^\d{16}$/.test(identityNumber)) {
-    throw new Error(
-      "NIK harus terdiri dari 16 digit angka.",
-    );
+    throw new Error("NIK harus terdiri dari 16 digit angka.");
   }
 
   if (!/^\d{10,15}$/.test(phone)) {
-    throw new Error(
-      "Nomor HP harus terdiri dari 10-15 digit angka.",
-    );
+    throw new Error("Nomor HP harus terdiri dari 10-15 digit angka.");
   }
 
-  if (
-    email &&
-    !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)
-  ) {
-    throw new Error(
-      "Format email tidak valid.",
-    );
+  if (email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+    throw new Error("Format email tidak valid.");
   }
 
   const duplicateNik = mockMembers.some(
@@ -592,17 +487,14 @@ export async function updateMember(
   );
 
   if (duplicateNik) {
-    throw new Error(
-      "NIK tersebut sudah terdaftar sebagai anggota.",
-    );
+    throw new Error("NIK tersebut sudah terdaftar sebagai anggota.");
   }
 
   member.name = name;
   member.identityNumber = identityNumber;
   member.phone = phone;
   member.email = email;
-  member.updatedAt =
-    new Date().toISOString();
+  member.updatedAt = new Date().toISOString();
 
   persistMockState();
 
@@ -610,7 +502,6 @@ export async function updateMember(
     ...member,
   };
 }
-
 
 export async function changeMemberStatus(
   memberId: string,
@@ -621,30 +512,20 @@ export async function changeMemberStatus(
 
   const companyId = getCurrentSession().user.companyId;
 
-  if (
-    status !== "ACTIVE" &&
-    status !== "INACTIVE"
-  ) {
-    throw new Error(
-      "Status anggota tidak valid.",
-    );
+  if (status !== "ACTIVE" && status !== "INACTIVE") {
+    throw new Error("Status anggota tidak valid.");
   }
 
   const member = mockMembers.find(
-    (item) =>
-      item.id === memberId &&
-      item.companyId === companyId,
+    (item) => item.id === memberId && item.companyId === companyId,
   );
 
   if (!member) {
-    throw new Error(
-      "Data anggota tidak ditemukan.",
-    );
+    throw new Error("Data anggota tidak ditemukan.");
   }
 
   member.status = status;
-  member.updatedAt =
-    new Date().toISOString();
+  member.updatedAt = new Date().toISOString();
 
   persistMockState();
 
@@ -672,8 +553,7 @@ export async function getAvailableBooks(): Promise<Book[]> {
   return mockBooks
     .filter(
       (book) =>
-        book.companyId ===
-          companyId &&
+        book.companyId === companyId &&
         book.status !== "INACTIVE" &&
         book.availableCopies > 0,
     )
@@ -692,9 +572,7 @@ export async function getAvailableBooks(): Promise<Book[]> {
  *   filter berdasarkan judul, kode, ISBN.
  *   Buku dengan availableCopies = 0 tetap dapat ditemukan.
  */
-export async function searchBooks(
-  query: string,
-): Promise<Book[]> {
+export async function searchBooks(query: string): Promise<Book[]> {
   ensureMockStoreHydrated();
   await delay(300);
 
@@ -702,49 +580,59 @@ export async function searchBooks(
 
   const companyId = getCurrentSession().user.companyId;
 
-  const keyword =
-    query.trim().toLowerCase();
+  const keyword = query.trim().toLowerCase();
 
   // Search harus tetap menampilkan semua buku aktif,
   // termasuk buku yang availableCopies sudah 0.
   // Buku yang tidak memiliki copy tersedia tetap ditampilkan di UI
   // agar user tidak membuat data buku baru yang sebenarnya sudah ada.
-  const books =
-    mockBooks.filter(
-      (book) =>
-        book.companyId ===
-          companyId &&
-        book.status !== "INACTIVE",
-    );
+  const books = mockBooks.filter(
+    (book) => book.companyId === companyId,
+  );
 
   if (!keyword) {
-    return books.map(
-      (book) => ({
-        ...book,
-      }),
-    );
+    return books.map((book) => ({
+      ...book,
+    }));
   }
 
   return books
     .filter(
       (book) =>
-        book.title
-          .toLowerCase()
-          .includes(keyword) ||
-        book.code
-          .toLowerCase()
-          .includes(keyword) ||
-        book.isbn
-          ?.toLowerCase()
-          .includes(keyword),
+        book.title.toLowerCase().includes(keyword) ||
+        book.code.toLowerCase().includes(keyword) ||
+        book.isbn?.toLowerCase().includes(keyword) ||
+        book.author?.toLowerCase().includes(keyword) ||
+        book.category?.toLowerCase().includes(keyword),
     )
     .map((book) => ({
       ...book,
     }));
 }
 
+export async function getBookById(bookId: string): Promise<Book> {
+  ensureMockStoreHydrated();
+  await delay(300);
+
+  const companyId = getCurrentSession().user.companyId;
+
+  syncAllBooks();
+
+  const book = mockBooks.find(
+    (item) => item.id === bookId && item.companyId === companyId,
+  );
+
+  if (!book) {
+    throw new Error("Data buku tidak ditemukan.");
+  }
+
+  return {
+    ...book,
+  };
+}
 
 export interface CreateBookData {
+  code: string;
   title: string;
   isbn?: string;
   author?: string;
@@ -754,44 +642,32 @@ export interface CreateBookData {
   totalCopies: number;
 }
 
-export async function createBook(
-  data: CreateBookData,
-): Promise<Book> {
+export async function createBook(data: CreateBookData): Promise<Book> {
   ensureMockStoreHydrated();
   await delay();
 
   const companyId = getCurrentSession().user.companyId;
 
   // Defense-in-depth validation.
-  // Field yang optional di CreateBookData tetap optional di API.
+  const code = data.code.trim().toUpperCase();
   const title = data.title.trim();
   const isbn = data.isbn?.trim() || undefined;
   const author = data.author?.trim() || undefined;
   const publisher = data.publisher?.trim() || undefined;
   const category = data.category?.trim() || undefined;
 
+  if (!code) {
+    throw new Error("Kode buku wajib diisi.");
+  }
+
   if (title.length < 2) {
     throw new Error("Judul buku wajib diisi minimal 2 karakter.");
   }
 
-  if (!author) {
-    throw new Error("Penulis wajib diisi.");
-  }
-
-  if (!isbn) {
-    throw new Error("ISBN wajib diisi.");
-  }
-
-  if (!/^[0-9Xx-]+$/.test(isbn)) {
+  if (isbn && !/^[0-9Xx-]+$/.test(isbn)) {
     throw new Error("Format ISBN tidak valid.");
   }
 
-  if (!publisher) {
-    throw new Error("Penerbit wajib diisi.");
-  }
-
-  // publicationYear sengaja tidak divalidasi sebagai required di API,
-  // karena field tersebut masih optional pada CreateBookData.
   if (data.publicationYear !== undefined) {
     if (
       !Number.isInteger(data.publicationYear) ||
@@ -802,32 +678,22 @@ export async function createBook(
     }
   }
 
-  if (!category) {
-    throw new Error("Kategori wajib diisi.");
-  }
-
   if (!Number.isInteger(data.totalCopies) || data.totalCopies < 1) {
     throw new Error("Jumlah copy minimal 1.");
   }
 
+  const duplicateCode = mockBooks.some(
+    (book) =>
+      book.companyId === companyId &&
+      book.code.trim().toLowerCase() === code.toLowerCase(),
+  );
+
+  if (duplicateCode) {
+    throw new Error("Kode buku sudah digunakan dalam company ini.");
+  }
+
   const now = new Date().toISOString();
   const bookId = `book-${Date.now()}`;
-
-  // Kode buku selalu dibuat dari nomor BK terbesar yang saat ini ada.
-  const highestBookNumber = mockBooks.reduce((max, book) => {
-    const match = /^BK-(\d+)$/.exec(book.code.trim());
-
-    if (!match) {
-      return max;
-    }
-
-    const number = Number(match[1]);
-
-    return Number.isFinite(number) ? Math.max(max, number) : max;
-  }, 0);
-
-  const nextBookNumber = highestBookNumber + 1;
-  const code = `BK-${String(nextBookNumber).padStart(3, "0")}`;
 
   const book: Book = {
     id: bookId,
@@ -841,8 +707,8 @@ export async function createBook(
     category,
     coverUrl: undefined,
     status: "AVAILABLE",
-    totalCopies: data.totalCopies,
-    availableCopies: data.totalCopies,
+    totalCopies: 0,
+    availableCopies: 0,
     createdAt: now,
     updatedAt: now,
   };
@@ -851,10 +717,12 @@ export async function createBook(
 
   for (let index = 1; index <= data.totalCopies; index += 1) {
     const copy: BookCopy = {
-      id: `book-copy-${Date.now()}-${index}-${Math.random().toString(36).slice(2)}`,
+      id: `book-copy-${Date.now()}-${index}-${Math.random()
+        .toString(36)
+        .slice(2)}`,
       companyId,
       bookId,
-      code: `${code}-${String(index).padStart(2, "0")}`,
+      code: `${code}-${String(index).padStart(3, "0")}`,
       status: "AVAILABLE",
       createdAt: now,
       updatedAt: now,
@@ -869,25 +737,252 @@ export async function createBook(
   return { ...book };
 }
 
-
-export async function getBookCopies(
+export async function updateBook(
   bookId: string,
-): Promise<BookCopy[]> {
+  data: {
+    title: string;
+    isbn?: string;
+    author?: string;
+    publisher?: string;
+    publicationYear?: number;
+    category?: string;
+  },
+): Promise<Book> {
+  ensureMockStoreHydrated();
+  await delay();
+
+  const companyId = getCurrentSession().user.companyId;
+
+  const book = mockBooks.find(
+    (item) => item.id === bookId && item.companyId === companyId,
+  );
+
+  if (!book) {
+    throw new Error("Data buku tidak ditemukan.");
+  }
+
+  const title = data.title.trim();
+  const isbn = data.isbn?.trim() || undefined;
+  const author = data.author?.trim() || undefined;
+  const publisher = data.publisher?.trim() || undefined;
+  const category = data.category?.trim() || undefined;
+
+  if (title.length < 2) {
+    throw new Error("Judul buku wajib diisi minimal 2 karakter.");
+  }
+
+  if (isbn && !/^[0-9Xx-]+$/.test(isbn)) {
+    throw new Error("Format ISBN tidak valid.");
+  }
+
+  if (data.publicationYear !== undefined) {
+    if (
+      !Number.isInteger(data.publicationYear) ||
+      data.publicationYear < 1000 ||
+      data.publicationYear > new Date().getFullYear()
+    ) {
+      throw new Error("Tahun terbit tidak valid.");
+    }
+  }
+
+  book.title = title;
+  book.isbn = isbn;
+  book.author = author;
+  book.publisher = publisher;
+  book.publicationYear = data.publicationYear;
+  book.category = category;
+  book.updatedAt = new Date().toISOString();
+
+  persistMockState();
+
+  return {
+    ...book,
+  };
+}
+
+export async function changeBookStatus(
+  bookId: string,
+  status: Extract<BookStatus, "AVAILABLE" | "INACTIVE">,
+): Promise<Book> {
+  ensureMockStoreHydrated();
+  await delay();
+
+  const companyId = getCurrentSession().user.companyId;
+
+  const book = mockBooks.find(
+    (item) => item.id === bookId && item.companyId === companyId,
+  );
+
+  if (!book) {
+    throw new Error("Data buku tidak ditemukan.");
+  }
+
+  if (status !== "AVAILABLE" && status !== "INACTIVE") {
+    throw new Error("Status buku tidak valid.");
+  }
+
+  if (status === "INACTIVE") {
+    const counts = getBookCopyCounts(book.id, book.companyId);
+
+    if (counts.borrowedCopies > 0) {
+      throw new Error(
+        "Buku tidak dapat diarsipkan karena masih memiliki copy yang sedang dipinjam.",
+      );
+    }
+  }
+
+  book.status = status;
+
+  // Kalau buku diaktifkan kembali,
+  // status aktualnya harus mengikuti kondisi copy.
+  if (status === "AVAILABLE") {
+    syncBookAvailability(book);
+  } else {
+    book.updatedAt = new Date().toISOString();
+  }
+
+  persistMockState();
+
+  return {
+    ...book,
+  };
+}
+
+export async function getBookCopies(bookId: string): Promise<BookCopy[]> {
   ensureMockStoreHydrated();
   await delay(300);
 
   const companyId = getCurrentSession().user.companyId;
 
   return mockBookCopies
-    .filter(
-      (copy) =>
-        copy.bookId === bookId &&
-        copy.companyId ===
-          companyId,
-    )
+    .filter((copy) => copy.bookId === bookId && copy.companyId === companyId)
     .map((copy) => ({
       ...copy,
     }));
+}
+
+export async function getBookCopy(bookCopyId: string): Promise<BookCopy> {
+  ensureMockStoreHydrated();
+  await delay(300);
+
+  const companyId = getCurrentSession().user.companyId;
+
+  const copy = mockBookCopies.find(
+    (item) => item.id === bookCopyId && item.companyId === companyId,
+  );
+
+  if (!copy) {
+    throw new Error("Data copy buku tidak ditemukan.");
+  }
+
+  return {
+    ...copy,
+  };
+}
+
+export async function createBookCopy(bookId: string): Promise<BookCopy> {
+  ensureMockStoreHydrated();
+  await delay();
+
+  const companyId = getCurrentSession().user.companyId;
+
+  const book = mockBooks.find(
+    (item) => item.id === bookId && item.companyId === companyId,
+  );
+
+  if (!book) {
+    throw new Error("Data buku tidak ditemukan.");
+  }
+
+  const existingCopies = mockBookCopies.filter(
+    (copy) => copy.bookId === book.id && copy.companyId === companyId,
+  );
+
+  const usedNumbers = existingCopies
+    .map((copy) => {
+      const prefix = `${book.code}-`;
+      const numberPart = copy.code.startsWith(prefix)
+        ? copy.code.slice(prefix.length)
+        : "";
+
+      const number = Number(numberPart);
+
+      return Number.isInteger(number) ? number : 0;
+    })
+    .filter((number) => number > 0);
+
+  const highestNumber = usedNumbers.length > 0 ? Math.max(...usedNumbers) : 0;
+
+  const nextNumber = highestNumber + 1;
+
+  const now = new Date().toISOString();
+
+  const copy: BookCopy = {
+    id: `book-copy-${Date.now()}-${Math.random().toString(36).slice(2)}`,
+    companyId,
+    bookId: book.id,
+    code: `${book.code}-${String(nextNumber).padStart(3, "0")}`,
+    status: "AVAILABLE",
+    createdAt: now,
+    updatedAt: now,
+  };
+
+  mockBookCopies.push(copy);
+
+  syncBookAvailability(book);
+  persistMockState();
+
+  return {
+    ...copy,
+  };
+}
+
+export async function changeBookCopyStatus(
+  bookCopyId: string,
+  status: BookCopyStatus,
+): Promise<BookCopy> {
+  ensureMockStoreHydrated();
+  await delay();
+
+  const companyId = getCurrentSession().user.companyId;
+
+  const copy = mockBookCopies.find(
+    (item) => item.id === bookCopyId && item.companyId === companyId,
+  );
+
+  if (!copy) {
+    throw new Error("Data copy buku tidak ditemukan.");
+  }
+
+  if (copy.status === "BORROWED") {
+    throw new Error(
+      `Copy ${copy.code} sedang dipinjam dan tidak dapat diubah statusnya.`,
+    );
+  }
+
+  if (status === "BORROWED") {
+    throw new Error(
+      `Copy ${copy.code} tidak dapat ditandai BORROWED secara manual.`,
+    );
+  }
+
+  const book = mockBooks.find(
+    (item) => item.id === copy.bookId && item.companyId === companyId,
+  );
+
+  if (!book) {
+    throw new Error("Buku induk tidak ditemukan.");
+  }
+
+  copy.status = status;
+  copy.updatedAt = new Date().toISOString();
+
+  syncBookAvailability(book);
+  persistMockState();
+
+  return {
+    ...copy,
+  };
 }
 
 /* =========================================================
@@ -895,7 +990,7 @@ export async function getBookCopies(
 ========================================================= */
 
 export async function getActiveLoans(): Promise<Loan[]> {
- ensureMockStoreHydrated();
+  ensureMockStoreHydrated();
   await delay();
 
   const companyId = getCurrentSession().user.companyId;
@@ -903,12 +998,8 @@ export async function getActiveLoans(): Promise<Loan[]> {
   syncLoanStatuses();
   return mockLoans.filter(
     (loan) =>
-      loan.companyId ===
-        companyId &&
-      (
-        loan.status === "ACTIVE" ||
-        loan.status === "OVERDUE"
-      ),
+      loan.companyId === companyId &&
+      (loan.status === "ACTIVE" || loan.status === "OVERDUE"),
   );
 }
 
@@ -926,18 +1017,14 @@ export interface CreateLoanData {
  * Generate nomor transaksi berdasarkan PRD:
  * [company_code]-[tahun]-[nomor_urut]
  */
-function generateLoanNumber(
-  company: Company,
-  borrowedAt: string,
-): string {
+function generateLoanNumber(company: Company, borrowedAt: string): string {
   const year = new Date(borrowedAt).getFullYear();
   const prefix = `${company.code}-${year}-`;
 
   const lastNumber = mockLoans
     .filter(
       (loan) =>
-        loan.companyId === company.id &&
-        loan.loanNumber.startsWith(prefix),
+        loan.companyId === company.id && loan.loanNumber.startsWith(prefix),
     )
     .map((loan) => Number(loan.loanNumber.slice(prefix.length)))
     .filter((number) => Number.isFinite(number))
@@ -946,9 +1033,7 @@ function generateLoanNumber(
   return `${prefix}${String(lastNumber + 1).padStart(6, "0")}`;
 }
 
-export async function createLoan(
-  data: CreateLoanData,
-): Promise<Loan> {
+export async function createLoan(data: CreateLoanData): Promise<Loan> {
   ensureMockStoreHydrated();
   await delay();
 
@@ -983,8 +1068,7 @@ export async function createLoan(
   const validatedItems = data.items.map((item) => {
     const book = mockBooks.find(
       (candidate) =>
-        candidate.id === item.bookId &&
-        candidate.companyId === companyId,
+        candidate.id === item.bookId && candidate.companyId === companyId,
     );
 
     if (!book) {
@@ -992,12 +1076,16 @@ export async function createLoan(
     }
 
     if (item.bookCopyIds.length === 0) {
-      throw new Error(`Minimal satu copy wajib dipilih untuk buku ${book.title}.`);
+      throw new Error(
+        `Minimal satu copy wajib dipilih untuk buku ${book.title}.`,
+      );
     }
 
     const uniqueCopyIds = new Set(item.bookCopyIds);
     if (uniqueCopyIds.size !== item.bookCopyIds.length) {
-      throw new Error(`Copy buku ${book.title} tidak boleh dipilih lebih dari satu kali.`);
+      throw new Error(
+        `Copy buku ${book.title} tidak boleh dipilih lebih dari satu kali.`,
+      );
     }
 
     const selectedCopies = mockBookCopies.filter(
@@ -1086,9 +1174,7 @@ export async function createLoan(
    TRANSACTIONS
 ========================================================= */
 
-export async function getTransactions(): Promise<
-  TransactionData[]
-> {
+export async function getTransactions(): Promise<TransactionData[]> {
   ensureMockStoreHydrated();
   await delay();
 
@@ -1098,71 +1184,43 @@ export async function getTransactions(): Promise<
   syncAllBooks();
 
   return mockLoans
-    .filter(
-      (loan) =>
-        loan.companyId ===
-        companyId,
-    )
+    .filter((loan) => loan.companyId === companyId)
     .map((loan) => {
-      const member =
-        mockMembers.find(
+      const member = mockMembers.find(
+        (item) =>
+          item.id === loan.memberId && item.companyId === loan.companyId,
+      );
+
+      const user = mockUsers.find(
+        (item) =>
+          item.id === loan.borrowedBy && item.companyId === loan.companyId,
+      );
+
+      const items = mockLoanItems
+        .filter(
           (item) =>
-            item.id ===
-              loan.memberId &&
-            item.companyId ===
-              loan.companyId,
-        );
-
-      const user =
-        mockUsers.find(
-          (item) =>
-            item.id ===
-              loan.borrowedBy &&
-            item.companyId ===
-              loan.companyId,
-        );
-
-      const items =
-        mockLoanItems
-          .filter(
+            item.loanId === loan.id && item.companyId === loan.companyId,
+        )
+        .map((loanItem) => {
+          const book = mockBooks.find(
             (item) =>
-              item.loanId ===
-                loan.id &&
-              item.companyId ===
-                loan.companyId,
-          )
-          .map((loanItem) => {
-            const book =
-              mockBooks.find(
-                (item) =>
-                  item.id ===
-                    loanItem.bookId &&
-                  item.companyId ===
-                    loan.companyId,
-              );
-
-            const bookCopy =
-              mockBookCopies.find(
-                (item) =>
-                  item.id ===
-                    loanItem.bookCopyId &&
-                  item.bookId ===
-                    loanItem.bookId &&
-                  item.companyId ===
-                    loan.companyId,
-              );
-
-            return {
-              loanItem,
-              book: book!,
-              bookCopy: bookCopy!,
-            };
-          })
-          .filter(
-            (item) =>
-              item.book &&
-              item.bookCopy,
+              item.id === loanItem.bookId && item.companyId === loan.companyId,
           );
+
+          const bookCopy = mockBookCopies.find(
+            (item) =>
+              item.id === loanItem.bookCopyId &&
+              item.bookId === loanItem.bookId &&
+              item.companyId === loan.companyId,
+          );
+
+          return {
+            loanItem,
+            book: book!,
+            bookCopy: bookCopy!,
+          };
+        })
+        .filter((item) => item.book && item.bookCopy);
 
       return {
         loan,
@@ -1171,12 +1229,7 @@ export async function getTransactions(): Promise<
         items,
       };
     })
-    .filter(
-      (item) =>
-        item.member &&
-        item.user &&
-        item.items.length > 0,
-    );
+    .filter((item) => item.member && item.user && item.items.length > 0);
 }
 
 /* =========================================================
@@ -1197,156 +1250,104 @@ export async function returnLoanItems(
      CARI LOAN
   ----------------------------------------- */
 
-  const loan =
-    mockLoans.find(
-      (item) =>
-        item.id === loanId &&
-        item.companyId ===
-          companyId,
-    );
+  const loan = mockLoans.find(
+    (item) => item.id === loanId && item.companyId === companyId,
+  );
 
   if (!loan) {
-    throw new Error(
-      "Transaksi tidak ditemukan.",
-    );
+    throw new Error("Transaksi tidak ditemukan.");
   }
 
   /* -----------------------------------------
      CARI ITEM
   ----------------------------------------- */
 
-  const selectedItems =
-    mockLoanItems.filter(
-      (item) =>
-        item.loanId === loanId &&
-        item.companyId ===
-          companyId &&
-        loanItemIds.includes(
-          item.id,
-        ) &&
-        item.status ===
-          "BORROWED",
-    );
+  const selectedItems = mockLoanItems.filter(
+    (item) =>
+      item.loanId === loanId &&
+      item.companyId === companyId &&
+      loanItemIds.includes(item.id) &&
+      item.status === "BORROWED",
+  );
 
-  if (
-    selectedItems.length === 0
-  ) {
-    throw new Error(
-      "Tidak ada buku yang dapat dikembalikan.",
-    );
+  if (selectedItems.length === 0) {
+    throw new Error("Tidak ada buku yang dapat dikembalikan.");
   }
 
-  const now =
-    new Date().toISOString();
+  const now = new Date().toISOString();
 
   /* -----------------------------------------
      RETURN COPY
   ----------------------------------------- */
 
-  selectedItems.forEach(
-    (item) => {
-      item.status =
-        "RETURNED";
+  selectedItems.forEach((item) => {
+    item.status = "RETURNED";
 
-      item.returnedAt =
-        now;
+    item.returnedAt = now;
 
-      item.updatedAt =
-        now;
+    item.updatedAt = now;
 
-      /* -------------------------------------
+    /* -------------------------------------
          UPDATE BOOK COPY
       ------------------------------------- */
 
-      const copy =
-        mockBookCopies.find(
-          (bookCopy) =>
-            bookCopy.id ===
-              item.bookCopyId &&
-            bookCopy.bookId ===
-              item.bookId &&
-            bookCopy.companyId ===
-              companyId,
-        );
+    const copy = mockBookCopies.find(
+      (bookCopy) =>
+        bookCopy.id === item.bookCopyId &&
+        bookCopy.bookId === item.bookId &&
+        bookCopy.companyId === companyId,
+    );
 
-      if (copy) {
-        copy.status =
-          "AVAILABLE";
+    if (copy) {
+      copy.status = "AVAILABLE";
 
-        copy.updatedAt =
-          now;
-      }
+      copy.updatedAt = now;
+    }
 
-      /* -------------------------------------
+    /* -------------------------------------
          SYNC BOOK
       ------------------------------------- */
 
-      const book =
-        mockBooks.find(
-          (bookItem) =>
-            bookItem.id ===
-              item.bookId &&
-            bookItem.companyId ===
-              companyId,
-        );
+    const book = mockBooks.find(
+      (bookItem) =>
+        bookItem.id === item.bookId && bookItem.companyId === companyId,
+    );
 
-      if (book) {
-        syncBookAvailability(
-          book,
-        );
-      }
-    },
-  );
+    if (book) {
+      syncBookAvailability(book);
+    }
+  });
 
   /* -----------------------------------------
      CEK ITEM TERSISA
   ----------------------------------------- */
 
-  const remainingItems =
-    mockLoanItems.filter(
-      (item) =>
-        item.loanId === loanId &&
-        item.companyId ===
-          companyId &&
-        item.status ===
-          "BORROWED",
-    );
+  const remainingItems = mockLoanItems.filter(
+    (item) =>
+      item.loanId === loanId &&
+      item.companyId === companyId &&
+      item.status === "BORROWED",
+  );
 
   /* -----------------------------------------
      SEMUA KEMBALI
   ----------------------------------------- */
 
-  if (
-    remainingItems.length === 0
-  ) {
-    loan.status =
-      "COMPLETED";
+  if (remainingItems.length === 0) {
+    loan.status = "COMPLETED";
 
-    loan.returnedAt =
-      now;
-  }
+    loan.returnedAt = now;
+  } else {
 
   /* -----------------------------------------
      JIKA MASIH ADA ITEM
   ----------------------------------------- */
+    const isOverdue = new Date(loan.dueAt).getTime() < new Date(now).getTime();
 
-  else {
-    const isOverdue =
-      new Date(
-        loan.dueAt,
-      ).getTime() <
-      new Date(
-        now,
-      ).getTime();
-
-    loan.status =
-      isOverdue
-        ? "OVERDUE"
-        : "ACTIVE";
+    loan.status = isOverdue ? "OVERDUE" : "ACTIVE";
   }
 
-  loan.updatedAt =
-    now;
+  loan.updatedAt = now;
 
   persistMockState();
 
@@ -1357,9 +1358,7 @@ export async function returnLoanItems(
    RETURN LOANS
 ========================================================= */
 
-export async function getReturnLoans(): Promise<
-  ReturnLoanData[]
-> {
+export async function getReturnLoans(): Promise<ReturnLoanData[]> {
   ensureMockStoreHydrated();
   await delay();
 
@@ -1370,70 +1369,42 @@ export async function getReturnLoans(): Promise<
   return mockLoans
     .filter(
       (loan) =>
-        loan.companyId ===
-          companyId &&
-        (
-          loan.status ===
-            "ACTIVE" ||
-          loan.status ===
-            "OVERDUE"
-        ),
+        loan.companyId === companyId &&
+        (loan.status === "ACTIVE" || loan.status === "OVERDUE"),
     )
     .map((loan) => {
-      const member =
-        mockMembers.find(
+      const member = mockMembers.find(
+        (item) =>
+          item.id === loan.memberId && item.companyId === loan.companyId,
+      );
+
+      const items = mockLoanItems
+        .filter(
           (item) =>
-            item.id ===
-              loan.memberId &&
-            item.companyId ===
-              loan.companyId,
-        );
-
-      const items =
-        mockLoanItems
-          .filter(
+            item.loanId === loan.id &&
+            item.companyId === companyId &&
+            (item.status === "BORROWED" || item.status === "RETURNED"),
+        )
+        .map((loanItem) => {
+          const book = mockBooks.find(
             (item) =>
-              item.loanId ===
-                loan.id &&
-              item.companyId ===
-                companyId &&
-              (item.status ===
-                "BORROWED" ||
-                item.status ===
-                  "RETURNED"),
-          )
-          .map((loanItem) => {
-            const book =
-              mockBooks.find(
-                (item) =>
-                  item.id ===
-                    loanItem.bookId &&
-                  item.companyId ===
-                    companyId,
-              );
-
-            const bookCopy =
-              mockBookCopies.find(
-                (item) =>
-                  item.id ===
-                    loanItem.bookCopyId &&
-                  item.bookId ===
-                    loanItem.bookId &&
-                  item.companyId ===
-                    companyId,
-              );
-
-            return {
-              loanItem,
-              book: book!,
-              bookCopy: bookCopy!,
-            };
-          })
-          .filter(
-            (item) =>
-              item.book &&
-              item.bookCopy,
+              item.id === loanItem.bookId && item.companyId === companyId,
           );
+
+          const bookCopy = mockBookCopies.find(
+            (item) =>
+              item.id === loanItem.bookCopyId &&
+              item.bookId === loanItem.bookId &&
+              item.companyId === companyId,
+          );
+
+          return {
+            loanItem,
+            book: book!,
+            bookCopy: bookCopy!,
+          };
+        })
+        .filter((item) => item.book && item.bookCopy);
 
       return {
         loan,
@@ -1441,11 +1412,7 @@ export async function getReturnLoans(): Promise<
         items,
       };
     })
-    .filter(
-      (item) =>
-        item.member &&
-        item.items.length > 0,
-    );
+    .filter((item) => item.member && item.items.length > 0);
 }
 
 export async function getMembers(): Promise<Member[]> {
@@ -1456,12 +1423,9 @@ export async function getMembers(): Promise<Member[]> {
 
   return mockMembers
     .filter(
-      (member) =>
-        member.companyId === companyId &&
-        member.status === "ACTIVE",
+      (member) => member.companyId === companyId && member.status === "ACTIVE",
     )
     .map((member) => ({
       ...member,
     }));
 }
-

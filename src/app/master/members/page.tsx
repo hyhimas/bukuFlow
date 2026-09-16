@@ -4,11 +4,8 @@ import { FormEvent, useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 
 import { getSession } from "@/lib/auth";
-import {
-  canAccessMasterData,
-  canManageMasterData,
-} from "@/lib/authorization";
-
+import { canAccessMasterData, canManageMasterData } from "@/lib/authorization";
+import Dropdown from "@/components/ui/Dropdown";
 import Card from "@/components/ui/Card";
 import Input from "@/components/ui/Input";
 import Button from "@/components/ui/Button";
@@ -44,26 +41,27 @@ export default function MasterMembersPage() {
 
   const [members, setMembers] = useState<Member[]>([]);
   const [loading, setLoading] = useState(true);
+  const [tableLoading, setTableLoading] = useState(false);
   const [error, setError] = useState("");
 
+  const hasLoadedMembers = useRef(false);
+
   const [search, setSearch] = useState("");
-  const [statusFilter, setStatusFilter] = useState<
-    MemberStatus | ""
-  >("");
+  const [statusFilter, setStatusFilter] = useState<MemberStatus | "">("");
 
   const [page, setPage] = useState(1);
   const [total, setTotal] = useState(0);
   const [totalPages, setTotalPages] = useState(1);
 
   const [successMessage, setSuccessMessage] = useState("");
+  const [warningMessage, setWarningMessage] = useState("");
 
   // =====================================================
   // FORM
   // =====================================================
 
   const [showForm, setShowForm] = useState(false);
-  const [editingMember, setEditingMember] =
-    useState<Member | null>(null);
+  const [editingMember, setEditingMember] = useState<Member | null>(null);
 
   const [name, setName] = useState("");
   const [phone, setPhone] = useState("");
@@ -76,25 +74,24 @@ export default function MasterMembersPage() {
   const [formLoading, setFormLoading] = useState(false);
 
   const formCloseRef = useRef<HTMLButtonElement>(null);
+  const formModalRef = useRef<HTMLDivElement>(null);
 
   // =====================================================
   // DETAIL
   // =====================================================
 
-  const [detailMember, setDetailMember] =
-    useState<Member | null>(null);
+  const [detailMember, setDetailMember] = useState<Member | null>(null);
 
   const detailCloseRef = useRef<HTMLButtonElement>(null);
+  const detailModalRef = useRef<HTMLDivElement>(null);
 
   // =====================================================
   // STATUS
   // =====================================================
 
-  const [confirmMember, setConfirmMember] =
-    useState<Member | null>(null);
+  const [confirmMember, setConfirmMember] = useState<Member | null>(null);
 
-  const [confirmStatus, setConfirmStatus] =
-    useState<MemberStatus | null>(null);
+  const [confirmStatus, setConfirmStatus] = useState<MemberStatus | null>(null);
 
   const [statusLoading, setStatusLoading] = useState(false);
 
@@ -120,64 +117,61 @@ export default function MasterMembersPage() {
   // =====================================================
 
   useEffect(() => {
-    let cancelled = false;
+  let cancelled = false;
 
-    const timer = window.setTimeout(async () => {
+  const timer = window.setTimeout(async () => {
+    if (!hasLoadedMembers.current) {
       setLoading(true);
-      setError("");
+    } else {
+      setTableLoading(true);
+    }
 
-      try {
-        const result =
-          await masterDataRepository.listMembers({
-            search,
-            // Penting:
-            // "" berarti tidak menggunakan filter status.
-            status: statusFilter || undefined,
-            page,
-            pageSize: PAGE_SIZE,
-          });
+    setError("");
 
-        if (cancelled) {
-          return;
-        }
+    try {
+      const result = await masterDataRepository.listMembers({
+        search,
+        status: statusFilter || undefined,
+        page,
+        pageSize: PAGE_SIZE,
+      });
 
-        setMembers(result.data);
-        setTotal(result.total);
-        setTotalPages(result.totalPages);
-      } catch (error) {
-        if (cancelled) {
-          return;
-        }
-
-        setMembers([]);
-        setTotal(0);
-        setTotalPages(1);
-
-        setError(
-          error instanceof Error
-            ? error.message
-            : "Data member gagal dimuat.",
-        );
-      } finally {
-        if (!cancelled) {
-          setLoading(false);
-        }
+      if (cancelled) {
+        return;
       }
-    }, 400);
 
-    return () => {
-      cancelled = true;
-      window.clearTimeout(timer);
-    };
-  }, [search, statusFilter, page]);
+      setMembers(result.data);
+      setTotal(result.total);
+      setTotalPages(result.totalPages);
 
-  // =====================================================
-  // RESET PAGE
-  // =====================================================
+      hasLoadedMembers.current = true;
+    } catch (error) {
+      if (cancelled) {
+        return;
+      }
 
-  useEffect(() => {
-    setPage(1);
-  }, [search, statusFilter]);
+      setMembers([]);
+      setTotal(0);
+      setTotalPages(1);
+
+      setError(
+        error instanceof Error
+          ? error.message
+          : "Data member gagal dimuat.",
+      );
+    } finally {
+      if (!cancelled) {
+        setLoading(false);
+        setTableLoading(false);
+      }
+    }
+  }, 400);
+
+  return () => {
+    cancelled = true;
+    window.clearTimeout(timer);
+  };
+}, [search, statusFilter, page]);
 
   // =====================================================
   // SUCCESS MESSAGE
@@ -195,8 +189,20 @@ export default function MasterMembersPage() {
     return () => window.clearTimeout(timer);
   }, [successMessage]);
 
+  useEffect(() => {
+    if (!warningMessage) {
+      return;
+    }
+
+    const timer = window.setTimeout(() => {
+      setWarningMessage("");
+    }, 3500);
+
+    return () => window.clearTimeout(timer);
+  }, [warningMessage]);
+
   // =====================================================
-  // FORM ESCAPE
+  // FORM ESCAPE + FOCUS TRAP
   // =====================================================
 
   useEffect(() => {
@@ -206,16 +212,50 @@ export default function MasterMembersPage() {
 
     formCloseRef.current?.focus();
 
-    const handleEscape = (event: KeyboardEvent) => {
+    const handleKeyDown = (event: KeyboardEvent) => {
       if (event.key === "Escape" && !formLoading) {
         closeForm();
+        return;
+      }
+
+      if (event.key !== "Tab") {
+        return;
+      }
+
+      const modal = formModalRef.current;
+
+      if (!modal) {
+        return;
+      }
+
+      const focusableElements = modal.querySelectorAll<HTMLElement>(
+        'button:not([disabled]), input:not([disabled]), select:not([disabled]), textarea:not([disabled]), a[href], [tabindex]:not([tabindex="-1"])',
+      );
+
+      if (focusableElements.length === 0) {
+        return;
+      }
+
+      const firstElement = focusableElements[0];
+      const lastElement =
+        focusableElements[focusableElements.length - 1];
+
+      if (event.shiftKey && document.activeElement === firstElement) {
+        event.preventDefault();
+        lastElement.focus();
+        return;
+      }
+
+      if (!event.shiftKey && document.activeElement === lastElement) {
+        event.preventDefault();
+        firstElement.focus();
       }
     };
 
-    document.addEventListener("keydown", handleEscape);
+    document.addEventListener("keydown", handleKeyDown);
 
     return () => {
-      document.removeEventListener("keydown", handleEscape);
+      document.removeEventListener("keydown", handleKeyDown);
     };
   }, [showForm, formLoading]);
 
@@ -230,16 +270,50 @@ export default function MasterMembersPage() {
 
     detailCloseRef.current?.focus();
 
-    const handleEscape = (event: KeyboardEvent) => {
+    const handleKeyDown = (event: KeyboardEvent) => {
       if (event.key === "Escape") {
         setDetailMember(null);
+        return;
+      }
+
+      if (event.key !== "Tab") {
+        return;
+      }
+
+      const modal = detailModalRef.current;
+
+      if (!modal) {
+        return;
+      }
+
+      const focusableElements = modal.querySelectorAll<HTMLElement>(
+        'button:not([disabled]), input:not([disabled]), select:not([disabled]), textarea:not([disabled]), a[href], [tabindex]:not([tabindex="-1"])',
+      );
+
+      if (focusableElements.length === 0) {
+        return;
+      }
+
+      const firstElement = focusableElements[0];
+      const lastElement =
+        focusableElements[focusableElements.length - 1];
+
+      if (event.shiftKey && document.activeElement === firstElement) {
+        event.preventDefault();
+        lastElement.focus();
+        return;
+      }
+
+      if (!event.shiftKey && document.activeElement === lastElement) {
+        event.preventDefault();
+        firstElement.focus();
       }
     };
 
-    document.addEventListener("keydown", handleEscape);
+    document.addEventListener("keydown", handleKeyDown);
 
     return () => {
-      document.removeEventListener("keydown", handleEscape);
+      document.removeEventListener("keydown", handleKeyDown);
     };
   }, [detailMember]);
 
@@ -309,28 +383,22 @@ export default function MasterMembersPage() {
     if (!cleanName) {
       errors.name = "Nama wajib diisi.";
     } else if (cleanName.length < 2) {
-      errors.name =
-        "Nama harus terdiri dari minimal 2 karakter.";
+      errors.name = "Nama harus terdiri dari minimal 2 karakter.";
     }
 
     if (!cleanPhone) {
       errors.phone = "Nomor HP wajib diisi.";
     } else if (!/^\d{10,15}$/.test(cleanPhone)) {
-      errors.phone =
-        "Nomor HP harus terdiri dari 10-15 digit.";
+      errors.phone = "Nomor HP harus terdiri dari 10-15 digit.";
     }
 
     if (!cleanNik) {
       errors.identityNumber = "NIK wajib diisi.";
     } else if (!/^\d{16}$/.test(cleanNik)) {
-      errors.identityNumber =
-        "NIK harus terdiri dari 16 digit.";
+      errors.identityNumber = "NIK harus terdiri dari 16 digit.";
     }
 
-    if (
-      cleanEmail &&
-      !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(cleanEmail)
-    ) {
+    if (cleanEmail && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(cleanEmail)) {
       errors.email = "Format email tidak valid.";
     }
 
@@ -343,12 +411,11 @@ export default function MasterMembersPage() {
   // SUBMIT
   // =====================================================
 
-  async function handleSubmit(
-    event: FormEvent<HTMLFormElement>,
-  ) {
+  async function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
 
     setSuccessMessage("");
+    setWarningMessage("");
 
     if (!validateForm()) {
       return;
@@ -358,19 +425,33 @@ export default function MasterMembersPage() {
 
     try {
       if (editingMember) {
-       await masterDataRepository.updateMember(
-  editingMember.id,
-  {
-    name: name.trim(),
-    phone: phone.trim(),
-    identityNumber: identityNumber.trim(),
-    email: email.trim() || undefined,
-  },
-);
+        const newName = name.trim();
+        const newPhone = phone.trim();
+        const newIdentityNumber = identityNumber.trim();
+        const newEmail = email.trim();
 
-        setSuccessMessage(
-          "Data member berhasil diperbarui.",
-        );
+        const currentEmail = editingMember.email?.trim() ?? "";
+
+        const hasChanges =
+          newName !== editingMember.name ||
+          newPhone !== editingMember.phone ||
+          newIdentityNumber !== editingMember.identityNumber ||
+          newEmail !== currentEmail;
+
+        if (!hasChanges) {
+          setWarningMessage("Tidak ada perubahan yang disimpan.");
+          closeForm();
+          return;
+        }
+
+        await masterDataRepository.updateMember(editingMember.id, {
+          name: newName,
+          phone: newPhone,
+          identityNumber: newIdentityNumber,
+          email: newEmail || undefined,
+        });
+
+        setSuccessMessage("Data member berhasil diperbarui.");
       } else {
         await masterDataRepository.createMember({
           name: name.trim(),
@@ -379,36 +460,28 @@ export default function MasterMembersPage() {
           email: email.trim() || undefined,
         });
 
-        setSuccessMessage(
-          "Member berhasil ditambahkan.",
-        );
+        setSuccessMessage("Member berhasil ditambahkan.");
       }
 
       closeForm();
 
-      const result =
-        await masterDataRepository.listMembers({
-          search,
-          status: statusFilter || undefined,
-          page,
-          pageSize: PAGE_SIZE,
-        });
+      const result = await masterDataRepository.listMembers({
+        search,
+        status: statusFilter || undefined,
+        page,
+        pageSize: PAGE_SIZE,
+      });
 
       setMembers(result.data);
       setTotal(result.total);
       setTotalPages(result.totalPages);
     } catch (error) {
       const message =
-        error instanceof Error
-          ? error.message
-          : "Data member gagal disimpan.";
+        error instanceof Error ? error.message : "Data member gagal disimpan.";
 
       const lowerMessage = message.toLowerCase();
 
-      if (
-        lowerMessage.includes("nik") ||
-        lowerMessage.includes("terdaftar")
-      ) {
+      if (lowerMessage.includes("nik") || lowerMessage.includes("terdaftar")) {
         setFormErrors((current) => ({
           ...current,
           identityNumber: message,
@@ -443,8 +516,7 @@ export default function MasterMembersPage() {
 
   async function openDetail(member: Member) {
     try {
-      const result =
-        await masterDataRepository.getMember(member.id);
+      const result = await masterDataRepository.getMember(member.id);
 
       setDetailMember(result ?? member);
     } catch {
@@ -458,9 +530,7 @@ export default function MasterMembersPage() {
 
   function openStatusConfirm(member: Member) {
     const nextStatus: MemberStatus =
-      member.status === "ACTIVE"
-        ? "INACTIVE"
-        : "ACTIVE";
+      member.status === "ACTIVE" ? "INACTIVE" : "ACTIVE";
 
     setConfirmMember(member);
     setConfirmStatus(nextStatus);
@@ -471,76 +541,65 @@ export default function MasterMembersPage() {
   // =====================================================
 
   async function handleChangeStatus() {
-  if (!confirmMember || !confirmStatus) {
-    return;
-  }
+    if (!confirmMember || !confirmStatus) {
+      return;
+    }
 
-  setStatusLoading(true);
+    setStatusLoading(true);
 
-  try {
-    await masterDataRepository.changeMemberStatus(
-      confirmMember.id,
-      {
+    try {
+      await masterDataRepository.changeMemberStatus(confirmMember.id, {
         status: confirmStatus,
-      },
-    );
+      });
 
-    setSuccessMessage(
-      confirmStatus === "ACTIVE"
-        ? "Member berhasil diaktifkan."
-        : "Member berhasil dinonaktifkan.",
-    );
+      setSuccessMessage(
+        confirmStatus === "ACTIVE"
+          ? "Member berhasil diaktifkan."
+          : "Member berhasil dinonaktifkan.",
+      );
 
-    setConfirmMember(null);
-    setConfirmStatus(null);
+      setConfirmMember(null);
+      setConfirmStatus(null);
 
-    const result =
-      await masterDataRepository.listMembers({
+      const result = await masterDataRepository.listMembers({
         search,
         status: statusFilter || undefined,
         page,
         pageSize: PAGE_SIZE,
       });
 
-    setMembers(result.data);
-    setTotal(result.total);
-    setTotalPages(result.totalPages);
+      setMembers(result.data);
+      setTotal(result.total);
+      setTotalPages(result.totalPages);
 
-    if (detailMember?.id === confirmMember.id) {
-      setDetailMember({
-        ...detailMember,
-        status: confirmStatus,
-      });
+      if (detailMember?.id === confirmMember.id) {
+        setDetailMember({
+          ...detailMember,
+          status: confirmStatus,
+        });
+      }
+    } catch (error) {
+      setError(
+        error instanceof Error ? error.message : "Status member gagal diubah.",
+      );
+
+      setConfirmMember(null);
+      setConfirmStatus(null);
+    } finally {
+      setStatusLoading(false);
     }
-  } catch (error) {
-    setError(
-      error instanceof Error
-        ? error.message
-        : "Status member gagal diubah.",
-    );
-
-    setConfirmMember(null);
-    setConfirmStatus(null);
-  } finally {
-    setStatusLoading(false);
   }
-}
 
   // =====================================================
   // HELPERS
   // =====================================================
 
   function getStatusLabel(status: MemberStatus) {
-    return status === "ACTIVE"
-      ? "Aktif"
-      : "Tidak Aktif";
+    return status === "ACTIVE" ? "Aktif" : "Tidak Aktif";
   }
 
   function getInitial(name: string) {
-    return name
-      .trim()
-      .charAt(0)
-      .toUpperCase();
+    return name.trim().charAt(0).toUpperCase();
   }
 
   // =====================================================
@@ -580,9 +639,7 @@ export default function MasterMembersPage() {
               </p>
             </div>
 
-            {canManageMasterData(
-              getSession()?.user.role ?? "MEMBER",
-            ) && (
+            {canManageMasterData(getSession()?.user.role ?? "MEMBER") && (
               <Button
                 type="button"
                 onClick={openCreateForm}
@@ -600,10 +657,79 @@ export default function MasterMembersPage() {
 
         {successMessage && (
           <div
+            className="fixed right-4 top-4 z-[80] w-[min(380px,calc(100vw-2rem))]"
             role="status"
-            className="mb-3 rounded-lg border border-emerald-200 bg-emerald-50 px-3 py-2.5 text-sm font-medium text-emerald-700"
+            aria-live="polite"
           >
-            {successMessage}
+            <div className="flex items-start gap-3 rounded-xl border border-green-200 bg-white p-4 shadow-lg ring-1 ring-slate-900/5">
+              <div
+                className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-green-100 text-green-700"
+                aria-hidden="true"
+              >
+                ✓
+              </div>
+
+              <div className="min-w-0 flex-1">
+                <p className="text-sm font-semibold text-slate-900">Berhasil</p>
+
+                <p className="mt-1 text-sm leading-5 text-slate-500">
+                  {successMessage}
+                </p>
+              </div>
+
+              <button
+                type="button"
+                aria-label="Tutup notifikasi sukses"
+                onClick={() => setSuccessMessage("")}
+                className="rounded-md p-1 text-slate-400 transition hover:bg-slate-100 hover:text-slate-700 focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-500"
+              >
+                <span aria-hidden="true" className="text-lg leading-none">
+                  ×
+                </span>
+              </button>
+            </div>
+          </div>
+        )}
+
+        {/* =================================================
+            WARNING
+        ================================================= */}
+
+        {warningMessage && (
+          <div
+            className="fixed right-4 top-4 z-[80] w-[min(380px,calc(100vw-2rem))]"
+            role="status"
+            aria-live="polite"
+          >
+            <div className="flex items-start gap-3 rounded-xl border border-amber-200 bg-white p-4 shadow-lg ring-1 ring-slate-900/5">
+              <div
+                className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-amber-100 text-amber-700"
+                aria-hidden="true"
+              >
+                !
+              </div>
+
+              <div className="min-w-0 flex-1">
+                <p className="text-sm font-semibold text-slate-900">
+                  Tidak ada perubahan
+                </p>
+
+                <p className="mt-1 text-sm leading-5 text-slate-500">
+                  {warningMessage}
+                </p>
+              </div>
+
+              <button
+                type="button"
+                aria-label="Tutup notifikasi"
+                onClick={() => setWarningMessage("")}
+                className="rounded-md p-1 text-slate-400 transition hover:bg-slate-100 hover:text-slate-700 focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-500"
+              >
+                <span aria-hidden="true" className="text-lg leading-none">
+                  ×
+                </span>
+              </button>
+            </div>
           </div>
         )}
 
@@ -617,10 +743,8 @@ export default function MasterMembersPage() {
               id="member-search"
               label="Cari Member"
               value={search}
-              onChange={(event) =>
-                setSearch(event.target.value)
-              }
-              placeholder="Nama, nomor anggota, atau NIK..."
+              onChange={(event) => setSearch(event.target.value)}
+              placeholder="Nama, nomor anggota, NIK, atau email..."
             />
 
             <div>
@@ -632,35 +756,30 @@ export default function MasterMembersPage() {
               </label>
 
               <div className="relative">
-  <select
-    id="member-status"
-    value={statusFilter}
-    onChange={(event) => {
-      setStatusFilter(
-        event.target.value as MemberStatus | "",
-      );
-    }}
-    className="h-11 w-full appearance-none rounded-lg border border-slate-300 bg-white px-3 pr-10 text-sm text-slate-800 outline-none transition hover:border-slate-400 focus:border-blue-500 focus:ring-2 focus:ring-blue-100"
-  >
-    <option value="">Semua Status</option>
-    <option value="ACTIVE">Aktif</option>
-    <option value="INACTIVE">Tidak Aktif</option>
-  </select>
+  <Dropdown
+  id="member-status"
+  value={statusFilter}
+  onChange={(value) => {
+    setStatusFilter(value as MemberStatus | "");
+  }}
+  ariaLabel="Filter status member"
+  options={[
+    {
+      value: "",
+      label: "Semua Status",
+    },
+    {
+      value: "ACTIVE",
+      label: "Aktif",
+    },
+    {
+      value: "INACTIVE",
+      label: "Tidak Aktif",
+    },
+  ]}
+/>
 
-  <div className="pointer-events-none absolute inset-y-0 right-3 flex items-center">
-    <svg
-      className="h-4 w-4 text-slate-400"
-      viewBox="0 0 20 20"
-      fill="currentColor"
-      aria-hidden="true"
-    >
-      <path
-        fillRule="evenodd"
-        d="M5.23 7.21a.75.75 0 011.06.02L10 11.168l3.71-3.938a.75.75 0 111.08 1.04l-4.25 4.51a.75.75 0 01-1.08 0l-4.25-4.51a.75.75 0 01.02-1.06z"
-        clipRule="evenodd"
-      />
-    </svg>
-  </div>
+  
 </div>
             </div>
           </div>
@@ -686,24 +805,6 @@ export default function MasterMembersPage() {
         <Card className="overflow-hidden">
           {/* CARD HEADER */}
 
-          <div className="flex items-center justify-between border-b border-slate-200 px-3 py-3 sm:px-4">
-            <div>
-              <h2 className="text-sm font-semibold text-slate-900">
-                Daftar Member
-              </h2>
-
-              <p className="mt-0.5 text-xs text-slate-500">
-                {total} member
-              </p>
-            </div>
-
-            {loading && (
-              <span className="text-xs text-slate-400">
-                Memuat...
-              </span>
-            )}
-          </div>
-
           {/* =================================================
               EMPTY
           ================================================= */}
@@ -719,22 +820,17 @@ export default function MasterMembersPage() {
               </h3>
 
               <p className="mx-auto mt-1 max-w-sm text-xs leading-5 text-slate-500">
-                Coba ubah kata pencarian atau filter
-                status.
+                Coba ubah kata pencarian atau filter status.
               </p>
             </div>
           )}
 
           {/* =================================================
               DESKTOP TABLE
-              
-              IMPORTANT:
-              pakai lg, bukan md.
-              Tablet akan menggunakan card.
           ================================================= */}
 
           {members.length > 0 && (
-            <div className="hidden overflow-hidden lg:block">
+            <div className="relative hidden overflow-hidden lg:block">
               <table className="w-full table-fixed text-sm">
                 <colgroup>
                   <col className="w-[125px]" />
@@ -747,36 +843,23 @@ export default function MasterMembersPage() {
 
                 <thead className="border-b border-slate-200 bg-slate-50">
                   <tr className="text-left text-[11px] font-semibold uppercase tracking-wide text-slate-500">
-                    <th className="px-4 py-2.5">
-                      No. Anggota
-                    </th>
+                    <th className="px-4 py-2.5">No. Anggota</th>
 
-                    <th className="px-4 py-2.5">
-                      Nama
-                    </th>
+                    <th className="px-4 py-2.5">Nama</th>
 
-                    <th className="px-4 py-2.5">
-                      NIK
-                    </th>
+                    <th className="px-4 py-2.5">NIK</th>
 
-                    <th className="px-4 py-2.5">
-                      No. HP
-                    </th>
+                    <th className="px-4 py-2.5">No. HP</th>
 
-                    <th className="px-4 py-2.5">
-                      Status
-                    </th>
+                    <th className="px-4 py-2.5">Status</th>
 
-                    <th className="px-4 py-2.5 text-right">
-                      Aksi
-                    </th>
+                    <th className="px-4 py-2.5 text-right">Aksi</th>
                   </tr>
                 </thead>
 
                 <tbody className="divide-y divide-slate-100">
                   {members.map((member) => {
-                    const isActive =
-                      member.status === "ACTIVE";
+                    const isActive = member.status === "ACTIVE";
 
                     return (
                       <tr
@@ -819,15 +902,11 @@ export default function MasterMembersPage() {
                           >
                             <span
                               className={`h-1.5 w-1.5 rounded-full ${
-                                isActive
-                                  ? "bg-emerald-500"
-                                  : "bg-red-500"
+                                isActive ? "bg-emerald-500" : "bg-red-500"
                               }`}
                             />
 
-                            {getStatusLabel(
-                              member.status,
-                            )}
+                            {getStatusLabel(member.status)}
                           </span>
                         </td>
 
@@ -837,9 +916,7 @@ export default function MasterMembersPage() {
                           <div className="flex items-center justify-end gap-1.5">
                             <button
                               type="button"
-                              onClick={() =>
-                                void openDetail(member)
-                              }
+                              onClick={() => void openDetail(member)}
                               className="inline-flex h-8 min-w-[56px] items-center justify-center rounded-md border border-slate-200 bg-white px-2.5 text-xs font-semibold text-slate-700 transition hover:bg-slate-50 focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-500"
                             >
                               Detail
@@ -847,9 +924,7 @@ export default function MasterMembersPage() {
 
                             <button
                               type="button"
-                              onClick={() =>
-                                openEditForm(member)
-                              }
+                              onClick={() => openEditForm(member)}
                               className="inline-flex h-8 min-w-[52px] items-center justify-center rounded-md border border-slate-200 bg-white px-2.5 text-xs font-semibold text-slate-700 transition hover:bg-slate-50 focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-500"
                             >
                               Ubah
@@ -857,18 +932,14 @@ export default function MasterMembersPage() {
 
                             <button
                               type="button"
-                              onClick={() =>
-                                openStatusConfirm(member)
-                              }
+                              onClick={() => openStatusConfirm(member)}
                               className={`inline-flex h-8 min-w-[88px] items-center justify-center rounded-md border px-2.5 text-xs font-semibold transition focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 ${
                                 isActive
                                   ? "border-red-200 bg-red-50 text-red-600 hover:bg-red-100"
                                   : "border-emerald-200 bg-emerald-50 text-emerald-700 hover:bg-emerald-100"
                               }`}
                             >
-                              {isActive
-                                ? "Nonaktifkan"
-                                : "Aktifkan"}
+                              {isActive ? "Nonaktifkan" : "Aktifkan"}
                             </button>
                           </div>
                         </td>
@@ -877,28 +948,35 @@ export default function MasterMembersPage() {
                   })}
                 </tbody>
               </table>
+              {tableLoading && (
+                <div
+                  className="absolute inset-0 flex items-center justify-center bg-white/70"
+                  role="status"
+                  aria-live="polite"
+                  aria-label="Memuat data member"
+                >
+                  <div className="rounded-lg bg-white px-4 py-3 text-sm font-medium text-slate-600 shadow-sm ring-1 ring-slate-200">
+                    Memuat data...
+                  </div>
+                </div>
+              )}
             </div>
           )}
 
           {/* =================================================
               TABLET + MOBILE
-              
-              lg:hidden:
-              sampai ukuran tablet tidak ada horizontal
-              scroll.
           ================================================= */}
 
           {members.length > 0 && (
-<div className="grid grid-cols-1 gap-3 bg-slate-50/60 p-3 sm:p-3 md:grid-cols-2 lg:hidden">
+            <div className="relative grid grid-cols-1 gap-3 bg-slate-50/60 p-3 sm:p-3 md:grid-cols-2 lg:hidden">
               {members.map((member) => {
-                const isActive =
-                  member.status === "ACTIVE";
+                const isActive = member.status === "ACTIVE";
 
                 return (
-                 <div
-  key={member.id}
-  className="rounded-xl border border-slate-200 bg-white p-3 shadow-sm"
->
+                  <div
+                    key={member.id}
+                    className="rounded-xl border border-slate-200 bg-white p-3 shadow-sm"
+                  >
                     {/* TOP */}
 
                     <div className="flex items-start justify-between gap-3">
@@ -933,15 +1011,11 @@ export default function MasterMembersPage() {
                       >
                         <span
                           className={`h-1.5 w-1.5 rounded-full ${
-                            isActive
-                              ? "bg-emerald-500"
-                              : "bg-red-500"
+                            isActive ? "bg-emerald-500" : "bg-red-500"
                           }`}
                         />
 
-                        {getStatusLabel(
-                          member.status,
-                        )}
+                        {getStatusLabel(member.status)}
                       </span>
                     </div>
 
@@ -988,9 +1062,7 @@ export default function MasterMembersPage() {
                     <div className="mt-3 grid grid-cols-3 gap-1.5">
                       <button
                         type="button"
-                        onClick={() =>
-                          void openDetail(member)
-                        }
+                        onClick={() => void openDetail(member)}
                         className="h-9 rounded-md border border-slate-200 bg-white text-xs font-semibold text-slate-700 transition hover:bg-slate-50 focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-500"
                       >
                         Detail
@@ -998,9 +1070,7 @@ export default function MasterMembersPage() {
 
                       <button
                         type="button"
-                        onClick={() =>
-                          openEditForm(member)
-                        }
+                        onClick={() => openEditForm(member)}
                         className="h-9 rounded-md border border-slate-200 bg-white text-xs font-semibold text-slate-700 transition hover:bg-slate-50 focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-500"
                       >
                         Ubah
@@ -1008,23 +1078,31 @@ export default function MasterMembersPage() {
 
                       <button
                         type="button"
-                        onClick={() =>
-                          openStatusConfirm(member)
-                        }
+                        onClick={() => openStatusConfirm(member)}
                         className={`h-9 rounded-md border text-xs font-semibold ${
                           isActive
                             ? "border-red-200 bg-red-50 text-red-600"
                             : "border-emerald-200 bg-emerald-50 text-emerald-700"
                         }`}
                       >
-                        {isActive
-                          ? "Nonaktifkan"
-                          : "Aktifkan"}
+                        {isActive ? "Nonaktifkan" : "Aktifkan"}
                       </button>
                     </div>
                   </div>
                 );
               })}
+              {tableLoading && (
+                <div
+                  className="absolute inset-0 flex items-center justify-center bg-white/70"
+                  role="status"
+                  aria-live="polite"
+                  aria-label="Memuat data member"
+                >
+                  <div className="rounded-lg bg-white px-4 py-3 text-sm font-medium text-slate-600 shadow-sm ring-1 ring-slate-200">
+                    Memuat data...
+                  </div>
+                </div>
+              )}
             </div>
           )}
 
@@ -1042,20 +1120,13 @@ export default function MasterMembersPage() {
                 <button
                   type="button"
                   disabled={page <= 1}
-                  onClick={() =>
-                    setPage((current) =>
-                      Math.max(1, current - 1),
-                    )
-                  }
+                  onClick={() => setPage((current) => Math.max(1, current - 1))}
                   className="h-8 rounded-md border border-slate-200 bg-white px-2.5 text-xs font-medium text-slate-700 disabled:cursor-not-allowed disabled:opacity-40"
                 >
                   ←
                 </button>
 
-                {Array.from(
-                  { length: totalPages },
-                  (_, index) => index + 1,
-                )
+                {Array.from({ length: totalPages }, (_, index) => index + 1)
                   .filter(
                     (number) =>
                       number === 1 ||
@@ -1081,12 +1152,7 @@ export default function MasterMembersPage() {
                   type="button"
                   disabled={page >= totalPages}
                   onClick={() =>
-                    setPage((current) =>
-                      Math.min(
-                        totalPages,
-                        current + 1,
-                      ),
-                    )
+                    setPage((current) => Math.min(totalPages, current + 1))
                   }
                   className="h-8 rounded-md border border-slate-200 bg-white px-2.5 text-xs font-medium text-slate-700 disabled:cursor-not-allowed disabled:opacity-40"
                 >
@@ -1107,15 +1173,13 @@ export default function MasterMembersPage() {
           className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/50 p-3 sm:p-4"
           role="presentation"
           onMouseDown={(event) => {
-            if (
-              event.target === event.currentTarget &&
-              !formLoading
-            ) {
+            if (event.target === event.currentTarget && !formLoading) {
               closeForm();
             }
           }}
         >
           <div
+            ref={formModalRef}
             className="w-full max-w-2xl overflow-hidden rounded-xl bg-white shadow-2xl"
             role="dialog"
             aria-modal="true"
@@ -1129,9 +1193,7 @@ export default function MasterMembersPage() {
                   id="member-form-title"
                   className="text-base font-semibold text-slate-900"
                 >
-                  {editingMember
-                    ? "Ubah Member"
-                    : "Tambah Member"}
+                  {editingMember ? "Ubah Member" : "Tambah Member"}
                 </h2>
 
                 <p className="mt-0.5 text-xs text-slate-500">
@@ -1149,10 +1211,7 @@ export default function MasterMembersPage() {
                 onClick={closeForm}
                 className="rounded-md p-1.5 text-slate-400 transition hover:bg-slate-100 hover:text-slate-700 focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 disabled:opacity-50"
               >
-                <span
-                  aria-hidden="true"
-                  className="text-xl leading-none"
-                >
+                <span aria-hidden="true" className="text-xl leading-none">
                   ×
                 </span>
               </button>
@@ -1284,9 +1343,7 @@ export default function MasterMembersPage() {
                   loading={formLoading}
                   className="w-full sm:w-auto"
                 >
-                  {editingMember
-                    ? "Simpan Perubahan"
-                    : "Simpan Member"}
+                  {editingMember ? "Simpan Perubahan" : "Simpan Member"}
                 </Button>
               </div>
             </form>
@@ -1298,236 +1355,233 @@ export default function MasterMembersPage() {
     DETAIL MODAL
 ===================================================== */}
 
-{detailMember && (
-  <div
-    className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/40 p-3 sm:p-4"
-    role="presentation"
-    onMouseDown={(event) => {
-      if (event.target === event.currentTarget) {
-        setDetailMember(null);
-      }
-    }}
-  >
-    <div
-      className="w-full max-w-2xl overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-xl"
-      role="dialog"
-      aria-modal="true"
-      aria-labelledby="member-detail-title"
-    >
-      {/* DETAIL HEADER */}
-
-      <div className="border-b border-slate-200 bg-white px-5 py-5 sm:px-6">
-        <div className="flex items-start justify-between gap-4">
-          <div className="flex min-w-0 items-center gap-3.5">
-            {/* AVATAR */}
-
-            <div className="flex h-14 w-14 shrink-0 items-center justify-center rounded-full bg-blue-50 text-xl font-bold text-blue-600">
-              {getInitial(detailMember.name)}
-            </div>
-
-            {/* MEMBER IDENTITY */}
-
-            <div className="min-w-0">
-              <p className="text-xs font-medium text-slate-400">
-                {detailMember.memberNumber}
-              </p>
-
-              <h2
-                id="member-detail-title"
-                className="mt-0.5 truncate text-xl font-bold text-slate-900"
-              >
-                {detailMember.name}
-              </h2>
-
-              <span
-                className={`mt-2 inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-xs font-semibold ${
-                  detailMember.status === "ACTIVE"
-                    ? "bg-emerald-50 text-emerald-700"
-                    : "bg-red-50 text-red-600"
-                }`}
-              >
-                <span
-                  className={`h-1.5 w-1.5 rounded-full ${
-                    detailMember.status === "ACTIVE"
-                      ? "bg-emerald-500"
-                      : "bg-red-500"
-                  }`}
-                />
-
-                {getStatusLabel(detailMember.status)}
-              </span>
-            </div>
-          </div>
-
-          {/* CLOSE */}
-
-          <button
-            ref={detailCloseRef}
-            type="button"
-            aria-label="Tutup detail member"
-            onClick={() => setDetailMember(null)}
-            className="shrink-0 rounded-lg p-2 text-slate-400 transition hover:bg-slate-100 hover:text-slate-700 focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-500"
-          >
-            <span
-              aria-hidden="true"
-              className="text-xl leading-none"
-            >
-              ×
-            </span>
-          </button>
-        </div>
-      </div>
-
-      {/* DETAIL BODY */}
-
-      <div className="bg-slate-50/60 p-4 sm:p-5">
-        <div className="grid gap-3 sm:grid-cols-2">
-
-          {/* NAMA */}
-
-          <div className="rounded-xl border border-slate-200 bg-white px-4 py-3">
-            <p className="text-[11px] font-semibold uppercase tracking-wide text-slate-400">
-              Nama Lengkap
-            </p>
-
-            <p className="mt-1 text-sm font-semibold text-slate-800">
-              {detailMember.name}
-            </p>
-          </div>
-
-          {/* NOMOR ANGGOTA */}
-
-          <div className="rounded-xl border border-slate-200 bg-white px-4 py-3">
-            <p className="text-[11px] font-semibold uppercase tracking-wide text-slate-400">
-              Nomor Anggota
-            </p>
-
-            <p className="mt-1 text-sm font-semibold text-slate-800">
-              {detailMember.memberNumber}
-            </p>
-          </div>
-
-          {/* NIK */}
-
-          <div className="rounded-xl border border-slate-200 bg-white px-4 py-3">
-            <p className="text-[11px] font-semibold uppercase tracking-wide text-slate-400">
-              NIK
-            </p>
-
-            <p className="mt-1 text-sm font-semibold text-slate-800">
-              {detailMember.identityNumber}
-            </p>
-          </div>
-
-          {/* NOMOR HP */}
-
-          <div className="rounded-xl border border-slate-200 bg-white px-4 py-3">
-            <p className="text-[11px] font-semibold uppercase tracking-wide text-slate-400">
-              Nomor HP
-            </p>
-
-            <p className="mt-1 text-sm font-semibold text-slate-800">
-              {detailMember.phone}
-            </p>
-          </div>
-
-          {/* EMAIL */}
-
-          <div className="rounded-xl border border-slate-200 bg-white px-4 py-3 sm:col-span-2">
-            <p className="text-[11px] font-semibold uppercase tracking-wide text-slate-400">
-              Email
-            </p>
-
-            <p className="mt-1 truncate text-sm font-semibold text-slate-800">
-              {detailMember.email || "-"}
-            </p>
-          </div>
-
-          {/* TIPE MEMBER */}
-
-          <div className="rounded-xl border border-slate-200 bg-white px-4 py-3">
-            <p className="text-[11px] font-semibold uppercase tracking-wide text-slate-400">
-              Tipe Member
-            </p>
-
-            <p className="mt-1 text-sm font-semibold text-slate-800">
-              {detailMember.memberType || "Umum"}
-            </p>
-          </div>
-
-          {/* STATUS */}
-
-          <div className="rounded-xl border border-slate-200 bg-white px-4 py-3">
-            <p className="text-[11px] font-semibold uppercase tracking-wide text-slate-400">
-              Status
-            </p>
-
-            <span
-              className={`mt-1 inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-xs font-semibold ${
-                detailMember.status === "ACTIVE"
-                  ? "bg-emerald-50 text-emerald-700"
-                  : "bg-red-50 text-red-600"
-              }`}
-            >
-              <span
-                className={`h-1.5 w-1.5 rounded-full ${
-                  detailMember.status === "ACTIVE"
-                    ? "bg-emerald-500"
-                    : "bg-red-500"
-                }`}
-              />
-
-              {getStatusLabel(detailMember.status)}
-            </span>
-          </div>
-
-          {/* BERGABUNG */}
-
-          <div className="rounded-xl border border-slate-200 bg-white px-4 py-3 sm:col-span-2">
-            <p className="text-[11px] font-semibold uppercase tracking-wide text-slate-400">
-              Bergabung Pada
-            </p>
-
-            <p className="mt-1 text-sm font-semibold text-slate-800">
-              {new Date(detailMember.createdAt).toLocaleDateString(
-                "id-ID",
-                {
-                  day: "2-digit",
-                  month: "2-digit",
-                  year: "numeric",
-                },
-              )}
-            </p>
-          </div>
-        </div>
-      </div>
-
-      {/* DETAIL FOOTER */}
-
-      <div className="flex justify-end gap-2 border-t border-slate-200 bg-white px-4 py-3 sm:px-5">
-        <Button
-          type="button"
-          variant="secondary"
-          onClick={() => {
-            setDetailMember(null);
-            openEditForm(detailMember);
+      {detailMember && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/40 p-3 sm:p-4"
+          role="presentation"
+          onMouseDown={(event) => {
+            if (event.target === event.currentTarget) {
+              setDetailMember(null);
+            }
           }}
-          className="w-full sm:w-auto"
         >
-          Ubah Member
-        </Button>
+          <div
+            ref={detailModalRef}
+            className="w-full max-w-2xl overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-xl"
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="member-detail-title"
+          >
+            {/* DETAIL HEADER */}
 
-        <Button
-          type="button"
-          onClick={() => setDetailMember(null)}
-          className="w-full sm:w-auto"
-        >
-          Tutup
-        </Button>
-      </div>
-    </div>
-  </div>
-)}
+            <div className="border-b border-slate-200 bg-white px-5 py-5 sm:px-6">
+              <div className="flex items-start justify-between gap-4">
+                <div className="flex min-w-0 items-center gap-3.5">
+                  {/* AVATAR */}
+
+                  <div className="flex h-14 w-14 shrink-0 items-center justify-center rounded-full bg-blue-50 text-xl font-bold text-blue-600">
+                    {getInitial(detailMember.name)}
+                  </div>
+
+                  {/* MEMBER IDENTITY */}
+
+                  <div className="min-w-0">
+                    <p className="text-xs font-medium text-slate-400">
+                      {detailMember.memberNumber}
+                    </p>
+
+                    <h2
+                      id="member-detail-title"
+                      className="mt-0.5 truncate text-xl font-bold text-slate-900"
+                    >
+                      {detailMember.name}
+                    </h2>
+
+                    <span
+                      className={`mt-2 inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-xs font-semibold ${
+                        detailMember.status === "ACTIVE"
+                          ? "bg-emerald-50 text-emerald-700"
+                          : "bg-red-50 text-red-600"
+                      }`}
+                    >
+                      <span
+                        className={`h-1.5 w-1.5 rounded-full ${
+                          detailMember.status === "ACTIVE"
+                            ? "bg-emerald-500"
+                            : "bg-red-500"
+                        }`}
+                      />
+
+                      {getStatusLabel(detailMember.status)}
+                    </span>
+                  </div>
+                </div>
+
+                {/* CLOSE */}
+
+                <button
+                  ref={detailCloseRef}
+                  type="button"
+                  aria-label="Tutup detail member"
+                  onClick={() => setDetailMember(null)}
+                  className="shrink-0 rounded-lg p-2 text-slate-400 transition hover:bg-slate-100 hover:text-slate-700 focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-500"
+                >
+                  <span aria-hidden="true" className="text-xl leading-none">
+                    ×
+                  </span>
+                </button>
+              </div>
+            </div>
+
+            {/* DETAIL BODY */}
+
+            <div className="bg-slate-50/60 p-4 sm:p-5">
+              <div className="grid gap-3 sm:grid-cols-2">
+                {/* NAMA */}
+
+                <div className="rounded-xl border border-slate-200 bg-white px-4 py-3">
+                  <p className="text-[11px] font-semibold uppercase tracking-wide text-slate-400">
+                    Nama Lengkap
+                  </p>
+
+                  <p className="mt-1 text-sm font-semibold text-slate-800">
+                    {detailMember.name}
+                  </p>
+                </div>
+
+                {/* NOMOR ANGGOTA */}
+
+                <div className="rounded-xl border border-slate-200 bg-white px-4 py-3">
+                  <p className="text-[11px] font-semibold uppercase tracking-wide text-slate-400">
+                    Nomor Anggota
+                  </p>
+
+                  <p className="mt-1 text-sm font-semibold text-slate-800">
+                    {detailMember.memberNumber}
+                  </p>
+                </div>
+
+                {/* NIK */}
+
+                <div className="rounded-xl border border-slate-200 bg-white px-4 py-3">
+                  <p className="text-[11px] font-semibold uppercase tracking-wide text-slate-400">
+                    NIK
+                  </p>
+
+                  <p className="mt-1 text-sm font-semibold text-slate-800">
+                    {detailMember.identityNumber}
+                  </p>
+                </div>
+
+                {/* NOMOR HP */}
+
+                <div className="rounded-xl border border-slate-200 bg-white px-4 py-3">
+                  <p className="text-[11px] font-semibold uppercase tracking-wide text-slate-400">
+                    Nomor HP
+                  </p>
+
+                  <p className="mt-1 text-sm font-semibold text-slate-800">
+                    {detailMember.phone}
+                  </p>
+                </div>
+
+                {/* EMAIL */}
+
+                <div className="rounded-xl border border-slate-200 bg-white px-4 py-3 sm:col-span-2">
+                  <p className="text-[11px] font-semibold uppercase tracking-wide text-slate-400">
+                    Email
+                  </p>
+
+                  <p className="mt-1 truncate text-sm font-semibold text-slate-800">
+                    {detailMember.email || "-"}
+                  </p>
+                </div>
+
+                {/* TIPE MEMBER */}
+
+                <div className="rounded-xl border border-slate-200 bg-white px-4 py-3">
+                  <p className="text-[11px] font-semibold uppercase tracking-wide text-slate-400">
+                    Tipe Member
+                  </p>
+
+                  <p className="mt-1 text-sm font-semibold text-slate-800">
+                    {detailMember.memberType || "Umum"}
+                  </p>
+                </div>
+
+                {/* STATUS */}
+
+                <div className="rounded-xl border border-slate-200 bg-white px-4 py-3">
+                  <p className="text-[11px] font-semibold uppercase tracking-wide text-slate-400">
+                    Status
+                  </p>
+
+                  <span
+                    className={`mt-1 inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-xs font-semibold ${
+                      detailMember.status === "ACTIVE"
+                        ? "bg-emerald-50 text-emerald-700"
+                        : "bg-red-50 text-red-600"
+                    }`}
+                  >
+                    <span
+                      className={`h-1.5 w-1.5 rounded-full ${
+                        detailMember.status === "ACTIVE"
+                          ? "bg-emerald-500"
+                          : "bg-red-500"
+                      }`}
+                    />
+
+                    {getStatusLabel(detailMember.status)}
+                  </span>
+                </div>
+
+                {/* BERGABUNG */}
+
+                <div className="rounded-xl border border-slate-200 bg-white px-4 py-3 sm:col-span-2">
+                  <p className="text-[11px] font-semibold uppercase tracking-wide text-slate-400">
+                    Bergabung Pada
+                  </p>
+
+                  <p className="mt-1 text-sm font-semibold text-slate-800">
+                    {new Date(detailMember.createdAt).toLocaleDateString(
+                      "id-ID",
+                      {
+                        day: "2-digit",
+                        month: "2-digit",
+                        year: "numeric",
+                      },
+                    )}
+                  </p>
+                </div>
+              </div>
+            </div>
+
+            {/* DETAIL FOOTER */}
+
+            <div className="flex justify-end gap-2 border-t border-slate-200 bg-white px-4 py-3 sm:px-5">
+              <Button
+                type="button"
+                variant="secondary"
+                onClick={() => {
+                  setDetailMember(null);
+                  openEditForm(detailMember);
+                }}
+                className="w-full sm:w-auto"
+              >
+                Ubah Member
+              </Button>
+
+              <Button
+                type="button"
+                onClick={() => setDetailMember(null)}
+                className="w-full sm:w-auto"
+              >
+                Tutup
+              </Button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* =====================================================
           STATUS CONFIRMATION
@@ -1548,9 +1602,7 @@ export default function MasterMembersPage() {
             : ""
         }
         confirmLabel={
-          confirmStatus === "ACTIVE"
-            ? "Ya, Aktifkan"
-            : "Ya, Nonaktifkan"
+          confirmStatus === "ACTIVE" ? "Ya, Aktifkan" : "Ya, Nonaktifkan"
         }
         onClose={() => {
           if (!statusLoading) {

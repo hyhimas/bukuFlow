@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 
 import Badge from "@/components/ui/Badge";
 import Button from "@/components/ui/Button";
@@ -52,12 +52,12 @@ export default function TransactionsPage() {
   // DATA
   // =========================================================
 
-  const [transactions, setTransactions] = useState<TransactionData[]>(
-    [],
-  );
+  const [transactions, setTransactions] = useState<TransactionData[]>([]);
 
+  const [tableLoading, setTableLoading] = useState(false);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
+  const hasLoadedTransactions = useRef(false);
 
   // =========================================================
   // SEARCH
@@ -84,8 +84,7 @@ export default function TransactionsPage() {
   // "Terapkan Filter"
   // =========================================================
 
-  const [filterStatus, setFilterStatus] =
-    useState<TransactionStatus | "">("");
+  const [filterStatus, setFilterStatus] = useState<TransactionStatus | "">("");
 
   const [filterStartDate, setFilterStartDate] = useState("");
   const [filterEndDate, setFilterEndDate] = useState("");
@@ -121,17 +120,24 @@ export default function TransactionsPage() {
 
   useEffect(() => {
     async function loadTransactions() {
-      setLoading(true);
+      if (!hasLoadedTransactions.current) {
+        setLoading(true);
+      } else {
+        setTableLoading(true);
+      }
+
       setError("");
 
       try {
         const result = await getTransactions();
 
         setTransactions(result);
+        hasLoadedTransactions.current = true;
       } catch {
         setError("Riwayat transaksi gagal dimuat.");
       } finally {
         setLoading(false);
+        setTableLoading(false);
       }
     }
 
@@ -151,6 +157,22 @@ export default function TransactionsPage() {
       window.clearTimeout(timer);
     };
   }, [search]);
+
+  useEffect(() => {
+    if (!hasLoadedTransactions.current) {
+      return;
+    }
+
+    setTableLoading(true);
+
+    const timer = window.setTimeout(() => {
+      setTableLoading(false);
+    }, 150);
+
+    return () => {
+      window.clearTimeout(timer);
+    };
+  }, [debouncedSearch, status, startDate, endDate, page]);
 
   // =========================================================
   // FILTER
@@ -186,8 +208,7 @@ export default function TransactionsPage() {
       // STATUS
       // -------------------------------------------------------
 
-      const matchesStatus =
-        status === "" || loan.status === status;
+      const matchesStatus = status === "" || loan.status === status;
 
       // -------------------------------------------------------
       // DATE
@@ -197,27 +218,16 @@ export default function TransactionsPage() {
       const dueDate = getDateOnly(loan.dueAt);
 
       const matchesStartDate =
-        startDate === "" ||
-        (borrowedDate !== "" && borrowedDate >= startDate);
+        startDate === "" || (borrowedDate !== "" && borrowedDate >= startDate);
 
       const matchesEndDate =
-        endDate === "" ||
-        (dueDate !== "" && dueDate <= endDate);
+        endDate === "" || (dueDate !== "" && dueDate <= endDate);
 
       return (
-        matchesSearch &&
-        matchesStatus &&
-        matchesStartDate &&
-        matchesEndDate
+        matchesSearch && matchesStatus && matchesStartDate && matchesEndDate
       );
     });
-  }, [
-    transactions,
-    debouncedSearch,
-    status,
-    startDate,
-    endDate,
-  ]);
+  }, [transactions, debouncedSearch, status, startDate, endDate]);
 
   // =========================================================
   // PAGINATION
@@ -248,9 +258,7 @@ export default function TransactionsPage() {
       return "";
     }
 
-    const isoDateMatch = value.match(
-      /^(\d{4})-(\d{2})-(\d{2})/,
-    );
+    const isoDateMatch = value.match(/^(\d{4})-(\d{2})-(\d{2})/);
 
     if (isoDateMatch) {
       return isoDateMatch[0];
@@ -317,10 +325,7 @@ export default function TransactionsPage() {
   // ACTIVE FILTER CHECK
   // =========================================================
 
-  const hasActiveFilters =
-    status !== "" ||
-    startDate !== "" ||
-    endDate !== "";
+  const hasActiveFilters = status !== "" || startDate !== "" || endDate !== "";
 
   // =========================================================
   // RESET APPLIED FILTERS
@@ -433,9 +438,7 @@ export default function TransactionsPage() {
 
   return (
     <main className="min-h-screen bg-slate-50">
-
       <div className="page-container py-5 sm:py-6">
-
         {/* =====================================================
             HEADER
         ====================================================== */}
@@ -477,49 +480,51 @@ export default function TransactionsPage() {
         ====================================================== */}
 
         <div className="mb-5">
-<div className="grid grid-cols-[minmax(0,1fr)_auto] items-end gap-2.5 sm:gap-3">
-            {/* SEARCH */}
+          <Card className="mb-3 p-3 sm:p-4">
+            <div className="grid grid-cols-[minmax(0,1fr)_auto] items-end gap-2.5 sm:gap-3">
+              {/* SEARCH */}
 
-            <div className="min-w-0">
-              <Input
-                id="transaction-search"
-                label="Pencarian"
-                value={search}
-                onChange={(event) => {
-                  setSearch(event.target.value);
-                  resetPagination();
-                }}
-                placeholder="Nomor, anggota, buku, copy..."
-              />
+              <div className="min-w-0">
+                <Input
+                  id="transaction-search"
+                  label="Pencarian"
+                  value={search}
+                  onChange={(event) => {
+                    setSearch(event.target.value);
+                    resetPagination();
+                  }}
+                  placeholder="Nomor, anggota, buku, copy..."
+                />
+              </div>
+
+              {/* FILTER BUTTON */}
+
+              <Button
+                type="button"
+                variant="secondary"
+                onClick={openFilter}
+                className="!w-[92px] !shrink-0 !px-3"
+              >
+                <span className="flex items-center justify-center gap-1.5 whitespace-nowrap">
+                  <svg
+                    viewBox="0 0 24 24"
+                    fill="none"
+                    className="h-4 w-4 shrink-0"
+                    aria-hidden="true"
+                  >
+                    <path
+                      d="M4 6h16M7 12h10M10 18h4"
+                      stroke="currentColor"
+                      strokeWidth="1.8"
+                      strokeLinecap="round"
+                    />
+                  </svg>
+
+                  <span>Filter</span>
+                </span>
+              </Button>
             </div>
-
-            {/* FILTER BUTTON */}
-
-            <Button
-  type="button"
-  variant="secondary"
-  onClick={openFilter}
-  className="!w-[92px] !shrink-0 !px-3"
->
-  <span className="flex items-center justify-center gap-1.5 whitespace-nowrap">
-    <svg
-      viewBox="0 0 24 24"
-      fill="none"
-      className="h-4 w-4 shrink-0"
-      aria-hidden="true"
-    >
-      <path
-        d="M4 6h16M7 12h10M10 18h4"
-        stroke="currentColor"
-        strokeWidth="1.8"
-        strokeLinecap="round"
-      />
-    </svg>
-
-    <span>Filter</span>
-  </span>
-</Button>
-          </div>
+          </Card>
 
           {/* ===================================================
               ACTIVE FILTER CHIPS
@@ -527,7 +532,6 @@ export default function TransactionsPage() {
 
           {(hasActiveFilters || search.trim() !== "") && (
             <div className="mt-3 flex flex-wrap items-center gap-2">
-
               {search.trim() !== "" && (
                 <button
                   type="button"
@@ -551,7 +555,6 @@ export default function TransactionsPage() {
                   className="inline-flex min-h-8 items-center gap-1.5 rounded-full border border-slate-200 bg-white px-3 py-1 text-xs font-medium text-slate-700 transition hover:border-slate-300 hover:bg-slate-50 sm:text-sm"
                 >
                   Dari: {formatDate(startDate)}
-
                   <span className="text-slate-400" aria-hidden="true">
                     ×
                   </span>
@@ -565,7 +568,6 @@ export default function TransactionsPage() {
                   className="inline-flex min-h-8 items-center gap-1.5 rounded-full border border-slate-200 bg-white px-3 py-1 text-xs font-medium text-slate-700 transition hover:border-slate-300 hover:bg-slate-50 sm:text-sm"
                 >
                   Sampai: {formatDate(endDate)}
-
                   <span className="text-slate-400" aria-hidden="true">
                     ×
                   </span>
@@ -579,7 +581,6 @@ export default function TransactionsPage() {
                   className="inline-flex min-h-8 items-center gap-1.5 rounded-full border border-slate-200 bg-white px-3 py-1 text-xs font-medium text-slate-700 transition hover:border-slate-300 hover:bg-slate-50 sm:text-sm"
                 >
                   Status: {getStatusLabel(status)}
-
                   <span className="text-slate-400" aria-hidden="true">
                     ×
                   </span>
@@ -587,27 +588,27 @@ export default function TransactionsPage() {
               )}
 
               <button
-  type="button"
-  onClick={resetFilters}
-  className="inline-flex min-h-8 items-center gap-1.5 rounded-lg px-2.5 text-xs font-medium text-slate-500 transition-colors hover:bg-slate-100 hover:text-slate-900 focus:outline-none focus-visible:ring-2 focus-visible:ring-brand focus-visible:ring-offset-1 sm:text-sm"
->
-  <svg
-    viewBox="0 0 24 24"
-    fill="none"
-    className="h-3.5 w-3.5"
-    aria-hidden="true"
-  >
-    <path
-      d="M4 4v5h5M20 20v-5h-5M5.5 9A7.5 7.5 0 0 1 18 6.5M18.5 15A7.5 7.5 0 0 1 6 17.5"
-      stroke="currentColor"
-      strokeWidth="1.8"
-      strokeLinecap="round"
-      strokeLinejoin="round"
-    />
-  </svg>
+                type="button"
+                onClick={resetFilters}
+                className="inline-flex min-h-8 items-center gap-1.5 rounded-lg px-2.5 text-xs font-medium text-slate-500 transition-colors hover:bg-slate-100 hover:text-slate-900 focus:outline-none focus-visible:ring-2 focus-visible:ring-brand focus-visible:ring-offset-1 sm:text-sm"
+              >
+                <svg
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  className="h-3.5 w-3.5"
+                  aria-hidden="true"
+                >
+                  <path
+                    d="M4 4v5h5M20 20v-5h-5M5.5 9A7.5 7.5 0 0 1 18 6.5M18.5 15A7.5 7.5 0 0 1 6 17.5"
+                    stroke="currentColor"
+                    strokeWidth="1.8"
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                  />
+                </svg>
 
-  <span>Reset semua</span>
-</button>
+                <span>Reset semua</span>
+              </button>
             </div>
           )}
         </div>
@@ -623,7 +624,6 @@ export default function TransactionsPage() {
             aria-modal="true"
             aria-labelledby="filter-title"
           >
-
             {/* OVERLAY */}
 
             <button
@@ -642,7 +642,6 @@ export default function TransactionsPage() {
                 flex-col bg-white shadow-2xl
               "
             >
-
               {/* =================================================
                   DRAWER HEADER
               ================================================== */}
@@ -688,7 +687,6 @@ export default function TransactionsPage() {
               ================================================== */}
 
               <div className="flex-1 overflow-y-auto px-5 py-5 sm:px-6 sm:py-6">
-
                 {/* =================================================
                     PERIODE
                 ================================================== */}
@@ -703,7 +701,6 @@ export default function TransactionsPage() {
                   </p>
 
                   <div className="mt-4 grid gap-4 sm:grid-cols-2">
-
                     {/* DARI */}
 
                     <Input
@@ -758,8 +755,7 @@ export default function TransactionsPage() {
 
                   <div className="mt-3 flex flex-wrap gap-2">
                     {STATUS_OPTIONS.map((option) => {
-                      const selected =
-                        filterStatus === option.value;
+                      const selected = filterStatus === option.value;
 
                       return (
                         <button
@@ -789,7 +785,6 @@ export default function TransactionsPage() {
 
               <div className="border-t border-slate-200 bg-white px-5 py-4 sm:px-6">
                 <div className="flex gap-2.5 sm:gap-3">
-
                   {/* RESET */}
 
                   <Button
@@ -820,7 +815,7 @@ export default function TransactionsPage() {
             EMPTY STATE
         ====================================================== */}
 
-        {filteredTransactions.length === 0 ? (
+        {filteredTransactions.length === 0 && !tableLoading ? (
           <Card className="mt-5 p-4 sm:p-5">
             <EmptyState
               title="Tidak ada transaksi"
@@ -833,7 +828,7 @@ export default function TransactionsPage() {
                 DESKTOP TABLE
             ================================================== */}
 
-            <Card className="mt-5 hidden overflow-hidden xl:block">
+            <Card className="relative mt-5 hidden overflow-hidden xl:block">
               <table className="w-full table-fixed border-collapse text-left text-sm">
                 <colgroup>
                   <col className="w-[15%]" />
@@ -850,7 +845,6 @@ export default function TransactionsPage() {
 
                 <thead>
                   <tr className="border-b border-slate-200 bg-slate-50">
-
                     <th className="px-4 py-3 text-center text-xs font-semibold tracking-wide text-slate-500">
                       Nomor transaksi
                     </th>
@@ -893,7 +887,6 @@ export default function TransactionsPage() {
                       key={transaction.loan.id}
                       className="border-b border-slate-100 last:border-b-0 hover:bg-slate-50/70"
                     >
-
                       {/* NOMOR TRANSAKSI */}
 
                       <td className="min-w-0 px-4 py-3.5 align-middle">
@@ -920,41 +913,37 @@ export default function TransactionsPage() {
 
                       <td className="min-w-0 px-4 py-3.5 align-middle">
                         {transaction.items.length === 0 ? (
-                          <span className="text-slate-400">
-                            -
-                          </span>
+                          <span className="text-slate-400">-</span>
                         ) : (
                           <ul className="min-w-0 space-y-1">
-                            {transaction.items.map(
-                              ({ book, bookCopy }) => (
-                                <li
-                                  key={`${transaction.loan.id}-${book?.id ?? "book"}-${bookCopy?.id ?? "copy"}`}
-                                  className="grid min-w-0 grid-cols-[10px_minmax(0,1fr)]"
+                            {transaction.items.map(({ book, bookCopy }) => (
+                              <li
+                                key={`${transaction.loan.id}-${book?.id ?? "book"}-${bookCopy?.id ?? "copy"}`}
+                                className="grid min-w-0 grid-cols-[10px_minmax(0,1fr)]"
+                              >
+                                <span
+                                  className="text-slate-300"
+                                  aria-hidden="true"
                                 >
-                                  <span
-                                    className="text-slate-300"
-                                    aria-hidden="true"
-                                  >
-                                    •
+                                  •
+                                </span>
+
+                                <span
+                                  className="min-w-0 leading-5 text-slate-700"
+                                  title={`${book?.title ?? "-"}${bookCopy?.code ? ` (${bookCopy.code})` : ""}`}
+                                >
+                                  <span className="font-medium">
+                                    {book?.title ?? "-"}
                                   </span>
 
-                                  <span
-                                    className="min-w-0 leading-5 text-slate-700"
-                                    title={`${book?.title ?? "-"}${bookCopy?.code ? ` (${bookCopy.code})` : ""}`}
-                                  >
-                                    <span className="font-medium">
-                                      {book?.title ?? "-"}
+                                  {bookCopy?.code && (
+                                    <span className="ml-1 text-slate-400">
+                                      ({bookCopy.code})
                                     </span>
-
-                                    {bookCopy?.code && (
-                                      <span className="ml-1 text-slate-400">
-                                        ({bookCopy.code})
-                                      </span>
-                                    )}
-                                  </span>
-                                </li>
-                              ),
-                            )}
+                                  )}
+                                </span>
+                              </li>
+                            ))}
                           </ul>
                         )}
                       </td>
@@ -974,9 +963,7 @@ export default function TransactionsPage() {
 
                       <td className="px-4 py-3.5 text-center align-middle">
                         <span className="whitespace-nowrap text-slate-700">
-                          {formatDate(
-                            transaction.loan.borrowedAt,
-                          )}
+                          {formatDate(transaction.loan.borrowedAt)}
                         </span>
                       </td>
 
@@ -984,9 +971,7 @@ export default function TransactionsPage() {
 
                       <td className="px-4 py-3.5 text-center align-middle">
                         <span className="whitespace-nowrap text-slate-700">
-                          {formatDate(
-                            transaction.loan.dueAt,
-                          )}
+                          {formatDate(transaction.loan.dueAt)}
                         </span>
                       </td>
 
@@ -994,9 +979,7 @@ export default function TransactionsPage() {
 
                       <td className="px-4 py-3.5 text-center align-middle">
                         <span className="whitespace-nowrap text-slate-700">
-                          {formatDate(
-                            transaction.loan.returnedAt,
-                          )}
+                          {formatDate(transaction.loan.returnedAt)}
                         </span>
                       </td>
 
@@ -1005,13 +988,9 @@ export default function TransactionsPage() {
                       <td className="px-4 py-3.5 align-middle">
                         <div className="flex justify-center">
                           <Badge
-                            variant={getStatusVariant(
-                              transaction.loan.status,
-                            )}
+                            variant={getStatusVariant(transaction.loan.status)}
                           >
-                            {getStatusLabel(
-                              transaction.loan.status,
-                            )}
+                            {getStatusLabel(transaction.loan.status)}
                           </Badge>
                         </div>
                       </td>
@@ -1019,27 +998,33 @@ export default function TransactionsPage() {
                   ))}
                 </tbody>
               </table>
+              {tableLoading && (
+                <div
+                  className="absolute inset-0 flex items-center justify-center bg-white/70"
+                  role="status"
+                  aria-live="polite"
+                  aria-label="Memuat riwayat transaksi"
+                >
+                  <div className="rounded-lg bg-white px-4 py-3 text-sm font-medium text-slate-600 shadow-sm ring-1 ring-slate-200">
+                    Memuat data...
+                  </div>
+                </div>
+              )}
             </Card>
 
             {/* =================================================
                 TABLET + MOBILE
             ================================================== */}
 
-            <div className="mt-5 space-y-3 xl:hidden">
+            <div className="relative mt-5 space-y-3 xl:hidden">
               {paginatedTransactions.map((transaction) => (
-                <Card
-                  key={transaction.loan.id}
-                  className="p-4 sm:p-5"
-                >
-
+                <Card key={transaction.loan.id} className="p-4 sm:p-5">
                   {/* =================================================
                       TRANSACTION HEADER
                   ================================================== */}
 
                   <div className="flex items-start justify-between gap-3">
-
                     <div className="min-w-0 flex-1">
-
                       <p
                         className="truncate text-sm font-semibold tracking-tight text-slate-900 sm:text-base"
                         title={transaction.loan.loanNumber}
@@ -1057,13 +1042,9 @@ export default function TransactionsPage() {
 
                     <div className="shrink-0">
                       <Badge
-                        variant={getStatusVariant(
-                          transaction.loan.status,
-                        )}
+                        variant={getStatusVariant(transaction.loan.status)}
                       >
-                        {getStatusLabel(
-                          transaction.loan.status,
-                        )}
+                        {getStatusLabel(transaction.loan.status)}
                       </Badge>
                     </div>
                   </div>
@@ -1078,36 +1059,32 @@ export default function TransactionsPage() {
                     </p>
 
                     {transaction.items.length === 0 ? (
-                      <p className="mt-1 text-sm text-slate-900">
-                        -
-                      </p>
+                      <p className="mt-1 text-sm text-slate-900">-</p>
                     ) : (
                       <ul className="mt-1 space-y-0.5 text-sm leading-5 text-slate-900 sm:text-base">
-                        {transaction.items.map(
-                          ({ book, bookCopy }) => (
-                            <li
-                              key={`${transaction.loan.id}-${book?.id ?? "book"}-${bookCopy?.id ?? "copy"}`}
-                              className="break-words"
+                        {transaction.items.map(({ book, bookCopy }) => (
+                          <li
+                            key={`${transaction.loan.id}-${book?.id ?? "book"}-${bookCopy?.id ?? "copy"}`}
+                            className="break-words"
+                          >
+                            <span
+                              aria-hidden="true"
+                              className="mr-1 text-slate-400"
                             >
-                              <span
-                                aria-hidden="true"
-                                className="mr-1 text-slate-400"
-                              >
-                                •
-                              </span>
+                              •
+                            </span>
 
-                              <span className="font-medium">
-                                {book?.title ?? "-"}
-                              </span>
+                            <span className="font-medium">
+                              {book?.title ?? "-"}
+                            </span>
 
-                              {bookCopy?.code && (
-                                <span className="ml-1 text-slate-400">
-                                  ({bookCopy.code})
-                                </span>
-                              )}
-                            </li>
-                          ),
-                        )}
+                            {bookCopy?.code && (
+                              <span className="ml-1 text-slate-400">
+                                ({bookCopy.code})
+                              </span>
+                            )}
+                          </li>
+                        ))}
                       </ul>
                     )}
                   </div>
@@ -1138,7 +1115,6 @@ export default function TransactionsPage() {
                   ================================================== */}
 
                   <div className="grid grid-cols-2 gap-x-5 gap-y-3">
-
                     {/* PEMINJAMAN */}
 
                     <div className="min-w-0">
@@ -1147,9 +1123,7 @@ export default function TransactionsPage() {
                       </p>
 
                       <p className="mt-0.5 whitespace-nowrap text-sm text-slate-900 sm:text-base">
-                        {formatDate(
-                          transaction.loan.borrowedAt,
-                        )}
+                        {formatDate(transaction.loan.borrowedAt)}
                       </p>
                     </div>
 
@@ -1161,9 +1135,7 @@ export default function TransactionsPage() {
                       </p>
 
                       <p className="mt-0.5 whitespace-nowrap text-sm text-slate-900 sm:text-base">
-                        {formatDate(
-                          transaction.loan.dueAt,
-                        )}
+                        {formatDate(transaction.loan.dueAt)}
                       </p>
                     </div>
 
@@ -1175,14 +1147,24 @@ export default function TransactionsPage() {
                       </p>
 
                       <p className="mt-0.5 whitespace-nowrap text-sm text-slate-900 sm:text-base">
-                        {formatDate(
-                          transaction.loan.returnedAt,
-                        )}
+                        {formatDate(transaction.loan.returnedAt)}
                       </p>
                     </div>
                   </div>
                 </Card>
               ))}
+              {tableLoading && (
+                <div
+                  className="absolute inset-0 flex items-center justify-center rounded-xl bg-white/70"
+                  role="status"
+                  aria-live="polite"
+                  aria-label="Memuat riwayat transaksi"
+                >
+                  <div className="rounded-lg bg-white px-4 py-3 text-sm font-medium text-slate-600 shadow-sm ring-1 ring-slate-200">
+                    Memuat data...
+                  </div>
+                </div>
+              )}
             </div>
 
             {/* =================================================
@@ -1191,28 +1173,22 @@ export default function TransactionsPage() {
 
             {totalPages > 1 && (
               <div className="mt-5 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-
                 <p className="text-sm text-slate-500">
                   Halaman {currentPage} dari {totalPages}
                 </p>
 
                 <div className="grid grid-cols-2 gap-2 sm:flex">
-
                   <Button
                     type="button"
                     variant="secondary"
                     disabled={currentPage === 1}
                     onClick={() =>
-                      setPage((current) =>
-                        Math.max(1, current - 1),
-                      )
+                      setPage((current) => Math.max(1, current - 1))
                     }
                   >
                     <span aria-hidden="true">←</span>
 
-                    <span className="ml-2">
-                      Sebelumnya
-                    </span>
+                    <span className="ml-2">Sebelumnya</span>
                   </Button>
 
                   <Button
@@ -1220,17 +1196,10 @@ export default function TransactionsPage() {
                     variant="secondary"
                     disabled={currentPage === totalPages}
                     onClick={() =>
-                      setPage((current) =>
-                        Math.min(
-                          totalPages,
-                          current + 1,
-                        ),
-                      )
+                      setPage((current) => Math.min(totalPages, current + 1))
                     }
                   >
-                    <span className="mr-2">
-                      Berikutnya
-                    </span>
+                    <span className="mr-2">Berikutnya</span>
 
                     <span aria-hidden="true">→</span>
                   </Button>
