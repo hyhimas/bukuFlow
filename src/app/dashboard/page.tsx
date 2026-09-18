@@ -106,11 +106,7 @@ function BookDetailIcon() {
         strokeLinejoin="round"
         d="M5 18.5A2.5 2.5 0 0 1 7.5 16H20"
       />
-      <path
-        strokeLinecap="round"
-        strokeLinejoin="round"
-        d="M9 6h7M9 9h5"
-      />
+      <path strokeLinecap="round" strokeLinejoin="round" d="M9 6h7M9 9h5" />
     </svg>
   );
 }
@@ -154,16 +150,8 @@ function WarningIcon() {
         strokeLinejoin="round"
         d="M12 3 21 20H3L12 3Z"
       />
-      <path
-        strokeLinecap="round"
-        strokeLinejoin="round"
-        d="M12 9v4"
-      />
-      <path
-        strokeLinecap="round"
-        strokeLinejoin="round"
-        d="M12 16h.01"
-      />
+      <path strokeLinecap="round" strokeLinejoin="round" d="M12 9v4" />
+      <path strokeLinecap="round" strokeLinejoin="round" d="M12 16h.01" />
     </svg>
   );
 }
@@ -183,11 +171,7 @@ function LoanIcon() {
         strokeLinejoin="round"
         d="M5 4.5A2.5 2.5 0 0 1 7.5 2H20v17H7.5A2.5 2.5 0 0 0 5 21.5v-17Z"
       />
-      <path
-        strokeLinecap="round"
-        strokeLinejoin="round"
-        d="M12 7v6M9 10h6"
-      />
+      <path strokeLinecap="round" strokeLinejoin="round" d="M12 7v6M9 10h6" />
     </svg>
   );
 }
@@ -226,21 +210,13 @@ function HistoryIcon() {
       className="h-5 w-5"
       aria-hidden="true"
     >
-      <path
-        strokeLinecap="round"
-        strokeLinejoin="round"
-        d="M12 7v5l3 2"
-      />
+      <path strokeLinecap="round" strokeLinejoin="round" d="M12 7v5l3 2" />
       <path
         strokeLinecap="round"
         strokeLinejoin="round"
         d="M20.5 12a8.5 8.5 0 1 1-2.49-6.01"
       />
-      <path
-        strokeLinecap="round"
-        strokeLinejoin="round"
-        d="M20 4v5h-5"
-      />
+      <path strokeLinecap="round" strokeLinejoin="round" d="M20 4v5h-5" />
     </svg>
   );
 }
@@ -290,9 +266,7 @@ function DashboardStatCard({
         <div>
           <p className="text-sm text-slate-500">{label}</p>
 
-          <p className="mt-2 text-3xl font-bold text-slate-900">
-            {value}
-          </p>
+          <p className="mt-2 text-3xl font-bold text-slate-900">{value}</p>
         </div>
 
         <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-blue-50 text-blue-600">
@@ -464,49 +438,50 @@ export default function DashboardPage() {
           </h2>
 
           {isCompanyAdmin ? (
-  <div className="mt-3 space-y-4">
-    {/* Baris 1: 3 kartu */}
-    <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
-      <QuickAccessCard
-        href="/loans"
-        title="Peminjaman"
-        description="Pantau transaksi peminjaman yang sedang berjalan."
-        icon={<LoanIcon />}
-      />
+            <div className="mt-3 space-y-4">
+              {/* Tablet: 2 - 1, Desktop: 3 */}
+              <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
+                <QuickAccessCard
+                  href="/loans"
+                  title="Peminjaman"
+                  description="Pantau transaksi peminjaman yang sedang berjalan."
+                  icon={<LoanIcon />}
+                />
 
-      <QuickAccessCard
-        href="/returns"
-        title="Pengembalian"
-        description="Pantau proses dan status pengembalian buku."
-        icon={<ReturnIcon />}
-      />
+                <QuickAccessCard
+                  href="/returns"
+                  title="Pengembalian"
+                  description="Pantau proses dan status pengembalian buku."
+                  icon={<ReturnIcon />}
+                />
 
-      <QuickAccessCard
-        href="/transactions"
-        title="Riwayat Transaksi"
-        description="Lihat seluruh riwayat transaksi perpustakaan."
-        icon={<HistoryIcon />}
-      />
-    </div>
+                <QuickAccessCard
+                  href="/transactions"
+                  title="Riwayat Transaksi"
+                  description="Lihat seluruh riwayat transaksi perpustakaan."
+                  icon={<HistoryIcon />}
+                  className="md:col-span-2 xl:col-span-1"
+                />
+              </div>
 
-    {/* Baris 2: 2 kartu */}
-    <div className="grid gap-4 md:grid-cols-2">
-      <QuickAccessCard
-        href="/master/books"
-        title="Master Buku"
-        description="Kelola data buku dan salinan buku."
-        icon={<BookDetailIcon />}
-      />
+              {/* Tablet & desktop: 2 */}
+              <div className="grid gap-4 md:grid-cols-2">
+                <QuickAccessCard
+                  href="/master/books"
+                  title="Master Buku"
+                  description="Kelola data buku dan salinan buku."
+                  icon={<BookDetailIcon />}
+                />
 
-      <QuickAccessCard
-        href="/master/members"
-        title="Master Member"
-        description="Kelola data anggota perpustakaan."
-        icon={<MemberIcon />}
-      />
-    </div>
-  </div>
-) : (
+                <QuickAccessCard
+                  href="/master/members"
+                  title="Master Member"
+                  description="Kelola data anggota perpustakaan."
+                  icon={<MemberIcon />}
+                />
+              </div>
+            </div>
+          ) : (
             <div className="mt-3 grid gap-4 md:grid-cols-2 xl:grid-cols-6">
               {/* Catat Peminjaman */}
               <QuickAccessCard
@@ -532,7 +507,7 @@ export default function DashboardPage() {
                 title="Riwayat Transaksi"
                 description="Lihat riwayat transaksi."
                 icon={<HistoryIcon />}
-                className="xl:col-span-2"
+                className="md:col-span-2"
               />
             </div>
           )}

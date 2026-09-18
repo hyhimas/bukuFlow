@@ -1757,19 +1757,18 @@ export default function MasterBooksPage() {
                       return (
                         <div
                           key={copy.id}
-                          className="flex flex-col gap-3 px-4 py-3 sm:flex-row sm:items-center sm:justify-between"
+                          className="flex items-center justify-between gap-3 px-4 py-3"
                         >
                           <div>
                             <p className="text-sm font-semibold text-slate-800">
                               {copy.code}
                             </p>
-
                             <p className="mt-0.5 text-xs text-slate-400">
                               Copy
                             </p>
                           </div>
 
-                          <div className="flex items-center justify-between gap-3 sm:justify-end">
+                          <div className="shrink-0">
                             {copy.status === "BORROWED" ? (
                               <span
                                 className={`rounded-full px-3 py-1.5 text-xs font-semibold ${getCopyStatusClass(
@@ -1793,18 +1792,9 @@ export default function MasterBooksPage() {
                                 disabled={copyStatusLoading}
                                 variant="badge"
                                 options={[
-                                  {
-                                    value: "AVAILABLE",
-                                    label: "Tersedia",
-                                  },
-                                  {
-                                    value: "INACTIVE",
-                                    label: "Tidak Aktif",
-                                  },
-                                  {
-                                    value: "LOST",
-                                    label: "Hilang",
-                                  },
+                                  { value: "AVAILABLE", label: "Tersedia" },
+                                  { value: "INACTIVE", label: "Tidak Aktif" },
+                                  { value: "LOST", label: "Hilang" },
                                 ]}
                               />
                             ) : (

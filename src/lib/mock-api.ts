@@ -258,10 +258,10 @@ export async function getDashboard(): Promise<DashboardResponse> {
     /**
      * Jumlah copy yang AVAILABLE.
      */
-    booksAvailable: companyBooks.reduce(
-      (total, book) => total + book.availableCopies,
-      0,
-    ),
+    booksAvailable: companyBooks
+  .filter((book) => book.status !== "INACTIVE")
+  .reduce((total, book) => total + book.availableCopies, 0),
+    
 
     /**
      * Jumlah copy yang sedang BORROWED.

@@ -131,7 +131,6 @@ export default function NewLoanPage() {
     useState<BookFormErrors>(EMPTY_BOOK_ERRORS);
   const [bookFormLoading, setBookFormLoading] = useState(false);
 
-
   useEffect(() => {
     if (!showBookForm) return;
 
@@ -147,8 +146,6 @@ export default function NewLoanPage() {
     document.addEventListener("keydown", handleEscape);
     return () => document.removeEventListener("keydown", handleEscape);
   }, [showBookForm, bookFormLoading]);
-
-  
 
   // =====================================================
   // BOOK COPY
@@ -202,6 +199,11 @@ export default function NewLoanPage() {
         });
   }
 
+  function closeSuccessModal() {
+    setSuccessLoan(null);
+    window.location.reload();
+  }
+
   useEffect(() => {
     if (!successLoan) return;
 
@@ -210,11 +212,15 @@ export default function NewLoanPage() {
     const handleEscape = (event: KeyboardEvent) => {
       if (event.key === "Escape") {
         setSuccessLoan(null);
+        window.location.reload();
       }
     };
 
     document.addEventListener("keydown", handleEscape);
-    return () => document.removeEventListener("keydown", handleEscape);
+
+    return () => {
+      document.removeEventListener("keydown", handleEscape);
+    };
   }, [successLoan]);
 
   useEffect(() => {
@@ -228,20 +234,20 @@ export default function NewLoanPage() {
   }, [creationSuccess]);
 
   useEffect(() => {
-  const session = getSession();
+    const session = getSession();
 
-  if (!session) {
-    router.replace("/login");
-    return;
-  }
+    if (!session) {
+      router.replace("/login");
+      return;
+    }
 
-  if (!canManageLoans(session.user.role)) {
-    router.replace("/dashboard");
-    return;
-  }
-  
-  setPageLoading(false);
-}, [router]);
+    if (!canManageLoans(session.user.role)) {
+      router.replace("/dashboard");
+      return;
+    }
+
+    setPageLoading(false);
+  }, [router]);
 
   // =====================================================
   // SEARCH MEMBER WITH DEBOUNCE
@@ -271,7 +277,9 @@ export default function NewLoanPage() {
 
           const result = keyword
             ? await searchMembers(keyword)
-            : await getMembers();
+            : (await getMembers()).filter(
+                (member) => member.status === "ACTIVE",
+              );
 
           if (!cancelled) {
             setMembers(result);
@@ -314,10 +322,14 @@ export default function NewLoanPage() {
         setBookError("");
 
         try {
-          const result = await searchBooks(bookQuery.trim());
+          const keyword = bookQuery.trim();
+          const result = await searchBooks(keyword);
+          const visibleBooks = keyword
+            ? result
+            : result.filter((book) => book.status !== "INACTIVE");
 
           if (!cancelled) {
-            setBooks(result);
+            setBooks(visibleBooks);
           }
         } catch {
           if (!cancelled) {
@@ -345,6 +357,10 @@ export default function NewLoanPage() {
   // =====================================================
 
   async function handleSelectMember(member: Member) {
+    if (member.status === "INACTIVE") {
+      return;
+    }
+
     setSelectedMember(member);
 
     setMembers([]);
@@ -515,45 +531,44 @@ export default function NewLoanPage() {
   // =====================================================
 
   function validateBookForm() {
-  const errors: BookFormErrors = {
-    code: "",
-    title: "",
-    isbn: "",
-    author: "",
-    category: "",
-    totalCopies: "",
-  };
+    const errors: BookFormErrors = {
+      code: "",
+      title: "",
+      isbn: "",
+      author: "",
+      category: "",
+      totalCopies: "",
+    };
 
-  const code = bookCode.trim();
-  const title = bookTitle.trim();
-  const isbn = bookIsbn.trim();
-  const totalCopies = Number(bookTotalCopies);
+    const code = bookCode.trim();
+    const title = bookTitle.trim();
+    const isbn = bookIsbn.trim();
+    const totalCopies = Number(bookTotalCopies);
 
-  if (!code) {
-    errors.code = "Kode buku wajib diisi.";
+    if (!code) {
+      errors.code = "Kode buku wajib diisi.";
+    }
+
+    if (!title) {
+      errors.title = "Judul buku wajib diisi.";
+    } else if (title.length < 2) {
+      errors.title = "Judul buku harus terdiri dari minimal 2 karakter.";
+    }
+
+    if (isbn && !/^[0-9Xx-]+$/.test(isbn)) {
+      errors.isbn = "ISBN hanya boleh berisi angka, tanda hubung, atau X.";
+    }
+
+    if (!bookTotalCopies.trim()) {
+      errors.totalCopies = "Jumlah copy wajib diisi.";
+    } else if (!Number.isInteger(totalCopies) || totalCopies < 1) {
+      errors.totalCopies = "Jumlah copy minimal 1.";
+    }
+
+    setBookFormErrors(errors);
+
+    return !Object.values(errors).some(Boolean);
   }
-
-  if (!title) {
-    errors.title = "Judul buku wajib diisi.";
-  } else if (title.length < 2) {
-    errors.title = "Judul buku harus terdiri dari minimal 2 karakter.";
-  }
-
-  if (isbn && !/^[0-9Xx-]+$/.test(isbn)) {
-    errors.isbn =
-      "ISBN hanya boleh berisi angka, tanda hubung, atau X.";
-  }
-
-  if (!bookTotalCopies.trim()) {
-    errors.totalCopies = "Jumlah copy wajib diisi.";
-  } else if (!Number.isInteger(totalCopies) || totalCopies < 1) {
-    errors.totalCopies = "Jumlah copy minimal 1.";
-  }
-
-  setBookFormErrors(errors);
-
-  return !Object.values(errors).some(Boolean);
-}
 
   // =====================================================
   // CREATE BOOK
@@ -568,19 +583,18 @@ export default function NewLoanPage() {
     setBookError("");
 
     try {
-      
-  const book = await createBook({
-  code: bookCode.trim(),
-  title: bookTitle.trim(),
-  isbn: bookIsbn.trim() || undefined,
-  author: bookAuthor.trim() || undefined,
-  publisher: bookPublisher.trim() || undefined,
-  publicationYear: bookPublicationYear.trim()
-    ? Number(bookPublicationYear)
-    : undefined,
-  category: bookCategory.trim() || undefined,
-  totalCopies: Number(bookTotalCopies),
-});
+      const book = await createBook({
+        code: bookCode.trim(),
+        title: bookTitle.trim(),
+        isbn: bookIsbn.trim() || undefined,
+        author: bookAuthor.trim() || undefined,
+        publisher: bookPublisher.trim() || undefined,
+        publicationYear: bookPublicationYear.trim()
+          ? Number(bookPublicationYear)
+          : undefined,
+        category: bookCategory.trim() || undefined,
+        totalCopies: Number(bookTotalCopies),
+      });
 
       setShowBookForm(false);
       setBookFormErrors(EMPTY_BOOK_ERRORS);
@@ -734,8 +748,26 @@ export default function NewLoanPage() {
       return;
     }
 
+    if (selectedMember.status !== "ACTIVE") {
+      setSubmitError(
+        "Member tidak aktif dan tidak dapat membuat transaksi baru.",
+      );
+      return;
+    }
+
     if (selectedBooks.length === 0) {
       setSubmitError("Minimal satu buku harus dipilih.");
+      return;
+    }
+
+    const archivedBook = selectedBooks.find(
+      (item) => item.book.status === "INACTIVE",
+    );
+
+    if (archivedBook) {
+      setSubmitError(
+        `Buku ${archivedBook.book.title} diarsipkan dan tidak dapat dipinjam.`,
+      );
       return;
     }
 
@@ -844,13 +876,13 @@ export default function NewLoanPage() {
     setSubmitError("");
     setSuccessLoan(null);
   }
-if (pageLoading) {
-  return (
-    <main className="min-h-screen bg-slate-50">
-      <LoadingState label="Memuat peminjaman..." />
-    </main>
-  );
-}
+  if (pageLoading) {
+    return (
+      <main className="min-h-screen bg-slate-50">
+        <LoadingState label="Memuat peminjaman..." />
+      </main>
+    );
+  }
   // =====================================================
   // RENDER
   // =====================================================
@@ -860,7 +892,6 @@ if (pageLoading) {
       {/* =================================================
           HEADER
       ================================================= */}
-
 
       <div className="page-container py-6">
         {/* =================================================
@@ -955,38 +986,64 @@ if (pageLoading) {
                         Hasil pencarian
                       </h4>
 
-                      {members.map((member) => (
-                        <button
-                          key={member.id}
-                          type="button"
-                          onClick={() => handleSelectMember(member)}
-                          className="w-full rounded-lg border border-slate-200 bg-white px-4 py-3 text-left transition hover:border-blue-300 hover:bg-blue-50 focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-500"
-                        >
-                          <div className="flex items-center justify-between gap-4">
-                            <div className="min-w-0">
-                              <p className="truncate font-semibold text-slate-900">
-                                {member.name}
-                              </p>
+                      {members.map((member) => {
+                        const inactive = member.status === "INACTIVE";
 
-                              <p className="mt-1 truncate text-sm text-slate-500">
-                                {member.memberNumber} · {member.phone}
-                              </p>
+                        return (
+                          <button
+                            key={member.id}
+                            type="button"
+                            disabled={inactive}
+                            onClick={() => handleSelectMember(member)}
+                            className={`w-full rounded-lg border px-4 py-3 text-left transition focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 ${
+                              inactive
+                                ? "cursor-not-allowed border-slate-200 bg-slate-50 text-slate-400"
+                                : "border-slate-200 bg-white hover:border-blue-300 hover:bg-blue-50"
+                            }`}
+                          >
+                            <div className="flex items-center justify-between gap-4">
+                              <div className="min-w-0">
+                                <p
+                                  className={`truncate font-semibold ${
+                                    inactive
+                                      ? "text-slate-400"
+                                      : "text-slate-900"
+                                  }`}
+                                >
+                                  {member.name}
+                                </p>
+
+                                <p
+                                  className={`mt-1 truncate text-sm ${
+                                    inactive
+                                      ? "text-slate-400"
+                                      : "text-slate-500"
+                                  }`}
+                                >
+                                  {member.memberNumber} · {member.phone}
+                                </p>
+
+                                {inactive && (
+                                  <p className="mt-1 text-xs font-medium text-slate-500">
+                                    Member tidak aktif dan tidak dapat membuat
+                                    transaksi baru.
+                                  </p>
+                                )}
+                              </div>
+
+                              <span
+                                className={`shrink-0 rounded-full px-2.5 py-1 text-xs font-medium ${
+                                  inactive
+                                    ? "bg-slate-200 text-slate-500"
+                                    : "bg-emerald-50 text-emerald-700"
+                                }`}
+                              >
+                                {inactive ? "Tidak aktif" : "Aktif"}
+                              </span>
                             </div>
-
-                            <span
-                              className={`shrink-0 rounded-full px-2.5 py-1 text-xs font-medium ${
-                                member.status === "ACTIVE"
-                                  ? "bg-emerald-50 text-emerald-700"
-                                  : "bg-slate-100 text-slate-600"
-                              }`}
-                            >
-                              {member.status === "ACTIVE"
-                                ? "Aktif"
-                                : "Tidak aktif"}
-                            </span>
-                          </div>
-                        </button>
-                      ))}
+                          </button>
+                        );
+                      })}
                     </div>
                   )}
                 </>
@@ -1262,23 +1319,9 @@ if (pageLoading) {
 
                     <p className="mt-1 text-sm text-slate-500">
                       {bookQuery.trim()
-                        ? "Tidak ada buku tersedia yang sesuai dengan pencarian."
+                        ? "Buku yang kamu cari tidak ditemukan. Silakan minta Company Admin menambahkan buku melalui menu Master Buku."
                         : "Saat ini tidak ada buku yang dapat dipinjam."}
                     </p>
-
-                    {bookQuery.trim() && (
-                      <Button
-                        type="button"
-                        variant="secondary"
-                        className="mt-3"
-                        onClick={() => {
-                          setShowBookForm(true);
-                          setBookFormErrors(EMPTY_BOOK_ERRORS);
-                        }}
-                      >
-                        Tambah Buku Baru
-                      </Button>
-                    )}
                   </div>
                 )}
 
@@ -1287,227 +1330,224 @@ if (pageLoading) {
               ================================================= */}
 
                 {showBookForm && (
-  <div
-    className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/50 p-4"
-    role="presentation"
-    onMouseDown={(event) => {
-      if (
-        event.target === event.currentTarget &&
-        !bookFormLoading
-      ) {
-        setShowBookForm(false);
-        setBookFormErrors(EMPTY_BOOK_ERRORS);
-      }
-    }}
-  >
-    <div
-      className="max-h-[90vh] w-full max-w-2xl overflow-y-auto rounded-xl bg-white shadow-xl"
-      role="dialog"
-      aria-modal="true"
-      aria-labelledby="create-book-title"
-    >
-      {/* HEADER */}
-      <div className="flex items-start justify-between gap-4 border-b border-slate-200 px-5 py-4">
-        <div>
-          <h3
-            id="create-book-title"
-            className="text-lg font-semibold text-slate-900"
-          >
-            Tambah Buku Baru
-          </h3>
+                  <div
+                    className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/50 p-4"
+                    role="presentation"
+                    onMouseDown={(event) => {
+                      if (
+                        event.target === event.currentTarget &&
+                        !bookFormLoading
+                      ) {
+                        setShowBookForm(false);
+                        setBookFormErrors(EMPTY_BOOK_ERRORS);
+                      }
+                    }}
+                  >
+                    <div
+                      className="max-h-[90vh] w-full max-w-2xl overflow-y-auto rounded-xl bg-white shadow-xl"
+                      role="dialog"
+                      aria-modal="true"
+                      aria-labelledby="create-book-title"
+                    >
+                      {/* HEADER */}
+                      <div className="flex items-start justify-between gap-4 border-b border-slate-200 px-5 py-4">
+                        <div>
+                          <h3
+                            id="create-book-title"
+                            className="text-lg font-semibold text-slate-900"
+                          >
+                            Tambah Buku Baru
+                          </h3>
 
-          <p className="mt-1 text-sm text-slate-500">
-            Isi data buku dan jumlah copy awal.
-          </p>
-        </div>
+                          <p className="mt-1 text-sm text-slate-500">
+                            Isi data buku dan jumlah copy awal.
+                          </p>
+                        </div>
 
-        <button
-          ref={bookModalCloseRef}
-          type="button"
-          aria-label="Tutup form buku baru"
-          disabled={bookFormLoading}
-          onClick={() => {
-            setShowBookForm(false);
-            setBookFormErrors(EMPTY_BOOK_ERRORS);
-          }}
-          className="rounded-md p-2 text-slate-500 transition hover:bg-slate-100 hover:text-slate-700 focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 disabled:cursor-not-allowed disabled:opacity-50"
-        >
-          <span
-            aria-hidden="true"
-            className="text-xl leading-none"
-          >
-            ×
-          </span>
-        </button>
-      </div>
+                        <button
+                          ref={bookModalCloseRef}
+                          type="button"
+                          aria-label="Tutup form buku baru"
+                          disabled={bookFormLoading}
+                          onClick={() => {
+                            setShowBookForm(false);
+                            setBookFormErrors(EMPTY_BOOK_ERRORS);
+                          }}
+                          className="rounded-md p-2 text-slate-500 transition hover:bg-slate-100 hover:text-slate-700 focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 disabled:cursor-not-allowed disabled:opacity-50"
+                        >
+                          <span
+                            aria-hidden="true"
+                            className="text-xl leading-none"
+                          >
+                            ×
+                          </span>
+                        </button>
+                      </div>
 
-      {/* FORM */}
-      <form
-        onSubmit={handleCreateBook}
-        className="grid gap-3.5 p-5 sm:grid-cols-2"
-      >
-        {/* KODE BUKU */}
-        <Input
-          id="book-code"
-          label="Kode Buku"
-          value={bookCode}
-          onChange={(event) => {
-            setBookCode(event.target.value.toUpperCase());
+                      {/* FORM */}
+                      <form
+                        onSubmit={handleCreateBook}
+                        className="grid gap-3.5 p-5 sm:grid-cols-2"
+                      >
+                        {/* KODE BUKU */}
+                        <Input
+                          id="book-code"
+                          label="Kode Buku"
+                          value={bookCode}
+                          onChange={(event) => {
+                            setBookCode(event.target.value.toUpperCase());
 
-            if (bookFormErrors.code) {
-              setBookFormErrors((current) => ({
-                ...current,
-                code: "",
-              }));
-            }
-          }}
-          error={bookFormErrors.code}
-          placeholder="Contoh: LP"
-          autoComplete="off"
-          required
-        />
+                            if (bookFormErrors.code) {
+                              setBookFormErrors((current) => ({
+                                ...current,
+                                code: "",
+                              }));
+                            }
+                          }}
+                          error={bookFormErrors.code}
+                          placeholder="Contoh: LP"
+                          autoComplete="off"
+                          required
+                        />
 
-        {/* JUDUL BUKU */}
-        <Input
-          id="book-title"
-          label="Judul Buku"
-          value={bookTitle}
-          onChange={(event) => {
-            setBookTitle(event.target.value);
+                        {/* JUDUL BUKU */}
+                        <Input
+                          id="book-title"
+                          label="Judul Buku"
+                          value={bookTitle}
+                          onChange={(event) => {
+                            setBookTitle(event.target.value);
 
-            if (bookFormErrors.title) {
-              setBookFormErrors((current) => ({
-                ...current,
-                title: "",
-              }));
-            }
-          }}
-          error={bookFormErrors.title}
-          placeholder="Masukkan judul buku"
-          required
-        />
+                            if (bookFormErrors.title) {
+                              setBookFormErrors((current) => ({
+                                ...current,
+                                title: "",
+                              }));
+                            }
+                          }}
+                          error={bookFormErrors.title}
+                          placeholder="Masukkan judul buku"
+                          required
+                        />
 
-        {/* ISBN */}
-        <Input
-          id="book-isbn"
-          label="ISBN (opsional)"
-          value={bookIsbn}
-          onChange={(event) => {
-            setBookIsbn(event.target.value);
+                        {/* ISBN */}
+                        <Input
+                          id="book-isbn"
+                          label="ISBN (opsional)"
+                          value={bookIsbn}
+                          onChange={(event) => {
+                            setBookIsbn(event.target.value);
 
-            if (bookFormErrors.isbn) {
-              setBookFormErrors((current) => ({
-                ...current,
-                isbn: "",
-              }));
-            }
-          }}
-          error={bookFormErrors.isbn}
-          placeholder="978-..."
-          autoComplete="off"
-        />
+                            if (bookFormErrors.isbn) {
+                              setBookFormErrors((current) => ({
+                                ...current,
+                                isbn: "",
+                              }));
+                            }
+                          }}
+                          error={bookFormErrors.isbn}
+                          placeholder="978-..."
+                          autoComplete="off"
+                        />
 
-        {/* PENGARANG */}
-        <Input
-          id="book-author"
-          label="Pengarang (opsional)"
-          value={bookAuthor}
-          onChange={(event) => {
-            setBookAuthor(event.target.value);
+                        {/* PENGARANG */}
+                        <Input
+                          id="book-author"
+                          label="Pengarang (opsional)"
+                          value={bookAuthor}
+                          onChange={(event) => {
+                            setBookAuthor(event.target.value);
 
-            if (bookFormErrors.author) {
-              setBookFormErrors((current) => ({
-                ...current,
-                author: "",
-              }));
-            }
-          }}
-          error={bookFormErrors.author}
-          placeholder="Nama pengarang"
-        />
+                            if (bookFormErrors.author) {
+                              setBookFormErrors((current) => ({
+                                ...current,
+                                author: "",
+                              }));
+                            }
+                          }}
+                          error={bookFormErrors.author}
+                          placeholder="Nama pengarang"
+                        />
 
-        {/* KATEGORI */}
-        <Input
-          id="book-category"
-          label="Kategori (opsional)"
-          value={bookCategory}
-          onChange={(event) => {
-            setBookCategory(event.target.value);
+                        {/* KATEGORI */}
+                        <Input
+                          id="book-category"
+                          label="Kategori (opsional)"
+                          value={bookCategory}
+                          onChange={(event) => {
+                            setBookCategory(event.target.value);
 
-            if (bookFormErrors.category) {
-              setBookFormErrors((current) => ({
-                ...current,
-                category: "",
-              }));
-            }
-          }}
-          error={bookFormErrors.category}
-          placeholder="Contoh: Fiksi"
-        />
+                            if (bookFormErrors.category) {
+                              setBookFormErrors((current) => ({
+                                ...current,
+                                category: "",
+                              }));
+                            }
+                          }}
+                          error={bookFormErrors.category}
+                          placeholder="Contoh: Fiksi"
+                        />
 
-        {/* JUMLAH COPY */}
-        <Input
-          id="book-total-copies"
-          label="Jumlah Copy Awal"
-          type="number"
-          inputMode="numeric"
-          min={1}
-          value={bookTotalCopies}
-          onChange={(event) => {
-            setBookTotalCopies(event.target.value);
+                        {/* JUMLAH COPY */}
+                        <Input
+                          id="book-total-copies"
+                          label="Jumlah Copy Awal"
+                          type="number"
+                          inputMode="numeric"
+                          min={1}
+                          value={bookTotalCopies}
+                          onChange={(event) => {
+                            setBookTotalCopies(event.target.value);
 
-            if (bookFormErrors.totalCopies) {
-              setBookFormErrors((current) => ({
-                ...current,
-                totalCopies: "",
-              }));
-            }
-          }}
-          error={bookFormErrors.totalCopies}
-          placeholder="Minimal 1"
-          required
-        />
+                            if (bookFormErrors.totalCopies) {
+                              setBookFormErrors((current) => ({
+                                ...current,
+                                totalCopies: "",
+                              }));
+                            }
+                          }}
+                          error={bookFormErrors.totalCopies}
+                          placeholder="Minimal 1"
+                          required
+                        />
 
-        {/* INFO COPY */}
-        <div className="sm:col-span-2">
-          <div className="rounded-lg border border-blue-100 bg-blue-50 px-4 py-3">
-            <p className="text-sm font-medium text-blue-900">
-              Kode copy dibuat otomatis
-            </p>
+                        {/* INFO COPY */}
+                        <div className="sm:col-span-2">
+                          <div className="rounded-lg border border-blue-100 bg-blue-50 px-4 py-3">
+                            <p className="text-sm font-medium text-blue-900">
+                              Kode copy dibuat otomatis
+                            </p>
 
-            <p className="mt-1 text-xs leading-5 text-blue-700">
-              Sistem akan membuat kode copy secara berurutan
-              berdasarkan kode buku. Contoh: LP-001, LP-002,
-              LP-003.
-            </p>
-          </div>
-        </div>
+                            <p className="mt-1 text-xs leading-5 text-blue-700">
+                              Sistem akan membuat kode copy secara berurutan
+                              berdasarkan kode buku. Contoh: LP-001, LP-002,
+                              LP-003.
+                            </p>
+                          </div>
+                        </div>
 
-        {/* ACTION */}
-        <div className="mt-1 flex justify-end gap-2 border-t border-slate-100 pt-4 sm:col-span-2">
-          <Button
-            type="button"
-            variant="secondary"
-            disabled={bookFormLoading}
-            onClick={() => {
-              setShowBookForm(false);
-              setBookFormErrors(EMPTY_BOOK_ERRORS);
-            }}
-          >
-            Batal
-          </Button>
+                        {/* ACTION */}
+                        <div className="mt-1 flex justify-end gap-2 border-t border-slate-100 pt-4 sm:col-span-2">
+                          <Button
+                            type="button"
+                            variant="secondary"
+                            disabled={bookFormLoading}
+                            onClick={() => {
+                              setShowBookForm(false);
+                              setBookFormErrors(EMPTY_BOOK_ERRORS);
+                            }}
+                          >
+                            Batal
+                          </Button>
 
-          <Button
-            type="submit"
-            loading={bookFormLoading}
-          >
-            Simpan Buku
-          </Button>
-        </div>
-      </form>
-    </div>
-  </div>
-)}
+                          <Button type="submit" loading={bookFormLoading}>
+                            Simpan Buku
+                          </Button>
+                        </div>
+                      </form>
+                    </div>
+                  </div>
+                )}
 
                 {/* BOOK LIST */}
 
@@ -1518,8 +1558,8 @@ if (pageLoading) {
                     </h4>
 
                     {books.map((book) => {
-                      const unavailable =
-                        book.status === "INACTIVE" || book.availableCopies <= 0;
+                      const archived = book.status === "INACTIVE";
+                      const unavailable = archived || book.availableCopies <= 0;
                       const selectedItem = selectedBooks.find(
                         (item) => item.book.id === book.id,
                       );
@@ -1539,39 +1579,47 @@ if (pageLoading) {
                         >
                           <div className="grid gap-4 md:grid-cols-[minmax(0,1fr)_230px] md:items-center">
                             {/* INFO BUKU */}
-<div className="min-w-0">
-  <div className="grid grid-cols-[minmax(0,1fr)_auto] items-start gap-x-4">
-    {/* Judul + detail */}
-    <div className="min-w-0">
-      <p
-        className="truncate font-semibold text-slate-900"
-        title={book.title}
-      >
-        {book.title}
-      </p>
+                            <div className="min-w-0">
+                              <div className="grid grid-cols-[minmax(0,1fr)_auto] items-start gap-x-4">
+                                {/* Judul + detail */}
+                                <div className="min-w-0">
+                                  <p
+                                    className={`truncate font-semibold ${
+                                      archived
+                                        ? "text-slate-400"
+                                        : "text-slate-900"
+                                    }`}
+                                    title={book.title}
+                                  >
+                                    {book.title}
+                                  </p>
 
-      <div className="mt-2 space-y-1 text-sm text-slate-500">
-        <p>
-          <span className="text-slate-400">Penulis</span>{" "}
-          {book.author || "-"}
-        </p>
+                                  <div className="mt-2 space-y-1 text-sm text-slate-500">
+                                    <p>
+                                      <span className="text-slate-400">
+                                        Penulis
+                                      </span>{" "}
+                                      {book.author || "-"}
+                                    </p>
 
-        <p>
-          <span className="text-slate-400">ISBN</span>{" "}
-          {book.isbn || "-"}
-        </p>
-      </div>
-    </div>
+                                    <p>
+                                      <span className="text-slate-400">
+                                        ISBN
+                                      </span>{" "}
+                                      {book.isbn || "-"}
+                                    </p>
+                                  </div>
+                                </div>
 
-    {/* KODE BUKU */}
-    <p className="shrink-0 whitespace-nowrap pt-0.5 text-right text-sm text-slate-500">
-      {" "}
-      <span className="font-medium text-slate-700">
-        {book.code}
-      </span>
-    </p>
-  </div>
-</div>
+                                {/* KODE BUKU */}
+                                <p className="shrink-0 whitespace-nowrap pt-0.5 text-right text-sm text-slate-500">
+                                  {" "}
+                                  <span className="font-medium text-slate-700">
+                                    {book.code}
+                                  </span>
+                                </p>
+                              </div>
+                            </div>
 
                             {/* COPY INFO + ACTION */}
                             <div className="border-t border-slate-200 pt-3 md:border-l md:border-t-0 md:pl-4 md:pt-0">
@@ -1627,6 +1675,8 @@ if (pageLoading) {
                                       />
                                       Memuat copy...
                                     </span>
+                                  ) : archived ? (
+                                    "Diarsipkan"
                                   ) : unavailable ? (
                                     "Tidak tersedia"
                                   ) : selected ? (
@@ -1640,8 +1690,16 @@ if (pageLoading) {
                           </div>
 
                           {unavailable && (
-                            <p className="mt-3 rounded-md bg-red-50 px-3 py-2 text-xs font-medium text-red-600">
-                              Tidak ada copy yang tersedia untuk dipinjam.
+                            <p
+                              className={`mt-3 rounded-md px-3 py-2 text-xs font-medium ${
+                                archived
+                                  ? "bg-slate-100 text-slate-500"
+                                  : "bg-red-50 text-red-600"
+                              }`}
+                            >
+                              {archived
+                                ? "Buku diarsipkan dan tidak dapat dipinjam."
+                                : "Tidak ada copy yang tersedia untuk dipinjam."}
                             </p>
                           )}
 
@@ -2038,6 +2096,7 @@ if (pageLoading) {
             onMouseDown={(event) => {
               if (event.target === event.currentTarget) {
                 setSuccessLoan(null);
+                window.location.reload();
               }
             }}
           >
@@ -2151,7 +2210,10 @@ if (pageLoading) {
                 <Button
                   type="button"
                   variant="secondary"
-                  onClick={resetLoanForm}
+                  onClick={() => {
+                    resetLoanForm();
+                    window.location.reload();
+                  }}
                 >
                   Catat Peminjaman Baru
                 </Button>

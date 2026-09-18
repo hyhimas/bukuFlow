@@ -1102,3 +1102,291 @@ export const mockLoanItems: LoanItem[] = [
 ========================================================= */
 
 export const mockAuditLogs: AuditLog[] = [];
+/* =========================================================
+   DATA TAMBAHAN UNTUK PENGUJIAN
+   - Pagination
+   - Search & filter
+   - Company isolation
+   - Semua variasi status
+   Data dibuat deterministik agar konsisten setiap sesi.
+========================================================= */
+
+const extraMemberNames = [
+  "Agus Setiawan",
+  "Aulia Rahma",
+  "Bagas Prakoso",
+  "Bella Anindita",
+  "Citra Wulandari",
+  "Daffa Ramadhan",
+  "Dian Permata",
+  "Eka Saputra",
+  "Farhan Akbar",
+  "Gita Maharani",
+  "Hana Safitri",
+  "Ilham Kurniawan",
+  "Intan Sari",
+  "Joko Susilo",
+  "Karin Amelia",
+  "Lukman Hakim",
+  "Maya Anggraini",
+  "Naufal Hidayat",
+  "Oki Pratama",
+  "Putri Ayu",
+  "Rafi Maulana",
+  "Rani Oktaviani",
+  "Satria Nugraha",
+  "Tania Putri",
+  "Umar Faruk",
+  "Vina Lestari",
+  "Wahyu Firmansyah",
+  "Yuni Kartika",
+  "Zaki Ramadhan",
+  "Aditya Nugroho",
+];
+
+const memberTypes = ["UMUM", "MAHASISWA", "PELAJAR"];
+
+for (let i = 0; i < extraMemberNames.length; i += 1) {
+  const number = i + 10;
+  const companyId = i < 24 ? "company-001" : "company-002";
+  const sequence = i < 24 ? i + 8 : i - 20;
+  const isInactive = i % 7 === 0;
+
+  mockMembers.push({
+    id: `member-extra-${String(i + 1).padStart(3, "0")}`,
+    companyId,
+    memberNumber: `MBR-${String(sequence).padStart(3, "0")}`,
+    name: extraMemberNames[i],
+    memberType: memberTypes[i % memberTypes.length],
+    identityNumber: `337201${String(number).padStart(2, "0")}1010${String(number).padStart(4, "0")}`,
+    phone: `08123${String(450000 + i).padStart(6, "0")}`,
+    email: `${extraMemberNames[i].toLowerCase().replaceAll(" ", ".")}@example.com`,
+    status: isInactive ? "INACTIVE" : "ACTIVE",
+    createdAt: d(`2026-08-${String(10 + (i % 20)).padStart(2, "0")}T08:00:00+07:00`),
+    updatedAt: d(`2026-09-${String(1 + (i % 15)).padStart(2, "0")}T09:00:00+07:00`),
+  });
+}
+
+const extraBookDefinitions = [
+  ["PP", "Pengantar Pemrograman", "Rosa A.S.", "Teknologi"],
+  ["DB", "Dasar Basis Data", "Abdul Kadir", "Teknologi"],
+  ["JS", "JavaScript untuk Pemula", "Eko Kurniawan", "Teknologi"],
+  ["WD", "Web Development Modern", "Fajar Nugraha", "Teknologi"],
+  ["UI", "Desain Antarmuka Digital", "Dina Larasati", "Desain"],
+  ["UX", "Pengalaman Pengguna", "Arif Rahman", "Desain"],
+  ["ML", "Machine Learning Dasar", "Bambang S.", "Teknologi"],
+  ["DS", "Data Science Praktis", "Nina Pratiwi", "Data"],
+  ["PY", "Python untuk Analisis Data", "Rizal Hakim", "Teknologi"],
+  ["AL", "Algoritma dan Struktur Data", "M. Farid", "Teknologi"],
+  ["CN", "Computer Networking", "Dedi Irawan", "Jaringan"],
+  ["OS", "Sistem Operasi", "Hendra Wijaya", "Teknologi"],
+  ["SE", "Software Engineering", "Sari Melati", "Teknologi"],
+  ["PM", "Manajemen Proyek TI", "Andi Wijaya", "Manajemen"],
+  ["AI", "Artificial Intelligence", "Nadia Putri", "Teknologi"],
+  ["CL", "Cloud Computing", "Raka Pratama", "Teknologi"],
+  ["CY", "Cyber Security Dasar", "Bima Saputra", "Keamanan"],
+  ["GD", "Git dan GitHub", "Yoga Permana", "Teknologi"],
+  ["ST", "Statistika untuk Pemula", "Maya Sari", "Data"],
+  ["AN", "Analisis Data dengan Pandas", "Rendi Akbar", "Data"],
+  ["FR", "Frontend React", "Tio Ramadhan", "Teknologi"],
+  ["NX", "Next.js App Router", "Dimas Haryanto", "Teknologi"],
+  ["AP", "API Development", "Galih Prakoso", "Teknologi"],
+  ["TC", "Testing Aplikasi Web", "Nanda Putri", "Teknologi"],
+];
+
+const extraBookIds: string[] = [];
+
+for (let i = 0; i < extraBookDefinitions.length; i += 1) {
+  const [code, title, author, category] = extraBookDefinitions[i];
+  const companyId = i < 18 ? "company-001" : "company-002";
+  const bookId = `book-extra-${String(i + 1).padStart(3, "0")}`;
+  extraBookIds.push(bookId);
+
+  const state = i % 6;
+  const copyCount = 4;
+
+  mockBooks.push({
+    id: bookId,
+    companyId,
+    code,
+    isbn: `978602${String(1000000 + i).padStart(7, "0")}`,
+    title,
+    author,
+    publisher: "BukuFlow Press",
+    publicationYear: 2020 + (i % 6),
+    category,
+    coverUrl: "",
+    status:
+      state === 4
+        ? "INACTIVE"
+        : state === 5
+          ? "BORROWED"
+          : "AVAILABLE",
+    totalCopies: copyCount,
+    availableCopies:
+      state === 4
+        ? 0
+        : state === 5
+          ? 0
+          : 3,
+    createdAt: d(`2026-08-${String(10 + (i % 18)).padStart(2, "0")}T08:00:00+07:00`),
+    updatedAt: d(`2026-09-${String(1 + (i % 15)).padStart(2, "0")}T10:00:00+07:00`),
+  });
+
+  for (let copyIndex = 1; copyIndex <= copyCount; copyIndex += 1) {
+    let status: BookCopy["status"] = "AVAILABLE";
+
+    if (state === 4) {
+      status = "INACTIVE";
+    } else if (state === 5) {
+      status = "BORROWED";
+    } else if (copyIndex === 4 && state === 1) {
+      status = "LOST";
+    } else if (copyIndex === 4 && state === 2) {
+      status = "INACTIVE";
+    } else if (copyIndex === 1 && state === 3) {
+      status = "BORROWED";
+    }
+
+    mockBookCopies.push({
+      id: `book-copy-extra-${String(i * copyCount + copyIndex).padStart(3, "0")}`,
+      companyId,
+      bookId,
+      code: `${code}-${String(copyIndex).padStart(3, "0")}`,
+      status,
+      createdAt: d(`2026-08-${String(10 + (i % 18)).padStart(2, "0")}T08:00:00+07:00`),
+      updatedAt: d(`2026-09-${String(1 + (i % 15)).padStart(2, "0")}T10:00:00+07:00`),
+    });
+  }
+}
+
+/* =========================================================
+   TRANSAKSI TAMBAHAN
+   Status: ACTIVE, OVERDUE, COMPLETED, CANCELLED
+   Jumlah cukup banyak untuk pengujian pagination.
+========================================================= */
+
+const extraLoanStatuses: Loan["status"][] = [
+  "ACTIVE",
+  "OVERDUE",
+  "COMPLETED",
+  "CANCELLED",
+  "ACTIVE",
+  "OVERDUE",
+];
+
+const extraTransactionBooks = mockBooks.filter((book) =>
+  extraBookIds.includes(book.id),
+);
+
+for (let i = 0; i < 30; i += 1) {
+  const companyId = i < 22 ? "company-001" : "company-002";
+  const memberPool = mockMembers.filter(
+    (member) => member.companyId === companyId,
+  );
+  const bookPool = extraTransactionBooks.filter(
+    (book) => book.companyId === companyId,
+  );
+
+  const member = memberPool[i % memberPool.length];
+  const book = bookPool[i % bookPool.length];
+  const status = extraLoanStatuses[i % extraLoanStatuses.length];
+
+  const loanId = `loan-extra-${String(i + 1).padStart(3, "0")}`;
+  const loanNumber = `${
+    companyId === "company-001" ? "BF001" : "BF002"
+  }-2026-${String(i + 20).padStart(6, "0")}`;
+
+  const borrowedAt = `2026-09-${String(
+    1 + (i % 15),
+  ).padStart(2, "0")}T${String(9 + (i % 8)).padStart(
+    2,
+    "0",
+  )}:00:00+07:00`;
+
+  const dueAt = `2026-09-${String(
+    10 + (i % 15),
+  ).padStart(2, "0")}T10:00:00+07:00`;
+
+  const returnedAt =
+    status === "COMPLETED"
+      ? d(
+          `2026-09-${String(
+            8 + (i % 8),
+          ).padStart(2, "0")}T15:00:00+07:00`,
+        )
+      : undefined;
+
+  mockLoans.push({
+    id: loanId,
+    companyId,
+    loanNumber,
+    memberId: member.id,
+    borrowedBy:
+      companyId === "company-001" ? "user-002" : "user-004",
+    borrowedAt: d(borrowedAt),
+    dueAt: d(dueAt),
+    returnedAt,
+    status,
+    notes:
+      status === "ACTIVE"
+        ? "Peminjaman aktif untuk data pengujian."
+        : status === "OVERDUE"
+          ? "Peminjaman terlambat untuk data pengujian."
+          : status === "COMPLETED"
+            ? "Peminjaman selesai untuk data pengujian."
+            : "Transaksi dibatalkan untuk data pengujian.",
+    createdAt: d(borrowedAt),
+    updatedAt: d(dueAt),
+  });
+
+  if (status === "ACTIVE" || status === "OVERDUE") {
+    const availableCopy = mockBookCopies.find(
+      (copy) =>
+        copy.companyId === companyId &&
+        copy.bookId === book.id &&
+        copy.status === "AVAILABLE",
+    );
+
+    if (availableCopy) {
+      availableCopy.status = "BORROWED";
+      availableCopy.updatedAt = d(
+        "2026-09-18T10:00:00+07:00",
+      );
+
+      mockLoanItems.push({
+        id: `loan-item-extra-${String(i + 1).padStart(3, "0")}`,
+        companyId,
+        loanId,
+        bookId: book.id,
+        bookCopyId: availableCopy.id,
+        returnedAt: undefined,
+        status: "BORROWED",
+        createdAt: d(borrowedAt),
+        updatedAt: d(borrowedAt),
+      });
+    }
+  } else if (status === "COMPLETED") {
+    const completedCopy = mockBookCopies.find(
+      (copy) =>
+        copy.companyId === companyId &&
+        copy.bookId === book.id &&
+        copy.status === "AVAILABLE",
+    );
+
+    if (completedCopy) {
+      mockLoanItems.push({
+        id: `loan-item-extra-${String(i + 1).padStart(3, "0")}`,
+        companyId,
+        loanId,
+        bookId: book.id,
+        bookCopyId: completedCopy.id,
+        returnedAt,
+        status: "RETURNED",
+        createdAt: d(borrowedAt),
+        updatedAt: returnedAt ?? d(borrowedAt),
+      });
+    }
+  }
+}
+
