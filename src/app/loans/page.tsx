@@ -17,6 +17,8 @@ import FeedbackPanel from "@/components/ui/FeedbackPanel";
 import Input from "@/components/ui/Input";
 import LoadingState from "@/components/ui/LoadingState";
 
+const PAGE_SIZE = 5;
+
 export default function LoansPage() {
   const router = useRouter();
 
@@ -27,6 +29,7 @@ export default function LoansPage() {
 
   const [search, setSearch] = useState("");
   const [loading, setLoading] = useState(true);
+  const [page, setPage] = useState(1);
   const [error, setError] = useState("");
 
   /*
@@ -110,6 +113,18 @@ export default function LoansPage() {
       return matchesLoanNumber || matchesMember || matchesBook;
     });
   }, [transactions, search]);
+
+  const totalPages = Math.max(
+    1,
+    Math.ceil(filteredTransactions.length / PAGE_SIZE),
+  );
+
+  const currentPage = Math.min(page, totalPages);
+
+  const paginatedTransactions = filteredTransactions.slice(
+    (currentPage - 1) * PAGE_SIZE,
+    currentPage * PAGE_SIZE,
+  );
 
   /*
    * =========================================================
@@ -256,7 +271,10 @@ export default function LoansPage() {
               id="loan-search"
               label="Pencarian"
               value={search}
-              onChange={(event) => setSearch(event.target.value)}
+              onChange={(event) => {
+                setSearch(event.target.value);
+                setPage(1);
+              }}
               placeholder="Contoh: TRX-001, Budi, Laskar Pelangi..."
             />
 
@@ -409,7 +427,7 @@ export default function LoansPage() {
 
                   {filteredTransactions.length > 0 ? (
                     <div className="mt-4 space-y-2.5">
-                      {filteredTransactions.map((transaction) => {
+                      {paginatedTransactions.map((transaction) => {
                         const isSelected =
                           selectedLoan?.loan.id === transaction.loan.id;
 
@@ -477,6 +495,67 @@ export default function LoansPage() {
                             : "Belum ada data peminjaman yang dapat ditampilkan."
                         }
                       />
+                    </div>
+                  )}
+
+                  {totalPages > 1 && (
+                    <div className="flex items-center justify-between border-t border-slate-200 px-3 py-2.5 sm:px-4">
+                      <p className="text-xs text-slate-500">
+                        Halaman {currentPage} dari {totalPages}
+                      </p>
+
+                      <div className="flex items-center gap-1">
+                        <button
+                          type="button"
+                          disabled={currentPage <= 1}
+                          onClick={() =>
+                            setPage((current) => Math.max(1, current - 1))
+                          }
+                          className="h-8 rounded-md border border-slate-200 bg-white px-2.5 text-xs font-medium text-slate-700 disabled:cursor-not-allowed disabled:opacity-40"
+                        >
+                          ←
+                        </button>
+
+                        {Array.from(
+                          {
+                            length: totalPages,
+                          },
+                          (_, index) => index + 1,
+                        )
+                          .filter(
+                            (number) =>
+                              number === 1 ||
+                              number === totalPages ||
+                              Math.abs(number - currentPage) <= 1,
+                          )
+                          .map((number) => (
+                            <button
+                              key={number}
+                              type="button"
+                              onClick={() => setPage(number)}
+                              className={`h-8 min-w-8 rounded-md px-2 text-xs font-semibold ${
+                                number === currentPage
+                                  ? "bg-blue-600 text-white"
+                                  : "border border-slate-200 bg-white text-slate-700 hover:bg-slate-50"
+                              }`}
+                            >
+                              {number}
+                            </button>
+                          ))}
+
+                        <button
+                          type="button"
+                          disabled={currentPage >= totalPages}
+                          onClick={() =>
+                            setPage((current) =>
+                              Math.min(totalPages, current + 1),
+                            )
+                          }
+                          className="h-8 rounded-md border border-slate-200 bg-white px-2.5 text-xs font-medium text-slate-700 disabled:cursor-not-allowed disabled:opacity-40"
+                        >
+                          →
+                        </button>
+                      </div>
                     </div>
                   )}
                 </Card>

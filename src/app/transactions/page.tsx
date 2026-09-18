@@ -1172,37 +1172,60 @@ export default function TransactionsPage() {
             ================================================== */}
 
             {totalPages > 1 && (
-              <div className="mt-5 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-                <p className="text-sm text-slate-500">
+              <div className="flex items-center justify-between border-t border-slate-200 px-3 py-2.5 sm:px-4">
+                <p className="text-xs text-slate-500">
                   Halaman {currentPage} dari {totalPages}
                 </p>
 
-                <div className="grid grid-cols-2 gap-2 sm:flex">
-                  <Button
+                <div className="flex items-center gap-1">
+                  <button
                     type="button"
-                    variant="secondary"
-                    disabled={currentPage === 1}
+                    disabled={currentPage <= 1}
                     onClick={() =>
                       setPage((current) => Math.max(1, current - 1))
                     }
+                    className="h-8 rounded-md border border-slate-200 bg-white px-2.5 text-xs font-medium text-slate-700 disabled:cursor-not-allowed disabled:opacity-40"
                   >
-                    <span aria-hidden="true">←</span>
+                    ←
+                  </button>
 
-                    <span className="ml-2">Sebelumnya</span>
-                  </Button>
+                  {Array.from(
+                    {
+                      length: totalPages,
+                    },
+                    (_, index) => index + 1,
+                  )
+                    .filter(
+                      (number) =>
+                        number === 1 ||
+                        number === totalPages ||
+                        Math.abs(number - currentPage) <= 1,
+                    )
+                    .map((number) => (
+                      <button
+                        key={number}
+                        type="button"
+                        onClick={() => setPage(number)}
+                        className={`h-8 min-w-8 rounded-md px-2 text-xs font-semibold ${
+                          number === currentPage
+                            ? "bg-blue-600 text-white"
+                            : "border border-slate-200 bg-white text-slate-700 hover:bg-slate-50"
+                        }`}
+                      >
+                        {number}
+                      </button>
+                    ))}
 
-                  <Button
+                  <button
                     type="button"
-                    variant="secondary"
-                    disabled={currentPage === totalPages}
+                    disabled={currentPage >= totalPages}
                     onClick={() =>
                       setPage((current) => Math.min(totalPages, current + 1))
                     }
+                    className="h-8 rounded-md border border-slate-200 bg-white px-2.5 text-xs font-medium text-slate-700 disabled:cursor-not-allowed disabled:opacity-40"
                   >
-                    <span className="mr-2">Berikutnya</span>
-
-                    <span aria-hidden="true">→</span>
-                  </Button>
+                    →
+                  </button>
                 </div>
               </div>
             )}
