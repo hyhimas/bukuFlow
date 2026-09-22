@@ -43,11 +43,6 @@ export default function Input({
               ? "border-danger"
               : "border-app-border"
           }
-          ${
-            props.type === "date"
-              ? "cursor-pointer [color-scheme:light] [&::-webkit-calendar-picker-indicator]:cursor-pointer [&::-webkit-calendar-picker-indicator]:opacity-60"
-              : ""
-          }
           ${className}`}
       />
 

@@ -6,6 +6,7 @@ import Badge from "@/components/ui/Badge";
 import Button from "@/components/ui/Button";
 import Card from "@/components/ui/Card";
 import Input from "@/components/ui/Input";
+import DatePicker from "@/components/ui/DatePicker";
 import BackLink from "@/components/ui/BackLink";
 import EmptyState from "@/components/ui/EmptyState";
 import FeedbackPanel from "@/components/ui/FeedbackPanel";
@@ -16,6 +17,11 @@ import { getSession } from "@/lib/auth";
 import { canAccessTransactions } from "@/lib/authorization";
 
 import { getTransactions } from "@/lib/mock-api";
+import {
+  exportToExcel,
+  filterByExportDate,
+  type ExportPeriod,
+} from "@/lib/export/excel";
 
 import type { Loan, TransactionData } from "@/lib/types";
 
@@ -90,6 +96,15 @@ export default function TransactionsPage() {
   const [filterEndDate, setFilterEndDate] = useState("");
 
   const [isFilterOpen, setIsFilterOpen] = useState(false);
+
+  // =========================================================
+  // EXPORT EXCEL
+  // =========================================================
+
+  const [isExportOpen, setIsExportOpen] = useState(false);
+  const [exportPeriod, setExportPeriod] = useState<ExportPeriod>("ALL");
+  const [exportStartDate, setExportStartDate] = useState("");
+  const [exportEndDate, setExportEndDate] = useState("");
 
   // =========================================================
   // PAGINATION
@@ -421,6 +436,55 @@ export default function TransactionsPage() {
   }
 
   // =========================================================
+  // EXPORT EXCEL
+  // =========================================================
+
+  function handleExportExcel() {
+    const exportTransactions = filterByExportDate(
+      transactions,
+      ({ loan }) => getDateOnly(loan.borrowedAt),
+      exportPeriod,
+      exportStartDate,
+      exportEndDate,
+    );
+
+    const rows = exportTransactions.map(({ loan, member, items, user }) => ({
+      "Nomor Transaksi": loan.loanNumber,
+      Anggota: member?.name ?? "-",
+      Buku: items
+        .map(
+          ({ book, bookCopy }) =>
+            `${book?.title ?? "-"}${
+              bookCopy?.code ? ` (${bookCopy.code})` : ""
+            }`,
+        )
+        .join(", "),
+      Petugas: user?.name ?? "-",
+      "Tanggal Peminjaman": formatDate(loan.borrowedAt),
+      "Jatuh Tempo": formatDate(loan.dueAt),
+      "Tanggal Pengembalian": formatDate(loan.returnedAt),
+      Status: getStatusLabel(loan.status),
+    }));
+
+    if (rows.length === 0) {
+      alert("Tidak ada transaksi pada periode yang dipilih.");
+      return;
+    }
+
+    exportToExcel(
+      rows,
+      `riwayat-transaksi-${getDateOnly(new Date().toISOString())}.xlsx`,
+      "Riwayat Transaksi",
+    );
+
+    setIsExportOpen(false);
+  }
+
+  function closeExport() {
+    setIsExportOpen(false);
+  }
+
+  // =========================================================
   // LOADING
   // =========================================================
 
@@ -446,13 +510,25 @@ export default function TransactionsPage() {
         <div className="mb-5 sm:mb-6">
           <BackLink href="/dashboard" />
 
-          <h1 className="mt-3 text-2xl font-bold tracking-tight text-slate-900 sm:text-3xl">
-            Riwayat Transaksi
-          </h1>
+          <div className="mt-3 flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
+            <div>
+              <h1 className="text-2xl font-bold tracking-tight text-slate-900 sm:text-3xl">
+                Riwayat Transaksi
+              </h1>
 
-          <p className="mt-1 text-sm leading-6 text-slate-500 sm:text-base">
-            Lihat riwayat peminjaman dan pengembalian.
-          </p>
+              <p className="mt-1 text-sm leading-6 text-slate-500 sm:text-base">
+                Lihat riwayat peminjaman dan pengembalian.
+              </p>
+            </div>
+
+            <Button
+              type="button"
+              onClick={() => setIsExportOpen(true)}
+              className="w-full sm:w-auto"
+            >
+              Export Excel
+            </Button>
+          </div>
         </div>
 
         {/* =====================================================
@@ -703,14 +779,12 @@ export default function TransactionsPage() {
                   <div className="mt-4 grid gap-4 sm:grid-cols-2">
                     {/* DARI */}
 
-                    <Input
+                    <DatePicker
                       id="transaction-start-date"
                       label="Dari tanggal"
-                      type="date"
                       value={filterStartDate}
-                      onChange={(event) => {
-                        const value = event.target.value;
-
+                      showClearButton
+                      onChange={(value) => {
                         setFilterStartDate(value);
 
                         // Kalau tanggal awal digeser melewati
@@ -727,14 +801,14 @@ export default function TransactionsPage() {
 
                     {/* SAMPAI */}
 
-                    <Input
+                    <DatePicker
                       id="transaction-end-date"
                       label="Sampai tanggal"
-                      type="date"
                       value={filterEndDate}
                       min={filterStartDate || undefined}
-                      onChange={(event) => {
-                        setFilterEndDate(event.target.value);
+                      showClearButton
+                      onChange={(value) => {
+                        setFilterEndDate(value);
                       }}
                     />
                   </div>
@@ -808,6 +882,159 @@ export default function TransactionsPage() {
                 </div>
               </div>
             </aside>
+          </div>
+        )}
+
+        {/* =====================================================
+            EXPORT EXCEL MODAL
+        ====================================================== */}
+
+        {isExportOpen && (
+          <div
+            className="fixed inset-0 z-50"
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="export-title"
+          >
+            <button
+              type="button"
+              aria-label="Tutup export"
+              onClick={closeExport}
+              className="absolute inset-0 bg-slate-900/30 backdrop-blur-[1px]"
+            />
+
+            <div className="relative flex min-h-full items-center justify-center p-4">
+              <div className="w-full max-w-md rounded-xl bg-white shadow-2xl">
+                <div className="flex items-start justify-between border-b border-slate-200 px-5 py-4 sm:px-6">
+                  <div>
+                    <h2
+                      id="export-title"
+                      className="text-lg font-semibold tracking-tight text-slate-900"
+                    >
+                      Export Excel
+                    </h2>
+
+                    <p className="mt-1 text-sm leading-5 text-slate-500">
+                      Pilih periode transaksi yang ingin diexport.
+                    </p>
+                  </div>
+
+                  <button
+                    type="button"
+                    onClick={closeExport}
+                    aria-label="Tutup export"
+                    className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg text-slate-500 transition hover:bg-slate-100 hover:text-slate-900 focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 focus-visible:ring-offset-1"
+                  >
+                    <svg
+                      viewBox="0 0 24 24"
+                      fill="none"
+                      className="h-5 w-5"
+                      aria-hidden="true"
+                    >
+                      <path
+                        d="m6 6 12 12M18 6 6 18"
+                        stroke="currentColor"
+                        strokeWidth="1.8"
+                        strokeLinecap="round"
+                      />
+                    </svg>
+                  </button>
+                </div>
+
+                <div className="px-5 py-5 sm:px-6 sm:py-6">
+                  <div className="space-y-2">
+                    {[
+                      { value: "ALL" as const, label: "Seluruh transaksi" },
+                      { value: "7_DAYS" as const, label: "7 hari terakhir" },
+                      { value: "1_MONTH" as const, label: "1 bulan terakhir" },
+                      { value: "1_YEAR" as const, label: "1 tahun terakhir" },
+                      { value: "CUSTOM" as const, label: "Periode custom" },
+                    ].map((option) => {
+                      const selected = exportPeriod === option.value;
+
+                      return (
+                        <button
+                          key={option.value}
+                          type="button"
+                          onClick={() => setExportPeriod(option.value)}
+                          className={[
+                            "flex w-full items-center gap-3 rounded-lg border px-4 py-3 text-left text-sm transition",
+                            selected
+                              ? "border-blue-600 bg-blue-50 text-blue-700"
+                              : "border-slate-200 bg-white text-slate-700 hover:border-slate-300 hover:bg-slate-50",
+                          ].join(" ")}
+                        >
+                          <span
+                            className={[
+                              "flex h-5 w-5 shrink-0 items-center justify-center rounded-full border-2",
+                              selected
+                                ? "border-blue-600 bg-white"
+                                : "border-slate-300 bg-white",
+                            ].join(" ")}
+                          >
+                            <span
+                              className="block rounded-full"
+                              style={{
+                                width: selected ? 10 : 0,
+                                height: selected ? 10 : 0,
+                                backgroundColor: selected
+                                  ? "#2563eb"
+                                  : "transparent",
+                              }}
+                            />
+                          </span>
+
+                          <span className="font-medium">{option.label}</span>
+                        </button>
+                      );
+                    })}
+                  </div>
+                  {exportPeriod === "CUSTOM" && (
+                    <div className="mt-5 grid gap-4 sm:grid-cols-2">
+                      <DatePicker
+                        id="export-start-date"
+                        label="Dari tanggal"
+                        value={exportStartDate}
+                        showClearButton
+                        onChange={(value) => setExportStartDate(value)}
+                      />
+
+                      <DatePicker
+                        id="export-end-date"
+                        label="Sampai tanggal"
+                        value={exportEndDate}
+                        min={exportStartDate || undefined}
+                        showClearButton
+                        onChange={(value) => setExportEndDate(value)}
+                      />
+                    </div>
+                  )}
+                </div>
+
+                <div className="flex gap-3 border-t border-slate-200 px-5 py-4 sm:px-6">
+                  <Button
+                    type="button"
+                    variant="secondary"
+                    className="flex-1"
+                    onClick={closeExport}
+                  >
+                    Batal
+                  </Button>
+
+                  <Button
+                    type="button"
+                    className="flex-1"
+                    onClick={handleExportExcel}
+                    disabled={
+                      exportPeriod === "CUSTOM" &&
+                      (exportStartDate === "" || exportEndDate === "")
+                    }
+                  >
+                    Export Excel
+                  </Button>
+                </div>
+              </div>
+            </div>
           </div>
         )}
 

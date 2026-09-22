@@ -117,61 +117,59 @@ export default function MasterMembersPage() {
   // =====================================================
 
   useEffect(() => {
-  let cancelled = false;
+    let cancelled = false;
 
-  const timer = window.setTimeout(async () => {
-    if (!hasLoadedMembers.current) {
-      setLoading(true);
-    } else {
-      setTableLoading(true);
-    }
-
-    setError("");
-
-    try {
-      const result = await masterDataRepository.listMembers({
-        search,
-        status: statusFilter || undefined,
-        page,
-        pageSize: PAGE_SIZE,
-      });
-
-      if (cancelled) {
-        return;
+    const timer = window.setTimeout(async () => {
+      if (!hasLoadedMembers.current) {
+        setLoading(true);
+      } else {
+        setTableLoading(true);
       }
 
-      setMembers(result.data);
-      setTotal(result.total);
-      setTotalPages(result.totalPages);
+      setError("");
 
-      hasLoadedMembers.current = true;
-    } catch (error) {
-      if (cancelled) {
-        return;
+      try {
+        const result = await masterDataRepository.listMembers({
+          search,
+          status: statusFilter || undefined,
+          page,
+          pageSize: PAGE_SIZE,
+        });
+
+        if (cancelled) {
+          return;
+        }
+
+        setMembers(result.data);
+        setTotal(result.total);
+        setTotalPages(result.totalPages);
+
+        hasLoadedMembers.current = true;
+      } catch (error) {
+        if (cancelled) {
+          return;
+        }
+
+        setMembers([]);
+        setTotal(0);
+        setTotalPages(1);
+
+        setError(
+          error instanceof Error ? error.message : "Data member gagal dimuat.",
+        );
+      } finally {
+        if (!cancelled) {
+          setLoading(false);
+          setTableLoading(false);
+        }
       }
+    }, 400);
 
-      setMembers([]);
-      setTotal(0);
-      setTotalPages(1);
-
-      setError(
-        error instanceof Error
-          ? error.message
-          : "Data member gagal dimuat.",
-      );
-    } finally {
-      if (!cancelled) {
-        setLoading(false);
-        setTableLoading(false);
-      }
-    }
-  }, 400);
-
-  return () => {
-    cancelled = true;
-    window.clearTimeout(timer);
-  };
-}, [search, statusFilter, page]);
+    return () => {
+      cancelled = true;
+      window.clearTimeout(timer);
+    };
+  }, [search, statusFilter, page]);
 
   // =====================================================
   // SUCCESS MESSAGE
@@ -237,8 +235,7 @@ export default function MasterMembersPage() {
       }
 
       const firstElement = focusableElements[0];
-      const lastElement =
-        focusableElements[focusableElements.length - 1];
+      const lastElement = focusableElements[focusableElements.length - 1];
 
       if (event.shiftKey && document.activeElement === firstElement) {
         event.preventDefault();
@@ -295,8 +292,7 @@ export default function MasterMembersPage() {
       }
 
       const firstElement = focusableElements[0];
-      const lastElement =
-        focusableElements[focusableElements.length - 1];
+      const lastElement = focusableElements[focusableElements.length - 1];
 
       if (event.shiftKey && document.activeElement === firstElement) {
         event.preventDefault();
@@ -639,15 +635,37 @@ export default function MasterMembersPage() {
               </p>
             </div>
 
-            {canManageMasterData(getSession()?.user.role ?? "MEMBER") && (
-              <Button
+            <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-end">
+              <button
                 type="button"
-                onClick={openCreateForm}
-                className="w-full sm:w-auto"
+                onClick={() => {
+                  alert("Fitur Import Excel belum tersedia.");
+                }}
+                className="inline-flex h-11 items-center justify-center rounded-lg bg-blue-600 px-4 text-sm font-semibold text-white transition hover:bg-blue-700"
               >
-                + Tambah Member
-              </Button>
-            )}
+                Import Excel
+              </button>
+
+              <button
+                type="button"
+                onClick={() => {
+                  alert("Fitur Export Excel belum tersedia.");
+                }}
+                className="inline-flex h-11 items-center justify-center rounded-lg bg-blue-600 px-4 text-sm font-semibold text-white transition hover:bg-blue-700"
+              >
+                Export Excel
+              </button>
+
+              {canManageMasterData(getSession()?.user.role ?? "MEMBER") && (
+                <Button
+                  type="button"
+                  onClick={openCreateForm}
+                  className="w-full sm:w-auto"
+                >
+                  + Tambah Member
+                </Button>
+              )}
+            </div>
           </div>
         </div>
 
@@ -756,31 +774,29 @@ export default function MasterMembersPage() {
               </label>
 
               <div className="relative">
-  <Dropdown
-  id="member-status"
-  value={statusFilter}
-  onChange={(value) => {
-    setStatusFilter(value as MemberStatus | "");
-  }}
-  ariaLabel="Filter status member"
-  options={[
-    {
-      value: "",
-      label: "Semua Status",
-    },
-    {
-      value: "ACTIVE",
-      label: "Aktif",
-    },
-    {
-      value: "INACTIVE",
-      label: "Tidak Aktif",
-    },
-  ]}
-/>
-
-  
-</div>
+                <Dropdown
+                  id="member-status"
+                  value={statusFilter}
+                  onChange={(value) => {
+                    setStatusFilter(value as MemberStatus | "");
+                  }}
+                  ariaLabel="Filter status member"
+                  options={[
+                    {
+                      value: "",
+                      label: "Semua Status",
+                    },
+                    {
+                      value: "ACTIVE",
+                      label: "Aktif",
+                    },
+                    {
+                      value: "INACTIVE",
+                      label: "Tidak Aktif",
+                    },
+                  ]}
+                />
+              </div>
             </div>
           </div>
         </Card>

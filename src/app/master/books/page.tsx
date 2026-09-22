@@ -908,15 +908,37 @@ export default function MasterBooksPage() {
               </p>
             </div>
 
-            {canManageMasterData(getSession()?.user.role ?? "MEMBER") && (
-              <Button
+            <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-end">
+              <button
                 type="button"
-                onClick={openCreateForm}
-                className="w-full sm:w-auto"
+                onClick={() => {
+                  alert("Fitur Import Excel belum tersedia.");
+                }}
+                className="inline-flex h-11 items-center justify-center rounded-lg bg-blue-600 px-4 text-sm font-semibold text-white transition hover:bg-blue-700"
               >
-                + Tambah Buku
-              </Button>
-            )}
+                Import Excel
+              </button>
+
+              <button
+                type="button"
+                onClick={() => {
+                  alert("Fitur Export Excel belum tersedia.");
+                }}
+                className="inline-flex h-11 items-center justify-center rounded-lg bg-blue-600 px-4 text-sm font-semibold text-white transition hover:bg-blue-700"
+              >
+                Export Excel
+              </button>
+
+              {canManageMasterData(getSession()?.user.role ?? "MEMBER") && (
+                <Button
+                  type="button"
+                  onClick={openCreateForm}
+                  className="w-full sm:w-auto"
+                >
+                  + Tambah Buku
+                </Button>
+              )}
+            </div>
           </div>
         </div>
 

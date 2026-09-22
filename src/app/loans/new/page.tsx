@@ -6,6 +6,7 @@ import { getSession } from "@/lib/auth";
 import { canManageLoans } from "@/lib/authorization";
 import Card from "@/components/ui/Card";
 import Input from "@/components/ui/Input";
+import DatePicker from "@/components/ui/DatePicker";
 import Button from "@/components/ui/Button";
 import BackLink from "@/components/ui/BackLink";
 
@@ -1887,14 +1888,11 @@ export default function NewLoanPage() {
                   </p>
 
                   <div className="mt-5 grid gap-4 sm:grid-cols-2">
-                    <Input
+                    <DatePicker
                       id="borrowed-at"
                       label="Tanggal peminjaman"
-                      type="date"
                       value={borrowedAt}
-                      onChange={(event) => {
-                        const value = event.target.value;
-
+                      onChange={(value) => {
                         setBorrowedAt(value);
 
                         if (dueAt && value > dueAt) {
@@ -1908,15 +1906,12 @@ export default function NewLoanPage() {
                       required
                     />
 
-                    <Input
+                    <DatePicker
                       id="due-at"
                       label="Tanggal jatuh tempo"
-                      type="date"
                       min={borrowedAt || undefined}
                       value={dueAt}
-                      onChange={(event) => {
-                        const value = event.target.value;
-
+                      onChange={(value) => {
                         setDueAt(value);
 
                         if (borrowedAt && value < borrowedAt) {

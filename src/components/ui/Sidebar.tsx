@@ -2,8 +2,8 @@
 
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
-import { useEffect,useRef, useState } from "react";
-
+import { useEffect, useRef, useState } from "react";
+import { mockCompanies } from "@/lib/mock-data";
 import { clearSession, getSession, type Session } from "@/lib/auth";
 import { canAccessMasterData } from "@/lib/authorization";
 
@@ -30,46 +30,50 @@ export default function Sidebar({
   }, []);
 
   useEffect(() => {
-  if (!open) return;
+    if (!open) return;
 
-  const sidebar = sidebarRef.current;
-  if (!sidebar) return;
+    const sidebar = sidebarRef.current;
+    if (!sidebar) return;
 
-  const handleKeyDown = (event: KeyboardEvent) => {
-    if (event.key !== "Tab") return;
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key !== "Tab") return;
 
-    const focusableElements = sidebar.querySelectorAll<HTMLElement>(
-      'a[href], button:not([disabled]), input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])',
-    );
+      const focusableElements = sidebar.querySelectorAll<HTMLElement>(
+        'a[href], button:not([disabled]), input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])',
+      );
 
-    const focusable = Array.from(focusableElements);
+      const focusable = Array.from(focusableElements);
 
-    if (focusable.length === 0) return;
+      if (focusable.length === 0) return;
 
-    const first = focusable[0];
-    const last = focusable[focusable.length - 1];
+      const first = focusable[0];
+      const last = focusable[focusable.length - 1];
 
-    if (event.shiftKey) {
-      if (document.activeElement === first) {
-        event.preventDefault();
-        last.focus();
+      if (event.shiftKey) {
+        if (document.activeElement === first) {
+          event.preventDefault();
+          last.focus();
+        }
+      } else {
+        if (document.activeElement === last) {
+          event.preventDefault();
+          first.focus();
+        }
       }
-    } else {
-      if (document.activeElement === last) {
-        event.preventDefault();
-        first.focus();
-      }
-    }
-  };
+    };
 
-  document.addEventListener("keydown", handleKeyDown);
+    document.addEventListener("keydown", handleKeyDown);
 
-  return () => {
-    document.removeEventListener("keydown", handleKeyDown);
-  };
-}, [open]);
+    return () => {
+      document.removeEventListener("keydown", handleKeyDown);
+    };
+  }, [open]);
 
   const role = session?.user.role;
+
+  const currentCompany = mockCompanies.find(
+    (company) => company.id === session?.user.companyId,
+  );
 
   const handleLogout = () => {
     clearSession();
@@ -94,7 +98,7 @@ export default function Sidebar({
 
       {/* Sidebar */}
       <aside
-        ref = {sidebarRef}
+        ref={sidebarRef}
         className={`fixed inset-y-0 left-0 z-50 flex w-72 max-w-[85vw] flex-col border-r border-slate-200 bg-white shadow-xl transition-transform duration-200 ${
           open ? "translate-x-0" : "-translate-x-full"
         }`}
@@ -107,7 +111,13 @@ export default function Sidebar({
             tabIndex={open ? 0 : -1}
             className="text-xl font-bold text-slate-900"
           >
-            BukuFlow
+            <div>
+              <p className="text-xl font-bold text-slate-900">BukuFlow</p>
+
+              <p className="truncate text-xs text-slate-500">
+                {currentCompany?.name ?? "Perusahaan"}
+              </p>
+            </div>
           </Link>
 
           <button
@@ -187,7 +197,6 @@ export default function Sidebar({
               </div>
             </div>
           )}
-
         </nav>
 
         {/* User & Logout */}
@@ -198,9 +207,7 @@ export default function Sidebar({
                 {session.user.name}
               </p>
 
-              <p className="mt-1 text-xs text-slate-500">
-                {session.user.role}
-              </p>
+              <p className="mt-1 text-xs text-slate-500">{session.user.role}</p>
             </div>
           )}
 
@@ -235,9 +242,13 @@ interface NavItemProps {
   disabled?: boolean;
 }
 
-
-
-function NavItem({ href, label, active, onClick, disabled = false, }: NavItemProps) {
+function NavItem({
+  href,
+  label,
+  active,
+  onClick,
+  disabled = false,
+}: NavItemProps) {
   return (
     <Link
       href={href}

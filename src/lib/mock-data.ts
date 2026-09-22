@@ -66,6 +66,11 @@ export const mockCompanySettings2: CompanySettings = {
   updatedAt: d("2026-08-01T08:00:00+07:00"),
 };
 
+
+export const mockCompanies: Company[] = [
+  mockCompany,
+  mockCompany2,
+];
 /* =========================================================
    USERS
    Password semua akun: admin123
