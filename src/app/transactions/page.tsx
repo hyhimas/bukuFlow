@@ -16,7 +16,7 @@ import { useRouter } from "next/navigation";
 import { getSession } from "@/lib/auth";
 import { canAccessTransactions } from "@/lib/authorization";
 
-import { getTransactions } from "@/lib/mock-api";
+import { listLoansApi } from "@/lib/api";
 import {
   exportToExcel,
   filterByExportDate,
@@ -144,7 +144,7 @@ export default function TransactionsPage() {
       setError("");
 
       try {
-        const result = await getTransactions();
+        const result = await listLoansApi();
 
         setTransactions(result);
         hasLoadedTransactions.current = true;

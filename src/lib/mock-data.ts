@@ -388,7 +388,7 @@ export const mockBooks: Book[] = [
     publicationYear: 2018,
     category: "Pengembangan Diri",
     coverUrl: "",
-    status: "BORROWED",
+    status: "AVAILABLE",
     totalCopies: 3,
     availableCopies: 2,
     createdAt: d("2026-08-01T08:00:00+07:00"),

@@ -287,7 +287,7 @@ export async function getDashboard(): Promise<DashboardResponse> {
         (a, b) =>
           new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime(),
       )
-      .slice(0, 5)
+      .slice(0, 10)
       .map((loan) => {
         const member = mockMembers.find(
           (item) =>
@@ -311,24 +311,26 @@ export async function getDashboard(): Promise<DashboardResponse> {
 
 export async function searchMembers(query: string): Promise<Member[]> {
   ensureMockStoreHydrated();
-  await delay(300);
+  await delay(150);
 
-  const companyId = getCurrentSession().user.companyId;
   const keyword = query.trim().toLowerCase();
 
   return mockMembers
     .filter(
       (member) =>
-        member.companyId === companyId &&
-        (!keyword ||
-          member.name.toLowerCase().includes(keyword) ||
-          member.memberNumber.toLowerCase().includes(keyword) ||
-          member.identityNumber.includes(keyword) ||
-          member.email?.includes(keyword)),
+        !keyword ||
+        member.name.toLowerCase().includes(keyword) ||
+        member.memberNumber.toLowerCase().includes(keyword) ||
+        member.identityNumber.includes(keyword) ||
+        member.email?.toLowerCase().includes(keyword),
     )
     .map((member) => ({
       ...member,
     }));
+}
+
+export async function getMember(): Promise<Member[]> {
+  return searchMembers("");
 }
 
 export async function createMember(
@@ -802,7 +804,7 @@ export async function updateBook(
 
 export async function changeBookStatus(
   bookId: string,
-  status: Extract<BookStatus, "AVAILABLE" | "INACTIVE">,
+  status: BookStatus,
 ): Promise<Book> {
   ensureMockStoreHydrated();
   await delay();
@@ -854,11 +856,28 @@ export async function getBookCopies(bookId: string): Promise<BookCopy[]> {
 
   const companyId = getCurrentSession().user.companyId;
 
-  return mockBookCopies
-    .filter((copy) => copy.bookId === bookId && copy.companyId === companyId)
-    .map((copy) => ({
-      ...copy,
-    }));
+  let copies = mockBookCopies.filter(
+    (copy) => copy.bookId === bookId && copy.companyId === companyId,
+  );
+
+  // Jika buku berasal dari Backend API dan belum ada di mockBookCopies, buat copy default otomatis
+  if (copies.length === 0) {
+    const defaultCopy: BookCopy = {
+      id: `copy-${bookId}-1`,
+      companyId,
+      bookId,
+      code: `CP-${bookId.slice(-4).toUpperCase()}-01`,
+      status: "AVAILABLE",
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString(),
+    };
+    mockBookCopies.push(defaultCopy);
+    copies = [defaultCopy];
+  }
+
+  return copies.map((copy) => ({
+    ...copy,
+  }));
 }
 
 export async function getBookCopy(bookCopyId: string): Promise<BookCopy> {

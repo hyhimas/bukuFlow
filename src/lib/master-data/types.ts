@@ -78,7 +78,7 @@ export interface UpdateBookInput {
 }
 
 export interface ChangeBookStatusInput {
-  status: Extract<BookStatus, "AVAILABLE" | "INACTIVE">;
+  status: BookStatus;
 }
 
 

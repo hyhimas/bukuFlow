@@ -10,7 +10,7 @@ import LoadingState from "@/components/ui/LoadingState";
 
 import { getSession } from "@/lib/auth";
 import { isSupportedRole } from "@/lib/authorization";
-import { getDashboard } from "@/lib/mock-api";
+import { getDashboardApi } from "@/lib/api";
 import type { Loan, UserRole } from "@/lib/types";
 
 interface DashboardData {
@@ -338,7 +338,7 @@ export default function DashboardPage() {
       setName(session.user.name);
 
       try {
-        const result = await getDashboard();
+        const result = await getDashboardApi();
 
         setData(result);
       } catch {
@@ -535,7 +535,7 @@ export default function DashboardPage() {
             </div>
           ) : (
             <div className="divide-y divide-slate-100">
-              {data.recentLoans.map((loan) => (
+              {data.recentLoans.slice(0, 10).map((loan) => (
                 <div
                   key={loan.id}
                   className="grid grid-cols-[minmax(0,1fr)_auto] grid-rows-[auto_auto] items-center gap-x-4 gap-y-1 px-5 py-4 xl:grid-cols-[260px_minmax(180px,1fr)_minmax(280px,1fr)_120px] xl:grid-rows-1 xl:gap-x-6"

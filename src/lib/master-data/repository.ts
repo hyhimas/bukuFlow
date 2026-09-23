@@ -8,12 +8,12 @@ import {
   changeBookStatus,
   createBookCopy,
   changeBookCopyStatus,
-  searchMembers,
-  searchBooks,
   getMemberById,
   updateMember,
   changeMemberStatus,
 } from "@/lib/mock-api";
+
+import { searchMembersApi, searchBooksApi } from "@/lib/api";
 
 import type {
   Book,
@@ -44,7 +44,7 @@ import type {
  * Repository Master Data
  *
  * UI hanya berkomunikasi dengan repository ini.
- * Implementasi sekarang menggunakan mock API.
+ * Mengambil data member dari Backend API jika tersedia.
  */
 export const masterDataRepository = {
   /**
@@ -54,7 +54,8 @@ export const masterDataRepository = {
   async listMembers(
     input: MemberListInput = {},
   ): Promise<PaginatedResult<Member>> {
-    const members = await searchMembers(input.search ?? "");
+    const keyword = input.search ?? "";
+    const members = await searchMembersApi(keyword);
 
     const filtered =
       input.status !== undefined
@@ -125,7 +126,8 @@ export const masterDataRepository = {
   async listBooks(
     input: BookListInput = {},
   ): Promise<PaginatedResult<Book>> {
-    const books = await searchBooks(input.search ?? "");
+    const keyword = input.search ?? "";
+    const books = await searchBooksApi(keyword);
 
     const filtered =
       input.status !== undefined

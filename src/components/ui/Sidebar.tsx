@@ -6,6 +6,7 @@ import { useEffect, useRef, useState } from "react";
 import { mockCompanies } from "@/lib/mock-data";
 import { clearSession, getSession, type Session } from "@/lib/auth";
 import { canAccessMasterData } from "@/lib/authorization";
+import {logoutApi} from "@/lib/api"
 
 interface SidebarProps {
   open: boolean;
@@ -75,10 +76,9 @@ export default function Sidebar({
     (company) => company.id === session?.user.companyId,
   );
 
-  const handleLogout = () => {
-    clearSession();
-    router.replace("/login");
-  };
+ const handleLogout = async () => {
+  await logoutApi();
+};
 
   const isActive = (href: string) => {
     return pathname === href || pathname.startsWith(`${href}/`);

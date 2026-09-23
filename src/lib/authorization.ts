@@ -13,7 +13,7 @@ export function canManageMasterData(role: UserRole): boolean {
 }
 
 export function canManageLoans(role: UserRole): boolean {
-  return role === "STAFF";
+  return role === "STAFF" || role === "COMPANY_ADMIN";
 }
 
 export function canAccessLoans(role: UserRole): boolean {
@@ -21,7 +21,7 @@ export function canAccessLoans(role: UserRole): boolean {
 }
 
 export function canManageReturns(role: UserRole): boolean {
-  return role === "STAFF";
+  return role === "STAFF" || role === "COMPANY_ADMIN";
 }
 
 export function canAccessReturns(role: UserRole): boolean {

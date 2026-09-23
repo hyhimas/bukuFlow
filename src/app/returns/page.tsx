@@ -16,7 +16,7 @@ import EmptyState from "@/components/ui/EmptyState";
 import FeedbackPanel from "@/components/ui/FeedbackPanel";
 import LoadingState from "@/components/ui/LoadingState";
 import type { ReturnLoanData, Loan } from "@/lib/types";
-import { getReturnLoans, returnLoanItems } from "@/lib/mock-api";
+import { getActiveReturnsApi, returnLoanItemsApi } from "@/lib/api";
 
 const PAGE_SIZE = 5;
 
@@ -82,7 +82,7 @@ export default function ReturnsPage() {
       setError("");
 
       try {
-        const result = await getReturnLoans();
+        const result = await getActiveReturnsApi();
 
         setLoans(result);
         setFilteredLoans(result);
@@ -204,7 +204,7 @@ export default function ReturnsPage() {
     setReturnLoading(true);
 
     try {
-      const loan = await returnLoanItems(selectedLoan.loan.id, selectedItemIds);
+      const loan = await returnLoanItemsApi(selectedLoan.loan.id, selectedItemIds);
 
       setSuccessLoan(loan);
 

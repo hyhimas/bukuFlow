@@ -123,10 +123,8 @@ export default function MasterBooksPage() {
 
   const [confirmBook, setConfirmBook] = useState<Book | null>(null);
 
-  const [confirmBookStatus, setConfirmBookStatus] = useState<Extract<
-    BookStatus,
-    "AVAILABLE" | "INACTIVE"
-  > | null>(null);
+  const [confirmBookStatus, setConfirmBookStatus] =
+    useState<BookStatus | null>(null);
 
   const [bookStatusLoading, setBookStatusLoading] = useState(false);
 
@@ -148,11 +146,12 @@ export default function MasterBooksPage() {
   }, [router]);
 
   // =====================================================
-  // LOAD BOOKS
+  // LOAD BOOKS (Instant saat kosong, 350ms saat mengetik)
   // =====================================================
 
   useEffect(() => {
     let cancelled = false;
+    const delay = search.trim().length === 0 ? 0 : 350;
 
     const timer = window.setTimeout(async () => {
       if (!hasLoadedBooks.current) {
@@ -165,7 +164,7 @@ export default function MasterBooksPage() {
 
       try {
         const result = await masterDataRepository.listBooks({
-          search,
+          search: search.trim(),
           status: statusFilter || undefined,
           page,
           pageSize: PAGE_SIZE,
@@ -198,7 +197,7 @@ export default function MasterBooksPage() {
           setTableLoading(false);
         }
       }
-    }, 400);
+    }, delay);
 
     return () => {
       cancelled = true;

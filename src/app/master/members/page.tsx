@@ -113,11 +113,14 @@ export default function MasterMembersPage() {
   }, [router]);
 
   // =====================================================
-  // LOAD MEMBERS
+  // LOAD MEMBERS (Instant saat kosong, Debounce saat mengetik)
   // =====================================================
 
   useEffect(() => {
     let cancelled = false;
+
+    // Jika search kosong, muat langsung (0ms). Jika sedang mengetik, debounce 350ms
+    const delay = search.trim().length === 0 ? 0 : 350;
 
     const timer = window.setTimeout(async () => {
       if (!hasLoadedMembers.current) {
@@ -130,7 +133,7 @@ export default function MasterMembersPage() {
 
       try {
         const result = await masterDataRepository.listMembers({
-          search,
+          search: search.trim(),
           status: statusFilter || undefined,
           page,
           pageSize: PAGE_SIZE,
@@ -163,7 +166,7 @@ export default function MasterMembersPage() {
           setTableLoading(false);
         }
       }
-    }, 400);
+    }, delay);
 
     return () => {
       cancelled = true;

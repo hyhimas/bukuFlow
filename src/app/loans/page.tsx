@@ -5,7 +5,7 @@ import { useRouter } from "next/navigation";
 
 import { getSession } from "@/lib/auth";
 import { canAccessLoans } from "@/lib/authorization";
-import { getTransactions } from "@/lib/mock-api";
+import { listLoansApi } from "@/lib/api";
 
 import type { Loan, TransactionData } from "@/lib/types";
 
@@ -69,7 +69,7 @@ export default function LoansPage() {
       setError("");
 
       try {
-        const result = await getTransactions();
+        const result = await listLoansApi();
 
         const activeLoans = result.filter(
           ({ loan }) => loan.status === "ACTIVE" || loan.status === "OVERDUE",

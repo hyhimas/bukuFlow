@@ -20,6 +20,8 @@ import {
   createLoan,
 } from "@/lib/mock-api";
 
+import { searchMembersApi, searchBooksApi } from "@/lib/api";
+
 import type { Book, BookCopy, Loan, Member } from "@/lib/types";
 import LoadingState from "@/components/ui/LoadingState";
 
@@ -55,6 +57,9 @@ const EMPTY_BOOK_ERRORS: BookFormErrors = {
   totalCopies: "",
 };
 
+const MEMBER_PAGE_SIZE = 5;
+const BOOK_PAGE_SIZE = 5;
+
 export default function NewLoanPage() {
   const router = useRouter();
   const successModalCloseRef = useRef<HTMLButtonElement>(null);
@@ -68,6 +73,7 @@ export default function NewLoanPage() {
 
   const [memberQuery, setMemberQuery] = useState("");
   const [members, setMembers] = useState<Member[]>([]);
+  const [memberPage, setMemberPage] = useState(1);
   const [selectedMember, setSelectedMember] = useState<Member | null>(null);
 
   const [memberLoading, setMemberLoading] = useState(false);
@@ -111,6 +117,7 @@ export default function NewLoanPage() {
 
   const [bookQuery, setBookQuery] = useState("");
   const [books, setBooks] = useState<Book[]>([]);
+  const [bookPage, setBookPage] = useState(1);
 
   const [bookLoading, setBookLoading] = useState(false);
   const [bookError, setBookError] = useState("");
@@ -251,7 +258,7 @@ export default function NewLoanPage() {
   }, [router]);
 
   // =====================================================
-  // SEARCH MEMBER WITH DEBOUNCE
+  // SEARCH MEMBER WITH DEBOUNCE (Instant saat kosong, 350ms saat mengetik)
   // =====================================================
 
   useEffect(() => {
@@ -260,6 +267,7 @@ export default function NewLoanPage() {
     }
 
     let cancelled = false;
+    const delay = memberQuery.trim().length === 0 ? 0 : 350;
 
     const timer = window.setTimeout(() => {
       async function loadMembers() {
@@ -275,20 +283,17 @@ export default function NewLoanPage() {
 
         try {
           const keyword = memberQuery.trim();
-
-          const result = keyword
-            ? await searchMembers(keyword)
-            : (await getMembers()).filter(
-                (member) => member.status === "ACTIVE",
-              );
+          const result = await searchMembersApi(keyword);
 
           if (!cancelled) {
-            setMembers(result);
+            setMembers(result.filter((member) => member.status === "ACTIVE"));
+            setMemberPage(1);
           }
         } catch {
           if (!cancelled) {
             setMemberError("Data anggota gagal dimuat.");
             setMembers([]);
+            setMemberPage(1);
           }
         } finally {
           if (!cancelled) {
@@ -298,7 +303,7 @@ export default function NewLoanPage() {
       }
 
       void loadMembers();
-    }, 400);
+    }, delay);
 
     return () => {
       cancelled = true;
@@ -316,6 +321,7 @@ export default function NewLoanPage() {
     }
 
     let cancelled = false;
+    const delay = bookQuery.trim().length === 0 ? 0 : 350;
 
     const timer = window.setTimeout(() => {
       async function loadBooks() {
@@ -324,18 +330,20 @@ export default function NewLoanPage() {
 
         try {
           const keyword = bookQuery.trim();
-          const result = await searchBooks(keyword);
+          const result = await searchBooksApi(keyword);
           const visibleBooks = keyword
             ? result
             : result.filter((book) => book.status !== "INACTIVE");
 
           if (!cancelled) {
             setBooks(visibleBooks);
+            setBookPage(1);
           }
         } catch {
           if (!cancelled) {
-            setBookError("Pencarian buku gagal.");
+            setBookError("Data buku gagal dimuat.");
             setBooks([]);
+            setBookPage(1);
           }
         } finally {
           if (!cancelled) {
@@ -345,7 +353,7 @@ export default function NewLoanPage() {
       }
 
       void loadBooks();
-    }, 400);
+    }, delay);
 
     return () => {
       cancelled = true;
@@ -365,11 +373,14 @@ export default function NewLoanPage() {
     setSelectedMember(member);
 
     setMembers([]);
+    setMemberPage(1);
     setMemberQuery("");
     setMemberError("");
 
     // Reset pemilihan buku
     setBookQuery("");
+    setBooks([]);
+    setBookPage(1);
     setSelectedBooks([]);
     setBookError("");
     setCopyError("");
@@ -837,10 +848,12 @@ export default function NewLoanPage() {
 
     setMemberQuery("");
     setMembers([]);
+    setMemberPage(1);
     setMemberError("");
 
     setBookQuery("");
     setBooks([]);
+    setBookPage(1);
     setSelectedBooks([]);
 
     setBookError("");
@@ -857,6 +870,7 @@ export default function NewLoanPage() {
   function resetLoanForm() {
     setMemberQuery("");
     setMembers([]);
+    setMemberPage(1);
     setSelectedMember(null);
     setMemberError("");
     setShowMemberForm(false);
@@ -867,6 +881,7 @@ export default function NewLoanPage() {
     setMemberFormErrors(EMPTY_MEMBER_ERRORS);
     setBookQuery("");
     setBooks([]);
+    setBookPage(1);
     setSelectedBooks([]);
     setBookError("");
     setCopyLoadingBookId(null);
@@ -877,6 +892,31 @@ export default function NewLoanPage() {
     setSubmitError("");
     setSuccessLoan(null);
   }
+
+  // =====================================================
+  // PAGINATION CALCULATIONS
+  // =====================================================
+
+  const memberTotalPages = Math.max(
+    1,
+    Math.ceil(members.length / MEMBER_PAGE_SIZE),
+  );
+  const currentMemberPage = Math.min(memberPage, memberTotalPages);
+  const paginatedMembers = members.slice(
+    (currentMemberPage - 1) * MEMBER_PAGE_SIZE,
+    currentMemberPage * MEMBER_PAGE_SIZE,
+  );
+
+  const bookTotalPages = Math.max(
+    1,
+    Math.ceil(books.length / BOOK_PAGE_SIZE),
+  );
+  const currentBookPage = Math.min(bookPage, bookTotalPages);
+  const paginatedBooks = books.slice(
+    (currentBookPage - 1) * BOOK_PAGE_SIZE,
+    currentBookPage * BOOK_PAGE_SIZE,
+  );
+
   if (pageLoading) {
     return (
       <main className="min-h-screen bg-slate-50">
@@ -937,6 +977,7 @@ export default function NewLoanPage() {
                         value={memberQuery}
                         onChange={(event) => {
                           setMemberQuery(event.target.value);
+                          setMemberPage(1);
                           setMemberError("");
                         }}
                         placeholder="Cari nama, nomor anggota, NIK, atau nomor HP..."
@@ -983,11 +1024,19 @@ export default function NewLoanPage() {
 
                   {members.length > 0 && (
                     <div className="mt-5 space-y-3">
-                      <h4 className="text-sm font-semibold text-slate-700">
-                        Hasil pencarian
-                      </h4>
+                      <div className="flex items-center justify-between gap-3">
+                        <h4 className="text-sm font-semibold text-slate-700">
+                          {memberQuery.trim()
+                            ? "Hasil pencarian"
+                            : "Daftar anggota"}
+                        </h4>
 
-                      {members.map((member) => {
+                        <p className="shrink-0 text-xs text-slate-500">
+                          {members.length} anggota
+                        </p>
+                      </div>
+
+                      {paginatedMembers.map((member) => {
                         const inactive = member.status === "INACTIVE";
 
                         return (
@@ -1045,6 +1094,67 @@ export default function NewLoanPage() {
                           </button>
                         );
                       })}
+
+                      {memberTotalPages > 1 && (
+                        <div className="mt-4 flex items-center justify-between border-t border-slate-200 pt-3">
+                          <p className="text-xs text-slate-500">
+                            Halaman {currentMemberPage} dari {memberTotalPages}
+                          </p>
+
+                          <div className="flex items-center gap-1">
+                            <button
+                              type="button"
+                              disabled={currentMemberPage <= 1}
+                              onClick={() =>
+                                setMemberPage((current) =>
+                                  Math.max(1, current - 1),
+                                )
+                              }
+                              className="h-8 rounded-md border border-slate-200 bg-white px-2.5 text-xs font-medium text-slate-700 disabled:cursor-not-allowed disabled:opacity-40"
+                            >
+                              ←
+                            </button>
+
+                            {Array.from(
+                              { length: memberTotalPages },
+                              (_, index) => index + 1,
+                            )
+                              .filter(
+                                (number) =>
+                                  number === 1 ||
+                                  number === memberTotalPages ||
+                                  Math.abs(number - currentMemberPage) <= 1,
+                              )
+                              .map((number) => (
+                                <button
+                                  key={number}
+                                  type="button"
+                                  onClick={() => setMemberPage(number)}
+                                  className={`h-8 min-w-8 rounded-md px-2 text-xs font-semibold ${
+                                    number === currentMemberPage
+                                      ? "bg-blue-600 text-white"
+                                      : "border border-slate-200 bg-white text-slate-700 hover:bg-slate-50"
+                                  }`}
+                                >
+                                  {number}
+                                </button>
+                              ))}
+
+                            <button
+                              type="button"
+                              disabled={currentMemberPage >= memberTotalPages}
+                              onClick={() =>
+                                setMemberPage((current) =>
+                                  Math.min(memberTotalPages, current + 1),
+                                )
+                              }
+                              className="h-8 rounded-md border border-slate-200 bg-white px-2.5 text-xs font-medium text-slate-700 disabled:cursor-not-allowed disabled:opacity-40"
+                            >
+                              →
+                            </button>
+                          </div>
+                        </div>
+                      )}
                     </div>
                   )}
                 </>
@@ -1276,7 +1386,10 @@ export default function NewLoanPage() {
                     id="book-search"
                     label="Cari Buku"
                     value={bookQuery}
-                    onChange={(event) => setBookQuery(event.target.value)}
+                    onChange={(event) => {
+                      setBookQuery(event.target.value);
+                      setBookPage(1);
+                    }}
                     placeholder="Cari judul, kode, atau ISBN..."
                   />
                 </div>
@@ -1287,6 +1400,7 @@ export default function NewLoanPage() {
                     type="button"
                     onClick={() => {
                       setBookQuery("");
+                      setBookPage(1);
                     }}
                     className="mt-3 text-sm font-medium text-blue-600 hover:text-blue-700"
                   >
@@ -1554,11 +1668,17 @@ export default function NewLoanPage() {
 
                 {!bookLoading && books.length > 0 && (
                   <div className="mt-4 space-y-3">
-                    <h4 className="text-sm font-semibold text-slate-700">
-                      {bookQuery.trim() ? "Hasil pencarian" : "Daftar buku"}
-                    </h4>
+                    <div className="flex items-center justify-between gap-3">
+                      <h4 className="text-sm font-semibold text-slate-700">
+                        {bookQuery.trim() ? "Hasil pencarian" : "Daftar buku"}
+                      </h4>
 
-                    {books.map((book) => {
+                      <p className="shrink-0 text-xs text-slate-500">
+                        {books.length} buku
+                      </p>
+                    </div>
+
+                    {paginatedBooks.map((book) => {
                       const archived = book.status === "INACTIVE";
                       const unavailable = archived || book.availableCopies <= 0;
                       const selectedItem = selectedBooks.find(
@@ -1801,6 +1921,67 @@ export default function NewLoanPage() {
                         </div>
                       );
                     })}
+
+                    {bookTotalPages > 1 && (
+                      <div className="mt-4 flex items-center justify-between border-t border-slate-200 pt-3">
+                        <p className="text-xs text-slate-500">
+                          Halaman {currentBookPage} dari {bookTotalPages}
+                        </p>
+
+                        <div className="flex items-center gap-1">
+                          <button
+                            type="button"
+                            disabled={currentBookPage <= 1}
+                            onClick={() =>
+                              setBookPage((current) =>
+                                Math.max(1, current - 1),
+                              )
+                            }
+                            className="h-8 rounded-md border border-slate-200 bg-white px-2.5 text-xs font-medium text-slate-700 disabled:cursor-not-allowed disabled:opacity-40"
+                          >
+                            ←
+                          </button>
+
+                          {Array.from(
+                            { length: bookTotalPages },
+                            (_, index) => index + 1,
+                          )
+                            .filter(
+                              (number) =>
+                                number === 1 ||
+                                number === bookTotalPages ||
+                                Math.abs(number - currentBookPage) <= 1,
+                            )
+                            .map((number) => (
+                              <button
+                                key={number}
+                                type="button"
+                                onClick={() => setBookPage(number)}
+                                className={`h-8 min-w-8 rounded-md px-2 text-xs font-semibold ${
+                                  number === currentBookPage
+                                    ? "bg-blue-600 text-white"
+                                    : "border border-slate-200 bg-white text-slate-700 hover:bg-slate-50"
+                                }`}
+                              >
+                                {number}
+                              </button>
+                            ))}
+
+                          <button
+                            type="button"
+                            disabled={currentBookPage >= bookTotalPages}
+                            onClick={() =>
+                              setBookPage((current) =>
+                                Math.min(bookTotalPages, current + 1),
+                              )
+                            }
+                            className="h-8 rounded-md border border-slate-200 bg-white px-2.5 text-xs font-medium text-slate-700 disabled:cursor-not-allowed disabled:opacity-40"
+                          >
+                            →
+                          </button>
+                        </div>
+                      </div>
+                    )}
                   </div>
                 )}
               </Card>
