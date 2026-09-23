@@ -27,7 +27,7 @@ import type { Loan, TransactionData } from "@/lib/types";
 
 type TransactionStatus = "ACTIVE" | "OVERDUE" | "COMPLETED";
 
-const PAGE_SIZE = 5;
+const PAGE_SIZE = 10;
 
 const STATUS_OPTIONS: {
   value: TransactionStatus | "";

@@ -30,7 +30,7 @@ const EMPTY_MEMBER_ERRORS: MemberFormErrors = {
   email: "",
 };
 
-const PAGE_SIZE = 8;
+const PAGE_SIZE = 10;
 
 export default function MasterMembersPage() {
   const router = useRouter();

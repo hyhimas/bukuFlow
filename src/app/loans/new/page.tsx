@@ -57,8 +57,8 @@ const EMPTY_BOOK_ERRORS: BookFormErrors = {
   totalCopies: "",
 };
 
-const MEMBER_PAGE_SIZE = 5;
-const BOOK_PAGE_SIZE = 5;
+const MEMBER_PAGE_SIZE = 10;
+const BOOK_PAGE_SIZE = 10;
 
 export default function NewLoanPage() {
   const router = useRouter();

@@ -18,7 +18,7 @@ import LoadingState from "@/components/ui/LoadingState";
 import type { ReturnLoanData, Loan } from "@/lib/types";
 import { getActiveReturnsApi, returnLoanItemsApi } from "@/lib/api";
 
-const PAGE_SIZE = 5;
+const PAGE_SIZE = 10;
 
 export default function ReturnsPage() {
   const router = useRouter();

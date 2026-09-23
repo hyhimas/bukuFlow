@@ -35,7 +35,7 @@ const EMPTY_BOOK_ERRORS: BookFormErrors = {
   totalCopies: "",
 };
 
-const PAGE_SIZE = 8;
+const PAGE_SIZE = 10;
 
 export default function MasterBooksPage() {
   const router = useRouter();

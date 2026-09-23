@@ -186,21 +186,27 @@ function parseBookStatus(
 export async function searchBooksApi(keyword: string = ""): Promise<Book[]> {
   try {
     const cleanQuery = keyword.trim();
-    const queryParam = cleanQuery.length > 0 ? cleanQuery : " ";
 
-    const response = await api
-      .get("/catalog/books/search", {
-        params: {
-          q: queryParam,
-        },
-      })
-      .catch(() =>
-        api.get("/books/search", {
-          params: {
-            q: queryParam,
-          },
-        })
-      );
+    let response;
+    if (cleanQuery.length === 0) {
+      // Saat awal buka halaman (query kosong), gunakan endpoint List Books
+      response = await api
+        .get("/catalog/books")
+        .catch(() => api.get("/office/catalog/books"))
+        .catch(() =>
+          api.get("/catalog/books/search", { params: { q: " " } })
+        );
+    } else {
+      // Saat user mencari kata kunci tertentu, gunakan endpoint Search Books
+      response = await api
+        .get("/catalog/books/search", { params: { q: cleanQuery } })
+        .catch(() =>
+          api.get("/office/catalog/books/search", { params: { q: cleanQuery } })
+        )
+        .catch(() =>
+          api.get("/books/search", { params: { q: cleanQuery } })
+        );
+    }
 
     const items = response.data?.items || response.data || [];
 
@@ -211,7 +217,7 @@ export async function searchBooksApi(keyword: string = ""): Promise<Book[]> {
       );
 
       return {
-        id: item.id || `book-${Math.random().toString(36).slice(2)}`,
+        id: item.id || item._id || `book-${Math.random().toString(36).slice(2)}`,
         companyId: item.company_id || item.companyId || "company-001",
         code: item.code || "-",
         isbn: item.isbn || undefined,
@@ -219,7 +225,10 @@ export async function searchBooksApi(keyword: string = ""): Promise<Book[]> {
         author: item.author || "-",
         publisher: item.publisher || "-",
         publicationYear:
-          item.publication_year || item.publicationYear || undefined,
+          item.published_year ||
+          item.publication_year ||
+          item.publicationYear ||
+          undefined,
         category: item.category || "-",
         coverUrl: item.cover_url || item.coverUrl || undefined,
         status: parseBookStatus(item.status, totalCopies, availableCopies),

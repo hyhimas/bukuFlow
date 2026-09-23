@@ -17,7 +17,7 @@ import FeedbackPanel from "@/components/ui/FeedbackPanel";
 import Input from "@/components/ui/Input";
 import LoadingState from "@/components/ui/LoadingState";
 
-const PAGE_SIZE = 5;
+const PAGE_SIZE = 10;
 
 export default function LoansPage() {
   const router = useRouter();
