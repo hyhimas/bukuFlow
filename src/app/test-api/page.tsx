@@ -1,13 +1,58 @@
 "use client";
 
 import { useState } from "react";
-import { api, loginApi, getMeApi, logoutApi, searchMembersApi } from "@/lib/api";
+import {
+  api,
+  loginApi,
+  getMeApi,
+  logoutApi,
+  searchMembersApi,
+  listLoansApi,
+  getActiveReturnsApi,
+} from "@/lib/api";
 import { getToken, getSession, setSession } from "@/lib/auth";
 
 export default function TestApiPage() {
   // 1. State Health Check
   const [healthResult, setHealthResult] = useState<any>(null);
   const [healthLoading, setHealthLoading] = useState(false);
+
+  // Loans & Returns State
+  const [loansResult, setLoansResult] = useState<any>(null);
+  const [loansLoading, setLoansLoading] = useState(false);
+  const [loansError, setLoansError] = useState("");
+
+  const [returnsResult, setReturnsResult] = useState<any>(null);
+  const [returnsLoading, setReturnsLoading] = useState(false);
+  const [returnsError, setReturnsError] = useState("");
+
+  async function handleGetLoans() {
+    setLoansLoading(true);
+    setLoansError("");
+    setLoansResult(null);
+    try {
+      const data = await listLoansApi();
+      setLoansResult(data);
+    } catch (err: any) {
+      setLoansError(JSON.stringify(err.response?.data || err.message, null, 2));
+    } finally {
+      setLoansLoading(false);
+    }
+  }
+
+  async function handleGetActiveReturns() {
+    setReturnsLoading(true);
+    setReturnsError("");
+    setReturnsResult(null);
+    try {
+      const data = await getActiveReturnsApi();
+      setReturnsResult(data);
+    } catch (err: any) {
+      setReturnsError(JSON.stringify(err.response?.data || err.message, null, 2));
+    } finally {
+      setReturnsLoading(false);
+    }
+  }
 
   // 2. State Login Test
   const [email, setEmail] = useState("admin@bukuflow.com");
@@ -253,9 +298,46 @@ async function handleSearchMember(e: React.FormEvent) {
           </button>
         </div>
       </section>
-    </div>
+      {/* 7. GET LOANS */}
+      <section style={{ marginTop: "25px", borderTop: "1px solid #e2e8f0", paddingTop: "15px" }}>
+        <h3>7. GET /bukuflow/loans (List Loans) 🔒</h3>
+        <p style={{ fontSize: "14px", color: "#64748b" }}>
+          Mengambil daftar seluruh transaksi peminjaman buku dari backend.
+        </p>
+        <button onClick={handleGetLoans} disabled={loansLoading} style={btnStyle("#059669")}>
+          {loansLoading ? "Mengambil Data Loans..." : "Test GET Loans"}
+        </button>
+        {loansError && <pre style={{ ...codeStyle, backgroundColor: "#fee2e2", color: "#dc2626" }}>{loansError}</pre>}
+        {loansResult && (
+          <div>
+            <strong>Hasil Data Loans:</strong>
+            <pre style={{ ...codeStyle, backgroundColor: "#f0fdf4", color: "#166534" }}>
+              {JSON.stringify(loansResult, null, 2)}
+            </pre>
+          </div>
+        )}
+      </section>
 
-    
+      {/* 8. GET ACTIVE RETURNS */}
+      <section style={{ marginTop: "25px", borderTop: "1px solid #e2e8f0", paddingTop: "15px" }}>
+        <h3>8. GET /bukuflow/returns/active (Active Returns) 🔒</h3>
+        <p style={{ fontSize: "14px", color: "#64748b" }}>
+          Mengambil daftar peminjaman aktif yang siap untuk dikembalikan.
+        </p>
+        <button onClick={handleGetActiveReturns} disabled={returnsLoading} style={btnStyle("#d97706")}>
+          {returnsLoading ? "Mengambil Data Returns..." : "Test GET Active Returns"}
+        </button>
+        {returnsError && <pre style={{ ...codeStyle, backgroundColor: "#fee2e2", color: "#dc2626" }}>{returnsError}</pre>}
+        {returnsResult && (
+          <div>
+            <strong>Hasil Data Active Returns:</strong>
+            <pre style={{ ...codeStyle, backgroundColor: "#fffbeb", color: "#92400e" }}>
+              {JSON.stringify(returnsResult, null, 2)}
+            </pre>
+          </div>
+        )}
+      </section>
+    </div>
   );
 }
 

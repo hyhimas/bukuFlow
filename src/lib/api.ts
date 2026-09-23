@@ -518,15 +518,19 @@ function mapRawToTransactionData(raw: any): TransactionData {
 export async function listLoansApi(): Promise<TransactionData[]> {
   try {
     const response = await api
-      .get("/loans")
-      .catch(() => api.get("/bukuflow/loans"));
+      .get("/loan")
+      .catch(() => api.get("/office/loan"))
+      .catch(() => api.get("/loans"));
 
     const items = response.data?.items || response.data || [];
     if (Array.isArray(items) && items.length > 0) {
       return items.map(mapRawToTransactionData);
     }
     return [];
-  } catch {
+  } catch (error: any) {
+    if (error.response?.status === 404) {
+      return [];
+    }
     // Fallback ke mock jika backend belum tersedia
     const { getTransactions } = await import("./mock-api");
     return getTransactions();
@@ -536,27 +540,21 @@ export async function listLoansApi(): Promise<TransactionData[]> {
 export async function getActiveReturnsApi(): Promise<ReturnLoanData[]> {
   try {
     const response = await api
-      .get("/returns/active")
-      .catch(() => api.get("/bukuflow/returns/active"))
-      .catch(() => api.get("/loans/active"))
-      .catch(() => api.get("/bukuflow/loans/active"));
+      .get("/loan/returns/active")
+      .catch(() => api.get("/office/loan/returns/active"))
+      .catch(() => api.get("/returns/active"));
 
     const items = response.data?.items || response.data || [];
     if (Array.isArray(items) && items.length > 0) {
       return items.map(mapRawToTransactionData);
     }
 
-    // Jika endpoint active returns belum ada, coba filter dari listLoansApi
-    const allLoans = await listLoansApi();
-    const activeLoans = allLoans.filter(
-      (item) =>
-        item.loan.status === "ACTIVE" || item.loan.status === "OVERDUE"
-    );
-    if (activeLoans.length > 0) {
-      return activeLoans;
-    }
+    // Jika endpoint active returns kosong di backend, return []
     return [];
-  } catch {
+  } catch (error: any) {
+    if (error.response?.status === 404) {
+      return [];
+    }
     // Fallback ke mock jika backend belum tersedia
     const { getReturnLoans } = await import("./mock-api");
     return getReturnLoans();
@@ -574,7 +572,8 @@ export async function returnLoanItemsApi(
     };
 
     const response = await api
-      .post(`/returns/${loanId}`, payload)
+      .post(`/loan/returns/${loanId}`, payload)
+      .catch(() => api.post(`/returns/${loanId}`, payload))
       .catch(() =>
         api.post("/returns", {
           loan_id: loanId,
