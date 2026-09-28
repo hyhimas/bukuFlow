@@ -13,6 +13,7 @@ import {
   getBooksApi,
   getBookCopiesApi,
   searchBooksApi,
+  getOfficeDashboardApi,
 } from "@/lib/api";
 import { getToken, getSession, setSession } from "@/lib/auth";
 
@@ -79,6 +80,25 @@ export default function TestApiPage() {
       setLoansError(JSON.stringify(err.response?.data || err.message, null, 2));
     } finally {
       setLoansLoading(false);
+    }
+  }
+
+  // Raw Direct Loans Diagnostic State
+  const [rawLoansData, setRawLoansData] = useState<any>(null);
+  const [rawLoansLoading, setRawLoansLoading] = useState(false);
+  const [rawLoansError, setRawLoansError] = useState("");
+
+  async function handleGetRawLoans() {
+    setRawLoansLoading(true);
+    setRawLoansError("");
+    setRawLoansData(null);
+    try {
+      const res = await api.get("/loan").catch(() => api.get("/loans"));
+      setRawLoansData(res.data);
+    } catch (err: any) {
+      setRawLoansError(JSON.stringify(err.response?.data || err.message, null, 2));
+    } finally {
+      setRawLoansLoading(false);
     }
   }
 
@@ -329,6 +349,61 @@ export default function TestApiPage() {
     }
   }
 
+  // 16. Office Dashboard State & Handlers
+  const [officeDashCompanyId, setOfficeDashCompanyId] = useState("company-001");
+  const [officeDashResult, setOfficeDashResult] = useState<any>(null);
+  const [officeDashLoading, setOfficeDashLoading] = useState(false);
+  const [officeDashError, setOfficeDashError] = useState("");
+
+  const [officeDashRawResult, setOfficeDashRawResult] = useState<any>(null);
+  const [officeDashRawLoading, setOfficeDashRawLoading] = useState(false);
+  const [officeDashRawError, setOfficeDashRawError] = useState("");
+
+  async function handleGetOfficeDashboard() {
+    setOfficeDashLoading(true);
+    setOfficeDashError("");
+    setOfficeDashResult(null);
+    try {
+      const data = await getOfficeDashboardApi(officeDashCompanyId);
+      setOfficeDashResult(data);
+    } catch (err: any) {
+      setOfficeDashError(JSON.stringify(err.response?.data || err.message, null, 2));
+    } finally {
+      setOfficeDashLoading(false);
+    }
+  }
+
+  async function handleGetOfficeDashboardRaw() {
+    setOfficeDashRawLoading(true);
+    setOfficeDashRawError("");
+    setOfficeDashRawResult(null);
+    try {
+      const res = await api.get("/office/dashboard", {
+        params: { company_id: officeDashCompanyId },
+      });
+      setOfficeDashRawResult({
+        status: res.status,
+        statusText: res.statusText,
+        headers: res.headers,
+        data: res.data,
+      });
+    } catch (err: any) {
+      setOfficeDashRawError(
+        JSON.stringify(
+          {
+            status: err.response?.status,
+            statusText: err.response?.statusText,
+            data: err.response?.data || err.message,
+          },
+          null,
+          2
+        )
+      );
+    } finally {
+      setOfficeDashRawLoading(false);
+    }
+  }
+
   // 2. State Login Test
   const [email, setEmail] = useState("admin@bukuflow.com");
   const [password, setPassword] = useState("Admin12345!");
@@ -573,20 +648,180 @@ async function handleSearchMember(e: React.FormEvent) {
           </button>
         </div>
       </section>
-      {/* 7. GET LOANS */}
+      {/* 7. GET LOANS (RAW BE INSPECTION & DIAGNOSTIK) */}
       <section style={{ marginTop: "25px", borderTop: "1px solid #e2e8f0", paddingTop: "15px" }}>
-        <h3>7. GET /bukuflow/loans (List Loans) 🔒</h3>
+        <h3>7. GET /bukuflow/loan (Uji Raw Payload & Diagnostik Detail Buku / Petugas) 🔒</h3>
         <p style={{ fontSize: "14px", color: "#64748b" }}>
-          Mengambil daftar seluruh transaksi peminjaman buku dari backend.
+          Menguji langsung respon asli dari Backend untuk memverifikasi kelengkapan data judul buku, kode copy, dan nama petugas.
         </p>
-        <button onClick={handleGetLoans} disabled={loansLoading} style={btnStyle("#059669")}>
-          {loansLoading ? "Mengambil Data Loans..." : "Test GET Loans"}
-        </button>
+
+        {/* KOTAK CATATAN STATUS INTEGRASI */}
+        <div
+          style={{
+            marginTop: "12px",
+            marginBottom: "16px",
+            backgroundColor: "#fffbeb",
+            border: "1px solid #fde68a",
+            borderRadius: "8px",
+            padding: "14px 16px",
+            fontSize: "13px",
+            color: "#92400e",
+            lineHeight: "1.6",
+          }}
+        >
+          <div style={{ fontWeight: "bold", fontSize: "14px", marginBottom: "6px", display: "flex", alignItems: "center", gap: "6px" }}>
+            <span>⚠️</span> Catatan Analisis Integrasi Frontend & Backend:
+          </div>
+          <p style={{ margin: "0 0 6px 0" }}>
+            📌 <strong>Riwayat Peminjaman & Pengembalian:</strong> Saat ini Frontend belum mendapatkan informasi seperti <em>judul buku</em>, <em>kode buku</em>, dan <em>kode copy</em> secara langsung dari endpoint ini. Data yang diterima dari Backend masih berupa ID mentah (<code style={{ backgroundColor: "#fef3c7", padding: "2px 5px", borderRadius: "4px" }}>copy_ids: [&quot;...&quot;]</code>), sehingga Frontend belum bisa menampilkan detail buku dengan benar tanpa adanya join/populate.
+          </p>
+          <p style={{ margin: 0 }}>
+            📌 <strong>Nama Petugas:</strong> Di halaman riwayat transaksi, nama petugas juga belum bisa ditampilkan karena data nama petugas (<code style={{ backgroundColor: "#fef3c7", padding: "2px 5px", borderRadius: "4px" }}>user.name</code> / <code style={{ backgroundColor: "#fef3c7", padding: "2px 5px", borderRadius: "4px" }}>staff_name</code>) belum ikut dikirim dari Backend (hanya ID peminjam/staf).
+          </p>
+        </div>
+
+        <div style={{ display: "flex", flexWrap: "wrap", gap: "10px", marginBottom: "15px" }}>
+          <button onClick={handleGetRawLoans} disabled={rawLoansLoading} style={btnStyle("#2563eb")}>
+            {rawLoansLoading ? "Mengambil Raw Backend..." : "🔍 Uji RAW Response GET /loan (Murni dari Backend)"}
+          </button>
+
+          <button onClick={handleGetLoans} disabled={loansLoading} style={btnStyle("#059669")}>
+            {loansLoading ? "Mengambil Data..." : "🧪 Uji listLoansApi (Dengan Map FE)"}
+          </button>
+        </div>
+
+        {rawLoansError && (
+          <div>
+            <strong style={{ color: "#dc2626" }}>Error RAW Response:</strong>
+            <pre style={{ ...codeStyle, backgroundColor: "#fee2e2", color: "#dc2626" }}>{rawLoansError}</pre>
+          </div>
+        )}
+
+        {rawLoansData && (
+          <div style={{ marginTop: "15px" }}>
+            {/* TABEL DIAGNOSTIK FIELD OTOMATIS */}
+            {(() => {
+              const items = Array.isArray(rawLoansData)
+                ? rawLoansData
+                : Array.isArray(rawLoansData?.items)
+                ? rawLoansData.items
+                : Array.isArray(rawLoansData?.data)
+                ? rawLoansData.data
+                : [];
+              const sample = items[0] || {};
+              const hasBookTitle = Boolean(
+                sample.book_title ||
+                sample.title ||
+                sample.book?.title ||
+                (sample.items && sample.items.some((i: any) => i.book_title || i.title || i.book?.title))
+              );
+              const hasBookCode = Boolean(
+                sample.book_code ||
+                sample.code ||
+                sample.book?.code ||
+                (sample.items && sample.items.some((i: any) => i.book_code || i.code || i.book?.code))
+              );
+              const hasCopyCode = Boolean(
+                sample.copy_code ||
+                sample.copyCode ||
+                (sample.items && sample.items.some((i: any) => i.copy_code || i.copyCode))
+              );
+              const hasStaffName = Boolean(
+                sample.user_name ||
+                sample.userName ||
+                sample.staff_name ||
+                sample.user?.name ||
+                sample.staff?.name
+              );
+              const hasMemberName = Boolean(
+                sample.member_name ||
+                sample.memberName ||
+                sample.member?.name
+              );
+
+              return (
+                <div
+                  style={{
+                    backgroundColor: "#f8fafc",
+                    border: "1px solid #cbd5e1",
+                    borderRadius: "8px",
+                    padding: "12px 16px",
+                    marginBottom: "12px",
+                  }}
+                >
+                  <div style={{ fontWeight: "bold", fontSize: "14px", color: "#1e293b", marginBottom: "10px" }}>
+                    📊 Hasil Verifikasi Field dari Data Backend (Total {items.length} transaksi ditemukan):
+                  </div>
+                  <table style={{ width: "100%", fontSize: "13px", borderCollapse: "collapse" }}>
+                    <tbody>
+                      <tr style={{ borderBottom: "1px solid #e2e8f0" }}>
+                        <td style={{ padding: "6px 8px", fontWeight: "bold", width: "220px" }}>📖 Judul Buku (title):</td>
+                        <td style={{ padding: "6px 8px" }}>
+                          {hasBookTitle ? (
+                            <span style={{ color: "#166534", fontWeight: "bold" }}>✅ ADA (Dikirim oleh BE)</span>
+                          ) : (
+                            <span style={{ color: "#dc2626", fontWeight: "bold" }}>❌ BELUM ADA (Hanya copy_ids mentah)</span>
+                          )}
+                        </td>
+                      </tr>
+                      <tr style={{ borderBottom: "1px solid #e2e8f0" }}>
+                        <td style={{ padding: "6px 8px", fontWeight: "bold" }}>🏷️ Kode Buku (book_code):</td>
+                        <td style={{ padding: "6px 8px" }}>
+                          {hasBookCode ? (
+                            <span style={{ color: "#166534", fontWeight: "bold" }}>✅ ADA (Dikirim oleh BE)</span>
+                          ) : (
+                            <span style={{ color: "#dc2626", fontWeight: "bold" }}>❌ BELUM ADA</span>
+                          )}
+                        </td>
+                      </tr>
+                      <tr style={{ borderBottom: "1px solid #e2e8f0" }}>
+                        <td style={{ padding: "6px 8px", fontWeight: "bold" }}>🔖 Kode Copy Fisik (copy_code):</td>
+                        <td style={{ padding: "6px 8px" }}>
+                          {hasCopyCode ? (
+                            <span style={{ color: "#166534", fontWeight: "bold" }}>✅ ADA (Dikirim oleh BE)</span>
+                          ) : (
+                            <span style={{ color: "#dc2626", fontWeight: "bold" }}>❌ BELUM ADA (Hanya ID ObjectId)</span>
+                          )}
+                        </td>
+                      </tr>
+                      <tr style={{ borderBottom: "1px solid #e2e8f0" }}>
+                        <td style={{ padding: "6px 8px", fontWeight: "bold" }}>👤 Nama Petugas (staff/user.name):</td>
+                        <td style={{ padding: "6px 8px" }}>
+                          {hasStaffName ? (
+                            <span style={{ color: "#166534", fontWeight: "bold" }}>✅ ADA (Dikirim oleh BE)</span>
+                          ) : (
+                            <span style={{ color: "#dc2626", fontWeight: "bold" }}>❌ BELUM ADA (Hanya ID borrowed_by)</span>
+                          )}
+                        </td>
+                      </tr>
+                      <tr>
+                        <td style={{ padding: "6px 8px", fontWeight: "bold" }}>👥 Nama Anggota (member.name):</td>
+                        <td style={{ padding: "6px 8px" }}>
+                          {hasMemberName ? (
+                            <span style={{ color: "#166534", fontWeight: "bold" }}>✅ ADA (Dikirim oleh BE)</span>
+                          ) : (
+                            <span style={{ color: "#f59e0b", fontWeight: "bold" }}>⚠️ Hanya member_id (Di-lookup di FE)</span>
+                          )}
+                        </td>
+                      </tr>
+                    </tbody>
+                  </table>
+                </div>
+              );
+            })()}
+
+            <strong>Payload JSON Mentah Asli dari Backend:</strong>
+            <pre style={{ ...codeStyle, backgroundColor: "#eff6ff", color: "#1e40af", maxHeight: "350px" }}>
+              {JSON.stringify(rawLoansData, null, 2)}
+            </pre>
+          </div>
+        )}
+
         {loansError && <pre style={{ ...codeStyle, backgroundColor: "#fee2e2", color: "#dc2626" }}>{loansError}</pre>}
         {loansResult && (
-          <div>
-            <strong>Hasil Data Loans:</strong>
-            <pre style={{ ...codeStyle, backgroundColor: "#f0fdf4", color: "#166534" }}>
+          <div style={{ marginTop: "10px" }}>
+            <strong>Hasil Setelah Dimapping Frontend (listLoansApi):</strong>
+            <pre style={{ ...codeStyle, backgroundColor: "#f0fdf4", color: "#166534", maxHeight: "300px" }}>
               {JSON.stringify(loansResult, null, 2)}
             </pre>
           </div>
@@ -1276,6 +1511,155 @@ async function handleSearchMember(e: React.FormEvent) {
             <strong style={{ color: "#166534" }}>Sukses Hapus Member (Status: {deleteMemberResult.status}):</strong>
             <pre style={{ ...codeStyle, backgroundColor: "#f0fdf4", color: "#166534" }}>
               {JSON.stringify(deleteMemberResult, null, 2)}
+            </pre>
+          </div>
+        )}
+      </section>
+
+      {/* 16. GET OFFICE DASHBOARD (MULTI-TENANT) */}
+      <section style={{ border: "2px solid #0284c7", padding: "16px", borderRadius: "8px", backgroundColor: "#f0f9ff" }}>
+        <h3 style={{ color: "#0369a1", marginTop: 0 }}>
+          16. GET /office/dashboard (Multi-Tenant Office Dashboard Analytics) 🏢
+        </h3>
+        <p style={{ fontSize: "13px", color: "#475569", marginTop: "-4px" }}>
+          Mengambil data analitik dan statistik ringkasan per tenant / company (Total Buku, Stok Tersedia, Buku Dipinjam, Peminjaman Aktif, Jatuh Tempo, Total Anggota, dan Total Petugas).
+        </p>
+
+        <div style={{ marginBottom: "12px" }}>
+          <label style={{ display: "block", fontSize: "12px", fontWeight: "bold", marginBottom: "6px", color: "#0f172a" }}>
+            Pilih Cepat Company / Tenant:
+          </label>
+          <div style={{ display: "flex", gap: "8px", flexWrap: "wrap", marginBottom: "10px" }}>
+            {[
+              { id: "6ab348a67dfa3261ea67d2ed", name: "⭐ Demo Real Backend (6ab348a67dfa3261ea67d2ed)", code: "DEMO-BE" },
+              { id: "company-001", name: "SMA Negeri 1 Jakarta", code: "SMAN1-JKT" },
+              { id: "company-002", name: "SMP Negeri 2 Bandung", code: "SMPN2-BDG" },
+              { id: "company-003", name: "Institut Teknologi Nusantara", code: "ITN-SBY" },
+            ].map((c) => (
+              <button
+                key={c.id}
+                type="button"
+                onClick={() => setOfficeDashCompanyId(c.id)}
+                style={{
+                  padding: "6px 12px",
+                  borderRadius: "6px",
+                  fontSize: "12px",
+                  fontWeight: officeDashCompanyId === c.id ? "bold" : "normal",
+                  backgroundColor: officeDashCompanyId === c.id ? "#0284c7" : "#e0f2fe",
+                  color: officeDashCompanyId === c.id ? "#ffffff" : "#0369a1",
+                  border: officeDashCompanyId === c.id ? "1px solid #0284c7" : "1px solid #bae6fd",
+                  cursor: "pointer",
+                }}
+              >
+                {c.name} ({c.id})
+              </button>
+            ))}
+          </div>
+
+          <div style={{ display: "flex", gap: "8px", alignItems: "center" }}>
+            <label style={{ fontSize: "12px", fontWeight: "bold", color: "#334155" }}>Company ID:</label>
+            <input
+              type="text"
+              value={officeDashCompanyId}
+              onChange={(e) => setOfficeDashCompanyId(e.target.value)}
+              placeholder="company-001"
+              style={{
+                padding: "6px 10px",
+                borderRadius: "4px",
+                border: "1px solid #cbd5e1",
+                fontSize: "13px",
+                width: "220px",
+                fontFamily: "monospace",
+              }}
+            />
+          </div>
+        </div>
+
+        <div style={{ display: "flex", gap: "10px", marginTop: "12px", flexWrap: "wrap" }}>
+          <button
+            type="button"
+            onClick={handleGetOfficeDashboard}
+            disabled={officeDashLoading}
+            style={btnStyle("#0284c7")}
+          >
+            {officeDashLoading ? "Memuat Dashboard..." : "🚀 Test via Helper (getOfficeDashboardApi)"}
+          </button>
+          <button
+            type="button"
+            onClick={handleGetOfficeDashboardRaw}
+            disabled={officeDashRawLoading}
+            style={btnStyle("#0f766e")}
+          >
+            {officeDashRawLoading ? "Mengirim HTTP GET..." : "🔍 Test Raw GET /office/dashboard"}
+          </button>
+        </div>
+
+        {/* HELPER RESULT */}
+        {officeDashError && (
+          <div style={{ marginTop: "12px" }}>
+            <strong style={{ color: "#dc2626" }}>Helper Error / Respon Gagal:</strong>
+            <pre style={{ ...codeStyle, backgroundColor: "#fee2e2", color: "#dc2626" }}>{officeDashError}</pre>
+          </div>
+        )}
+        {officeDashResult && (
+          <div style={{ marginTop: "14px" }}>
+            <strong style={{ color: "#0369a1" }}>Respon getOfficeDashboardApi() Sukses:</strong>
+            <div
+              style={{
+                display: "grid",
+                gridTemplateColumns: "repeat(auto-fit, minmax(130px, 1fr))",
+                gap: "8px",
+                marginTop: "8px",
+                marginBottom: "8px",
+              }}
+            >
+              <div style={{ backgroundColor: "#ffffff", padding: "8px 12px", borderRadius: "6px", border: "1px solid #e2e8f0" }}>
+                <div style={{ fontSize: "11px", color: "#64748b" }}>Nama Tenant</div>
+                <div style={{ fontSize: "13px", fontWeight: "bold", color: "#0f172a" }}>{officeDashResult.companyName}</div>
+              </div>
+              <div style={{ backgroundColor: "#ffffff", padding: "8px 12px", borderRadius: "6px", border: "1px solid #e2e8f0" }}>
+                <div style={{ fontSize: "11px", color: "#64748b" }}>Total Anggota</div>
+                <div style={{ fontSize: "16px", fontWeight: "bold", color: "#2563eb" }}>{officeDashResult.totalMembers}</div>
+              </div>
+              <div style={{ backgroundColor: "#ffffff", padding: "8px 12px", borderRadius: "6px", border: "1px solid #e2e8f0" }}>
+                <div style={{ fontSize: "11px", color: "#64748b" }}>Total Judul Buku</div>
+                <div style={{ fontSize: "16px", fontWeight: "bold", color: "#059669" }}>{officeDashResult.totalBooks}</div>
+              </div>
+              <div style={{ backgroundColor: "#ffffff", padding: "8px 12px", borderRadius: "6px", border: "1px solid #e2e8f0" }}>
+                <div style={{ fontSize: "11px", color: "#64748b" }}>Buku Tersedia</div>
+                <div style={{ fontSize: "16px", fontWeight: "bold", color: "#16a34a" }}>{officeDashResult.booksAvailable}</div>
+              </div>
+              <div style={{ backgroundColor: "#ffffff", padding: "8px 12px", borderRadius: "6px", border: "1px solid #e2e8f0" }}>
+                <div style={{ fontSize: "11px", color: "#64748b" }}>Buku Dipinjam</div>
+                <div style={{ fontSize: "16px", fontWeight: "bold", color: "#d97706" }}>{officeDashResult.booksBorrowed}</div>
+              </div>
+              <div style={{ backgroundColor: "#ffffff", padding: "8px 12px", borderRadius: "6px", border: "1px solid #e2e8f0" }}>
+                <div style={{ fontSize: "11px", color: "#64748b" }}>Pinjaman Aktif</div>
+                <div style={{ fontSize: "16px", fontWeight: "bold", color: "#7c3aed" }}>{officeDashResult.activeLoans}</div>
+              </div>
+              <div style={{ backgroundColor: "#ffffff", padding: "8px 12px", borderRadius: "6px", border: "1px solid #e2e8f0" }}>
+                <div style={{ fontSize: "11px", color: "#64748b" }}>Jatuh Tempo</div>
+                <div style={{ fontSize: "16px", fontWeight: "bold", color: "#dc2626" }}>{officeDashResult.overdueLoans}</div>
+              </div>
+            </div>
+            <pre style={{ ...codeStyle, backgroundColor: "#f8fafc", color: "#334155" }}>
+              {JSON.stringify(officeDashResult, null, 2)}
+            </pre>
+          </div>
+        )}
+
+        {/* RAW HTTP RESULT */}
+        {officeDashRawError && (
+          <div style={{ marginTop: "12px" }}>
+            <strong style={{ color: "#dc2626" }}>Raw HTTP GET Error:</strong>
+            <pre style={{ ...codeStyle, backgroundColor: "#fee2e2", color: "#dc2626" }}>{officeDashRawError}</pre>
+          </div>
+        )}
+        {officeDashRawResult && (
+          <div style={{ marginTop: "14px" }}>
+            <strong style={{ color: "#0f766e" }}>Raw HTTP Response (Status: {officeDashRawResult.status} {officeDashRawResult.statusText}):</strong>
+            <pre style={{ ...codeStyle, backgroundColor: "#f0fdfa", color: "#134e4a" }}>
+              {JSON.stringify(officeDashRawResult, null, 2)}
             </pre>
           </div>
         )}

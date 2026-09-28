@@ -935,7 +935,7 @@ export default function NewLoanPage() {
         ================================================= */}
 
         <div
-          className={`${successLoan ? "pointer-events-none opacity-60" : ""} grid gap-5 lg:grid-cols-[minmax(0,1.55fr)_minmax(360px,0.85fr)]`}
+          className={`${successLoan ? "pointer-events-none opacity-60" : ""} grid gap-5 lg:grid-cols-[minmax(0,1.55fr)_minmax(360px,0.85fr)] lg:items-start`}
         >
           <div className="min-w-0">
             <Card className="p-4 sm:p-5">
@@ -1889,7 +1889,7 @@ export default function NewLoanPage() {
             )}
           </div>
 
-          <div className="min-w-0 lg:sticky lg:top-5 lg:self-start">
+          <div className="min-w-0 lg:sticky lg:top-6 lg:self-start space-y-5">
             <Card className="p-4 sm:p-5">
               <h3 className="text-base font-semibold text-slate-900">
                 Informasi Peminjaman

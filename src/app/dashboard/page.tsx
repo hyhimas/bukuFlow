@@ -334,6 +334,11 @@ export default function DashboardPage() {
         return;
       }
 
+      if (session.user.role === "SUPER_ADMIN") {
+        router.replace("/office/dashboard");
+        return;
+      }
+
       setRole(session.user.role);
       setName(session.user.name);
 

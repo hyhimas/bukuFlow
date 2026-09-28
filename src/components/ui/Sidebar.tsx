@@ -5,8 +5,8 @@ import { usePathname, useRouter } from "next/navigation";
 import { useEffect, useRef, useState } from "react";
 import { mockCompanies } from "@/lib/mock-data";
 import { clearSession, getSession, type Session } from "@/lib/auth";
-import { canAccessMasterData } from "@/lib/authorization";
-import {logoutApi} from "@/lib/api"
+import { canAccessMasterData, canAccessOffice } from "@/lib/authorization";
+import { logoutApi } from "@/lib/api";
 
 interface SidebarProps {
   open: boolean;
@@ -106,7 +106,7 @@ export default function Sidebar({
         {/* Header */}
         <div className="flex h-16 shrink-0 items-center justify-between border-b border-slate-200 px-5">
           <Link
-            href="/dashboard"
+            href={canAccessOffice(role) ? "/office/dashboard" : "/dashboard"}
             onClick={onClose}
             tabIndex={open ? 0 : -1}
             className="flex items-center gap-2"
@@ -131,82 +131,181 @@ export default function Sidebar({
 
         {/* Navigation */}
         <nav className="min-h-0 flex-1 overflow-y-auto overflow-x-hidden px-3 py-5">
-          <div className="space-y-1">
-            <NavItem
-              href="/dashboard"
-              label="Dashboard"
-              active={isActive("/dashboard")}
-              onClick={onClose}
-              disabled={!open}
-            />
+          {canAccessOffice(role) ? (
+            /* SUPER ADMIN OFFICE PORTAL */
+            <div className="space-y-6">
+              <div>
+                <p className="px-3 pb-2 text-xs font-semibold uppercase tracking-wider text-blue-600">
+                  Office Platform
+                </p>
+                <div className="space-y-1">
+                  <NavItem
+                    href="/office/dashboard"
+                    label="Dashboard Office"
+                    active={isActive("/office/dashboard")}
+                    onClick={onClose}
+                    disabled={!open}
+                  />
+                  <NavItem
+                    href="/office/companies"
+                    label="Manajemen Company"
+                    active={isActive("/office/companies")}
+                    onClick={onClose}
+                    disabled={!open}
+                  />
+                  <NavItem
+                    href="/office/users"
+                    label="Pengguna Platform"
+                    active={isActive("/office/users")}
+                    onClick={onClose}
+                    disabled={!open}
+                  />
+                </div>
+              </div>
 
-            {role && (
-              <>
-                <NavItem
-                  href={role === "COMPANY_ADMIN" ? "/loans" : "/loans/new"}
-                  label="Peminjaman"
-                  active={isActive("/loans")}
-                  onClick={onClose}
-                  disabled={!open}
-                />
-
-                <NavItem
-                  href="/returns"
-                  label="Pengembalian"
-                  active={isActive("/returns")}
-                  onClick={onClose}
-                  disabled={!open}
-                />
-
-                <NavItem
-                  href="/transactions"
-                  label="Riwayat Transaksi"
-                  active={isActive("/transactions")}
-                  onClick={onClose}
-                  disabled={!open}
-                />
-              </>
-            )}
-          </div>
-
-          {/* Master Data */}
-          {role && canAccessMasterData(role) && (
-            <div className="mt-7">
-              <p className="px-3 pb-2 text-xs font-semibold uppercase tracking-wider text-slate-400">
-                Master Data
-              </p>
-
-              <div className="space-y-1">
-                <NavItem
-                  href="/master/members"
-                  label="Member"
-                  active={isActive("/master/members")}
-                  onClick={onClose}
-                  disabled={!open}
-                />
-
-                <NavItem
-                  href="/master/books"
-                  label="Buku"
-                  active={isActive("/master/books")}
-                  onClick={onClose}
-                  disabled={!open}
-                />
+              <div>
+                <p className="px-3 pb-2 text-xs font-semibold uppercase tracking-wider text-slate-400">
+                  Support & Audit
+                </p>
+                <div className="space-y-1">
+                  <NavItem
+                    href="/office/catalog"
+                    label="Inspeksi Katalog"
+                    active={isActive("/office/catalog")}
+                    onClick={onClose}
+                    disabled={!open}
+                  />
+                  <NavItem
+                    href="/office/loans"
+                    label="Inspeksi Transaksi"
+                    active={isActive("/office/loans")}
+                    onClick={onClose}
+                    disabled={!open}
+                  />
+                  <NavItem
+                    href="/office/members"
+                    label="Inspeksi Anggota"
+                    active={isActive("/office/members")}
+                    onClick={onClose}
+                    disabled={!open}
+                  />
+                </div>
               </div>
             </div>
+          ) : (
+            /* COMPANY ADMIN & STAFF */
+            <>
+              <div className="space-y-1">
+                <NavItem
+                  href="/dashboard"
+                  label="Dashboard"
+                  active={isActive("/dashboard")}
+                  onClick={onClose}
+                  disabled={!open}
+                />
+
+                {role && (
+                  <>
+                    <NavItem
+                      href={role === "COMPANY_ADMIN" ? "/loans" : "/loans/new"}
+                      label="Peminjaman"
+                      active={isActive("/loans")}
+                      onClick={onClose}
+                      disabled={!open}
+                    />
+
+                    <NavItem
+                      href="/returns"
+                      label="Pengembalian"
+                      active={isActive("/returns")}
+                      onClick={onClose}
+                      disabled={!open}
+                    />
+
+                    <NavItem
+                      href="/transactions"
+                      label="Riwayat Transaksi"
+                      active={isActive("/transactions")}
+                      onClick={onClose}
+                      disabled={!open}
+                    />
+                  </>
+                )}
+              </div>
+
+              {/* Master Data */}
+              {role && canAccessMasterData(role) && (
+                <div className="mt-7">
+                  <p className="px-3 pb-2 text-xs font-semibold uppercase tracking-wider text-slate-400">
+                    Master Data
+                  </p>
+
+                  <div className="space-y-1">
+                    <NavItem
+                      href="/master/members"
+                      label="Member"
+                      active={isActive("/master/members")}
+                      onClick={onClose}
+                      disabled={!open}
+                    />
+
+                    <NavItem
+                      href="/master/books"
+                      label="Buku"
+                      active={isActive("/master/books")}
+                      onClick={onClose}
+                      disabled={!open}
+                    />
+                  </div>
+                </div>
+              )}
+            </>
           )}
         </nav>
 
         {/* User & Logout */}
         <div className="shrink-0 border-t border-slate-200 bg-white p-4">
           {session && (
-            <div className="mb-3 rounded-xl border border-slate-200 bg-slate-50 px-3 py-3">
-              <p className="truncate text-sm font-semibold text-slate-900">
-                {session.user.name}
-              </p>
-
-              <p className="mt-1 text-xs text-slate-500">{session.user.role}</p>
-            </div>
+            <Link
+              href="/profile"
+              onClick={onClose}
+              tabIndex={open ? 0 : -1}
+              className={`group mb-3 flex items-center justify-between rounded-xl border p-2.5 transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 ${
+                pathname === "/profile"
+                  ? "border-blue-300 bg-blue-50/90 shadow-sm ring-1 ring-blue-200"
+                  : "border-slate-200 bg-slate-50/80 hover:border-blue-200 hover:bg-blue-50/40"
+              }`}
+            >
+              <div className="flex items-center gap-2.5 overflow-hidden">
+                <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-gradient-to-br from-blue-600 to-indigo-600 font-bold text-white text-xs shadow-sm">
+                  {session.user.name
+                    ? session.user.name
+                        .split(" ")
+                        .map((n) => n[0])
+                        .slice(0, 2)
+                        .join("")
+                        .toUpperCase()
+                    : "U"}
+                </div>
+                <div className="min-w-0">
+                  <p className="truncate text-sm font-semibold text-slate-900 group-hover:text-blue-600 transition">
+                    {session.user.name}
+                  </p>
+                  <p className="truncate text-xs text-slate-500 font-medium">
+                    {session.user.role === "SUPER_ADMIN"
+                      ? "Super Admin"
+                      : session.user.role === "COMPANY_ADMIN"
+                      ? "Admin Perpustakaan"
+                      : "Staff"}
+                  </p>
+                </div>
+              </div>
+              <span className="shrink-0 text-slate-400 group-hover:text-blue-600 group-hover:translate-x-0.5 transition">
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                  <polyline points="9 18 15 12 9 6" />
+                </svg>
+              </span>
+            </Link>
           )}
 
           <button
@@ -272,13 +371,13 @@ function NavItem({
 }
 
 function NavIcon({ label }: { label: string }) {
-  if (label === "Dashboard") return <DashboardIcon />;
-  if (label === "Peminjaman") return <LoanIcon />;
+  if (label === "Dashboard" || label === "Dashboard Office") return <DashboardIcon />;
+  if (label === "Peminjaman" || label === "Inspeksi Transaksi") return <LoanIcon />;
   if (label === "Pengembalian") return <ReturnIcon />;
   if (label === "Riwayat Transaksi") return <HistoryIcon />;
-  if (label === "Member") return <MemberIcon />;
-  if (label === "Buku") return <BookIcon />;
-  if (label === "Company") return <CompanyIcon />;
+  if (label === "Member" || label === "Inspeksi Anggota") return <MemberIcon />;
+  if (label === "Buku" || label === "Inspeksi Katalog") return <BookIcon />;
+  if (label === "Company" || label === "Manajemen Company") return <CompanyIcon />;
 
   return <UsersIcon />;
 }

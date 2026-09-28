@@ -21,7 +21,11 @@ export default function LoginPage() {
   useEffect(() => {
     const auth = getAuthData();
     if (auth) {
-      router.replace("/dashboard");
+      if (auth.user.role === "SUPER_ADMIN") {
+        router.replace("/office/dashboard");
+      } else {
+        router.replace("/dashboard");
+      }
     } else {
       setCheckingAuth(false);
     }
@@ -54,7 +58,11 @@ export default function LoginPage() {
         user: userToSave,
       });
 
-      router.replace("/dashboard");
+      if (user.role === "SUPER_ADMIN") {
+        router.replace("/office/dashboard");
+      } else {
+        router.replace("/dashboard");
+      }
     } catch (err: any) {
       let message = "Email atau password salah.";
 
@@ -115,90 +123,217 @@ export default function LoginPage() {
   }
 
   return (
-    <main className="flex min-h-screen items-center justify-center bg-slate-50 px-4 py-8">
-      <div className="w-full max-w-sm md:max-w-lg xl:max-w-xl">
+    <main className="flex min-h-screen flex-col items-center justify-center bg-slate-50 px-4 py-10 sm:px-6">
+      {/* LOGIN CARD CONTAINER */}
+      <div className="w-full max-w-[420px]">
+        {/* BRAND HEADER */}
         <div className="mb-6 flex flex-col items-center text-center">
           <img
             src="/logo.png"
             alt="BukuFlow Logo"
-            className="h-10 w-auto object-contain mb-2"
+            className="h-11 w-auto object-contain"
           />
-          <p className="text-sm text-slate-600">
+          <p className="mt-2 text-xs font-medium text-slate-500">
             Sistem Manajemen Perpustakaan
           </p>
         </div>
 
-        <Card className="p-5 sm:p-6 md:p-8">
+        {/* MAIN FORM CARD (SOLID CLEAN) */}
+        <div className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm sm:p-8">
           <div className="mb-6">
-            <h2 className="text-xl font-semibold text-slate-900">Masuk</h2>
-            <p className="mt-1 text-sm text-slate-500">
-              Masukkan email dan password untuk melanjutkan.
+            <h1 className="text-xl font-bold tracking-tight text-slate-900 sm:text-2xl">
+              Masuk ke Akun
+            </h1>
+            <p className="mt-1 text-xs text-slate-500 sm:text-sm">
+              Kelola katalog buku, anggota, dan sirkulasi peminjaman.
             </p>
           </div>
 
-          <form onSubmit={handleSubmit} className="space-y-5">
-            <Input
-              id="email"
-              name="email"
-              type="email"
-              label="Email"
-              placeholder="nama@bukuflow.com"
-              autoComplete="email"
-              value={email}
-              onChange={(event) => setEmail(event.target.value)}
-              required
-            />
+          <form onSubmit={handleSubmit} className="space-y-4">
+            {/* EMAIL FIELD */}
+            <div>
+              <label
+                htmlFor="email"
+                className="mb-1.5 block text-xs font-semibold uppercase tracking-wider text-slate-700 sm:text-xs"
+              >
+                Email
+              </label>
+              <div className="relative">
+                <div className="pointer-events-none absolute inset-y-0 left-0 flex items-center pl-3.5 text-slate-400">
+                  <svg
+                    viewBox="0 0 24 24"
+                    fill="none"
+                    stroke="currentColor"
+                    strokeWidth="1.8"
+                    className="h-4 w-4"
+                    aria-hidden="true"
+                  >
+                    <rect width="20" height="16" x="2" y="4" rx="2" />
+                    <path d="m22 7-8.97 5.7a1.94 1.94 0 0 1-2.06 0L2 7" />
+                  </svg>
+                </div>
+                <input
+                  id="email"
+                  name="email"
+                  type="email"
+                  autoComplete="email"
+                  required
+                  value={email}
+                  onChange={(event) => setEmail(event.target.value)}
+                  placeholder="admin@perpustakaan.com"
+                  className="w-full rounded-xl border border-slate-300 bg-white py-2.5 pr-4 pl-10 text-sm text-slate-900 transition placeholder:text-slate-400 focus:border-blue-600 focus:outline-none focus:ring-2 focus:ring-blue-100"
+                />
+              </div>
+            </div>
 
-            <div className="space-y-2">
-              <div className="flex items-center justify-between">
+            {/* PASSWORD FIELD */}
+            <div>
+              <div className="mb-1.5 flex items-center justify-between">
                 <label
                   htmlFor="password"
-                  className="text-sm font-medium text-slate-700"
+                  className="block text-xs font-semibold uppercase tracking-wider text-slate-700 sm:text-xs"
                 >
                   Password
                 </label>
-
+              </div>
+              <div className="relative">
+                <div className="pointer-events-none absolute inset-y-0 left-0 flex items-center pl-3.5 text-slate-400">
+                  <svg
+                    viewBox="0 0 24 24"
+                    fill="none"
+                    stroke="currentColor"
+                    strokeWidth="1.8"
+                    className="h-4 w-4"
+                    aria-hidden="true"
+                  >
+                    <rect width="18" height="11" x="3" y="11" rx="2" ry="2" />
+                    <path d="M7 11V7a5 5 0 0 1 10 0v4" />
+                  </svg>
+                </div>
+                <input
+                  id="password"
+                  name="password"
+                  type={showPassword ? "text" : "password"}
+                  autoComplete="current-password"
+                  required
+                  value={password}
+                  onChange={(event) => setPassword(event.target.value)}
+                  placeholder="Masukkan kata sandi"
+                  className="w-full rounded-xl border border-slate-300 bg-white py-2.5 pr-11 pl-10 text-sm text-slate-900 transition placeholder:text-slate-400 focus:border-blue-600 focus:outline-none focus:ring-2 focus:ring-blue-100"
+                />
                 <button
                   type="button"
-                  onClick={() => setShowPassword((value) => !value)}
-                  className="text-sm font-medium text-blue-600 hover:text-blue-700 focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 focus-visible:ring-offset-2"
+                  onClick={() => setShowPassword((prev) => !prev)}
+                  aria-label={showPassword ? "Sembunyikan password" : "Lihat password"}
+                  className="absolute inset-y-0 right-0 flex items-center pr-3 text-slate-400 hover:text-slate-600 focus:outline-none"
                 >
-                  {showPassword ? "Sembunyikan" : "Tampilkan"}
+                  {showPassword ? (
+                    <svg
+                      viewBox="0 0 24 24"
+                      fill="none"
+                      stroke="currentColor"
+                      strokeWidth="1.8"
+                      className="h-4 w-4"
+                      aria-hidden="true"
+                    >
+                      <path d="M9.88 9.88a3 3 0 1 0 4.24 4.24" />
+                      <path d="M10.73 5.08A10.43 10.43 0 0 1 12 5c7 0 10 7 10 7a13.16 13.16 0 0 1-1.67 2.68" />
+                      <path d="M6.61 6.61A13.526 13.526 0 0 0 2 12s3 7 10 7a9.74 9.74 0 0 0 5.39-1.61" />
+                      <line x1="2" x2="22" y1="2" y2="22" />
+                    </svg>
+                  ) : (
+                    <svg
+                      viewBox="0 0 24 24"
+                      fill="none"
+                      stroke="currentColor"
+                      strokeWidth="1.8"
+                      className="h-4 w-4"
+                      aria-hidden="true"
+                    >
+                      <path d="M2 12s3-7 10-7 10 7 10 7-3 7-10 7-10-7-10-7Z" />
+                      <circle cx="12" cy="12" r="3" />
+                    </svg>
+                  )}
                 </button>
               </div>
-
-              <input
-                id="password"
-                name="password"
-                type={showPassword ? "text" : "password"}
-                value={password}
-                onChange={(event) => setPassword(event.target.value)}
-                autoComplete="current-password"
-                placeholder="Masukkan password"
-                required
-                className="w-full rounded-lg border border-slate-300 px-4 py-3 text-sm text-slate-900 outline-none transition focus:border-blue-500 focus:ring-2 focus:ring-blue-100"
-              />
             </div>
 
+            {/* ERROR FEEDBACK */}
             {error && (
               <div
                 role="alert"
-                className="rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700"
+                className="flex items-start gap-2.5 rounded-xl border border-red-200 bg-red-50 p-3 text-xs text-red-700"
               >
-                {error}
+                <svg
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="currentColor"
+                  strokeWidth="2"
+                  className="mt-0.5 h-4 w-4 shrink-0 text-red-600"
+                  aria-hidden="true"
+                >
+                  <circle cx="12" cy="12" r="10" />
+                  <line x1="12" x2="12" y1="8" y2="12" />
+                  <line x1="12" x2="12.01" y1="16" y2="16" />
+                </svg>
+                <p className="flex-1 leading-relaxed">{error}</p>
               </div>
             )}
 
-            <Button
-              type="submit"
-              loading={loading}
-              disabled={!email || !password}
-              className="w-full"
-            >
-              Masuk
-            </Button>
+            {/* SUBMIT BUTTON */}
+            <div className="pt-2">
+              <button
+                type="submit"
+                disabled={loading || !email.trim() || !password}
+                className="group flex w-full items-center justify-center gap-2 rounded-xl bg-blue-600 py-3 text-sm font-semibold text-white shadow-sm transition hover:bg-blue-700 active:bg-blue-800 disabled:cursor-not-allowed disabled:opacity-50"
+              >
+                {loading ? (
+                  <>
+                    <svg
+                      className="h-4 w-4 animate-spin text-white"
+                      viewBox="0 0 24 24"
+                      fill="none"
+                    >
+                      <circle
+                        className="opacity-25"
+                        cx="12"
+                        cy="12"
+                        r="10"
+                        stroke="currentColor"
+                        strokeWidth="4"
+                      />
+                      <path
+                        className="opacity-75"
+                        fill="currentColor"
+                        d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"
+                      />
+                    </svg>
+                    <span>Memproses Masuk...</span>
+                  </>
+                ) : (
+                  <>
+                    <span>Masuk</span>
+                    <svg
+                      viewBox="0 0 24 24"
+                      fill="none"
+                      stroke="currentColor"
+                      strokeWidth="2"
+                      className="h-4 w-4 transition-transform group-hover:translate-x-0.5"
+                      aria-hidden="true"
+                    >
+                      <path d="M5 12h14M12 5l7 7-7 7" />
+                    </svg>
+                  </>
+                )}
+              </button>
+            </div>
           </form>
-        </Card>
+        </div>
+
+        {/* FOOTER TEXT */}
+        <p className="mt-6 text-center text-xs text-slate-400">
+          © {new Date().getFullYear()} BukuFlow. Sistem Perpustakaan Terpadu.
+        </p>
       </div>
     </main>
   );

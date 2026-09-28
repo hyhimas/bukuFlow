@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
 import { loginApi, logoutApi } from "@/lib/api";
@@ -214,7 +215,7 @@ export default function AppShell({ children }: AppShellProps) {
   const isWarning = remainingSeconds <= 300 && !isCritical; // <= 5 menit
 
   return (
-    <div className="min-h-screen overflow-x-hidden bg-slate-50">
+    <div className="min-h-screen bg-slate-50">
       {/* HEADER UTAMA */}
       <div className="flex h-16 items-center justify-between border-b border-slate-200 bg-white px-4 sm:px-6">
         {/* Sisi Kiri: Menu & Logo */}
@@ -227,11 +228,16 @@ export default function AppShell({ children }: AppShellProps) {
           >
             <MenuIcon />
           </button>
-          <img
-            src="/logo.png"
-            alt="BukuFlow Logo"
-            className="ml-3.5 h-7 w-auto object-contain"
-          />
+          <Link
+            href={authSession?.user?.role === "SUPER_ADMIN" ? "/office/dashboard" : "/dashboard"}
+            className="ml-3 flex items-center focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 rounded"
+          >
+            <img
+              src="/logo.png"
+              alt="BukuFlow Logo"
+              className="h-8 w-auto object-contain"
+            />
+          </Link>
         </div>
 
         {/* Sisi Kanan: Modern Clean Session Indicator */}

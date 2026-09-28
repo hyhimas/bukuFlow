@@ -9,10 +9,12 @@ export function middleware(request: NextRequest) {
 
   const isProtectedPath =
     pathname.startsWith("/dashboard") ||
+    pathname.startsWith("/office") ||
     pathname.startsWith("/loans") ||
     pathname.startsWith("/returns") ||
     pathname.startsWith("/transactions") ||
-    pathname.startsWith("/master");
+    pathname.startsWith("/master") ||
+    pathname.startsWith("/profile");
 
   const isAuthPath = pathname.startsWith("/login");
 
@@ -32,10 +34,12 @@ export function middleware(request: NextRequest) {
 export const config = {
   matcher: [
     "/dashboard/:path*",
+    "/office/:path*",
     "/loans/:path*",
     "/returns/:path*",
     "/transactions/:path*",
     "/master/:path*",
+    "/profile/:path*",
     "/login",
   ],
 };

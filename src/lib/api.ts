@@ -5,6 +5,7 @@ import type {
   BookCopy,
   BookStatus,
   BookCopyStatus,
+  Company,
   Loan,
   Member,
   MemberStatus,
@@ -51,6 +52,12 @@ api.interceptors.response.use(
     if (error.response?.status === 401 && !isLoginEndpoint) {
       // Pastikan 401 ini bukan berasal dari request lama (stale token)
       const currentToken = getAccessToken();
+
+      // Abaikan force logout jika sedang mode testing/mock token
+      if (currentToken && currentToken.startsWith("mock-")) {
+        return Promise.reject(error);
+      }
+
       const requestAuthHeader = error.config?.headers?.Authorization;
       const requestToken = requestAuthHeader
         ? String(requestAuthHeader).replace(/^Bearer\s+/i, "").trim()
@@ -1243,6 +1250,100 @@ export async function getDashboardApi(): Promise<DashboardApiResponse> {
   }
 }
 
+export interface OfficeDashboardData {
+  companyId: string;
+  companyName: string;
+  totalBooks: number;
+  booksAvailable: number;
+  booksBorrowed: number;
+  activeLoans: number;
+  overdueLoans: number;
+  totalMembers: number;
+  totalUsers: number;
+  recentLoans: Array<{
+    id: string;
+    loanNumber: string;
+    memberName: string;
+    borrowedAt: string;
+    dueAt: string;
+    status: string;
+  }>;
+}
+
+export async function getOfficeDashboardApi(companyId?: string): Promise<OfficeDashboardData> {
+  const compId = companyId || "company-001";
+  try {
+    const response = await api.get("/office/dashboard", {
+      params: { company_id: compId },
+    });
+    const raw = response.data?.data || response.data?.dashboard || response.data;
+    return {
+      companyId: compId,
+      companyName: raw?.company_name || raw?.companyName || (compId === "company-002" ? "SMP Negeri 2 Bandung" : compId === "company-003" ? "Institut Teknologi Nusantara" : "SMA Negeri 1 Jakarta"),
+      totalBooks: Number(raw?.total_books ?? raw?.totalBooks ?? (compId === "company-002" ? 82 : compId === "company-003" ? 210 : 45)),
+      booksAvailable: Number(raw?.books_available ?? raw?.booksAvailable ?? (compId === "company-002" ? 70 : compId === "company-003" ? 185 : 38)),
+      booksBorrowed: Number(raw?.books_borrowed ?? raw?.booksBorrowed ?? (compId === "company-002" ? 12 : compId === "company-003" ? 25 : 7)),
+      activeLoans: Number(raw?.active_loans ?? raw?.activeLoans ?? (compId === "company-002" ? 10 : compId === "company-003" ? 20 : 5)),
+      overdueLoans: Number(raw?.overdue_loans ?? raw?.overdueLoans ?? (compId === "company-002" ? 2 : compId === "company-003" ? 5 : 2)),
+      totalMembers: Number(raw?.total_members ?? raw?.totalMembers ?? (compId === "company-002" ? 240 : compId === "company-003" ? 550 : 120)),
+      totalUsers: Number(raw?.total_users ?? raw?.totalUsers ?? (compId === "company-002" ? 6 : compId === "company-003" ? 12 : 4)),
+      recentLoans: Array.isArray(raw?.recent_loans || raw?.recentLoans)
+        ? (raw?.recent_loans || raw?.recentLoans)
+        : [
+            {
+              id: "loan-01",
+              loanNumber: "TRX-B63334",
+              memberName: "Demo Member Two",
+              borrowedAt: new Date(Date.now() - 3 * 86400000).toISOString(),
+              dueAt: new Date(Date.now() + 4 * 86400000).toISOString(),
+              status: "ACTIVE",
+            },
+            {
+              id: "loan-02",
+              loanNumber: "TRX-B63337",
+              memberName: "Demo Member Two",
+              borrowedAt: new Date(Date.now() - 3 * 86400000).toISOString(),
+              dueAt: new Date(Date.now() + 4 * 86400000).toISOString(),
+              status: "ACTIVE",
+            },
+          ],
+    };
+  } catch (err: any) {
+    if (err.response?.status >= 500) {
+      throw new Error(formatApiError(err, "Office dashboard gagal dimuat karena gangguan server."));
+    }
+    return {
+      companyId: compId,
+      companyName: compId === "company-002" ? "SMP Negeri 2 Bandung" : compId === "company-003" ? "Institut Teknologi Nusantara" : "SMA Negeri 1 Jakarta",
+      totalBooks: compId === "company-002" ? 82 : compId === "company-003" ? 210 : 45,
+      booksAvailable: compId === "company-002" ? 70 : compId === "company-003" ? 185 : 38,
+      booksBorrowed: compId === "company-002" ? 12 : compId === "company-003" ? 25 : 7,
+      activeLoans: compId === "company-002" ? 10 : compId === "company-003" ? 20 : 5,
+      overdueLoans: compId === "company-002" ? 2 : compId === "company-003" ? 5 : 2,
+      totalMembers: compId === "company-002" ? 240 : compId === "company-003" ? 550 : 120,
+      totalUsers: compId === "company-002" ? 6 : compId === "company-003" ? 12 : 4,
+      recentLoans: [
+        {
+          id: "loan-01",
+          loanNumber: "TRX-B63334",
+          memberName: "Demo Member Two",
+          borrowedAt: new Date(Date.now() - 3 * 86400000).toISOString(),
+          dueAt: new Date(Date.now() + 4 * 86400000).toISOString(),
+          status: "ACTIVE",
+        },
+        {
+          id: "loan-02",
+          loanNumber: "TRX-B63337",
+          memberName: "Demo Member Two",
+          borrowedAt: new Date(Date.now() - 3 * 86400000).toISOString(),
+          dueAt: new Date(Date.now() + 4 * 86400000).toISOString(),
+          status: "ACTIVE",
+        },
+      ],
+    };
+  }
+}
+
 function formatCleanLoanNumber(raw: any): string {
   const candidate = raw.loan_number || raw.loanNumber || raw.code;
   if (candidate && candidate !== "-" && typeof candidate === "string") {
@@ -1944,5 +2045,310 @@ export async function returnLoanItemsApi(
     }
 
     throw new Error("Pengembalian buku gagal diproses oleh server.");
+  }
+}
+
+// =========================================================
+// OFFICE MEMBERS API (SUPER ADMIN MULTI-TENANT)
+// =========================================================
+
+export interface OfficeMemberPayload {
+  name: string;
+  member_number?: string;
+  memberNumber?: string;
+  identity_number?: string;
+  identityNumber?: string;
+  phone: string;
+  email?: string;
+  status?: "ACTIVE" | "INACTIVE";
+}
+
+export interface OfficeMembersListResponse {
+  items: Member[];
+  total: number;
+  page: number;
+  size: number;
+  totalPages: number;
+}
+
+export async function getOfficeMembersApi(
+  companyId: string,
+  params: {
+    page?: number;
+    size?: number;
+    sortby?: string;
+    order?: string;
+  } = {}
+): Promise<OfficeMembersListResponse> {
+  const compId = companyId || "company-001";
+  const page = params.page || 1;
+  const size = params.size || 10;
+  const sortby = params.sortby || "name";
+  const order = params.order || "asc";
+
+  try {
+    const response = await api.get("/bukuflow/office/member", {
+      params: {
+        company_id: compId,
+        page,
+        size,
+        sortby,
+        order,
+      },
+    });
+
+    const raw = response.data;
+    const items = Array.isArray(raw?.items)
+      ? raw.items
+      : Array.isArray(raw?.data)
+      ? raw.data
+      : Array.isArray(raw)
+      ? raw
+      : [];
+
+    const mappedItems: Member[] = items.map((item: any) => ({
+      id: String(item.id || item.member_id || `mbr-${Math.random()}`),
+      companyId: String(item.company_id || item.companyId || compId),
+      memberNumber: String(item.member_number || item.memberNumber || "-"),
+      name: String(item.name || "-"),
+      memberType: (item.member_type || item.memberType || "UMUM") as any,
+      identityNumber: String(item.identity_number || item.identityNumber || "-"),
+      phone: String(item.phone || "-"),
+      email: String(item.email || "-"),
+      status: (item.status === "INACTIVE" ? "INACTIVE" : "ACTIVE") as any,
+      createdAt: String(item.created_at || item.createdAt || new Date().toISOString()),
+      updatedAt: String(item.updated_at || item.updatedAt || new Date().toISOString()),
+    }));
+
+    const total = Number(raw?.total || raw?.count || mappedItems.length);
+    const totalPages = Number(raw?.total_pages || raw?.totalPages || Math.ceil(total / size) || 1);
+
+    return {
+      items: mappedItems,
+      total,
+      page,
+      size,
+      totalPages,
+    };
+  } catch (error: any) {
+    if (error.response?.status >= 500) {
+      throw new Error(formatApiError(error, "Gagal memuat data member office."));
+    }
+
+    // Fallback Mock Data per Company
+    const { mockMembers, ensureMockStoreHydrated } = await import("./mock-store");
+    ensureMockStoreHydrated();
+    const allMembers = mockMembers.filter((m: Member) => m.companyId === compId);
+    const total = allMembers.length;
+    const totalPages = Math.ceil(total / size) || 1;
+    const start = (page - 1) * size;
+    const paginated = allMembers.slice(start, start + size);
+
+    return {
+      items: paginated,
+      total,
+      page,
+      size,
+      totalPages,
+    };
+  }
+}
+
+export async function searchOfficeMembersApi(
+  companyId: string,
+  query: string
+): Promise<Member[]> {
+  const compId = companyId || "company-001";
+  try {
+    const response = await api.get("/bukuflow/office/member/search", {
+      params: {
+        q: query,
+        company_id: compId,
+      },
+    });
+
+    const raw = response.data;
+    const items = Array.isArray(raw?.data) ? raw.data : Array.isArray(raw) ? raw : [];
+
+    return items.map((item: any) => ({
+      id: String(item.id || item.member_id || `mbr-${Math.random()}`),
+      companyId: String(item.company_id || item.companyId || compId),
+      memberNumber: String(item.member_number || item.memberNumber || "-"),
+      name: String(item.name || "-"),
+      memberType: (item.member_type || item.memberType || "UMUM") as any,
+      identityNumber: String(item.identity_number || item.identityNumber || "-"),
+      phone: String(item.phone || "-"),
+      email: String(item.email || "-"),
+      status: (item.status === "INACTIVE" ? "INACTIVE" : "ACTIVE") as any,
+      createdAt: String(item.created_at || item.createdAt || new Date().toISOString()),
+      updatedAt: String(item.updated_at || item.updatedAt || new Date().toISOString()),
+    }));
+  } catch (error: any) {
+    const { mockMembers, ensureMockStoreHydrated } = await import("./mock-store");
+    ensureMockStoreHydrated();
+    const q = query.toLowerCase();
+    return mockMembers.filter(
+      (m: Member) =>
+        m.companyId === compId &&
+        (m.name.toLowerCase().includes(q) ||
+          m.memberNumber.toLowerCase().includes(q) ||
+          m.identityNumber.toLowerCase().includes(q) ||
+          m.phone.toLowerCase().includes(q))
+    );
+  }
+}
+
+export async function getOfficeMemberDetailApi(
+  companyId: string,
+  memberId: string
+): Promise<Member> {
+  const compId = companyId || "company-001";
+  try {
+    const response = await api.get(`/bukuflow/office/member/${memberId}`, {
+      params: { company_id: compId },
+    });
+
+    const item = response.data?.data || response.data;
+    return {
+      id: String(item.id || item.member_id || memberId),
+      companyId: String(item.company_id || item.companyId || compId),
+      memberNumber: String(item.member_number || item.memberNumber || "-"),
+      name: String(item.name || "-"),
+      memberType: (item.member_type || item.memberType || "UMUM") as any,
+      identityNumber: String(item.identity_number || item.identityNumber || "-"),
+      phone: String(item.phone || "-"),
+      email: String(item.email || "-"),
+      status: (item.status === "INACTIVE" ? "INACTIVE" : "ACTIVE") as any,
+      createdAt: String(item.created_at || item.createdAt || new Date().toISOString()),
+      updatedAt: String(item.updated_at || item.updatedAt || new Date().toISOString()),
+    };
+  } catch (error: any) {
+    const { mockMembers, ensureMockStoreHydrated } = await import("./mock-store");
+    ensureMockStoreHydrated();
+    const found = mockMembers.find((m: Member) => m.id === memberId);
+    if (!found) throw new Error("Member tidak ditemukan.");
+    return found;
+  }
+}
+
+export async function createOfficeMemberApi(
+  companyId: string,
+  payload: OfficeMemberPayload
+): Promise<Member> {
+  const compId = companyId || "company-001";
+  const body = {
+    name: payload.name.trim(),
+    member_number: payload.member_number || payload.memberNumber || `MBR-${Date.now().toString().slice(-4)}`,
+    identity_number: payload.identity_number || payload.identityNumber || "-",
+    phone: payload.phone.trim(),
+    email: payload.email ? payload.email.trim() : "",
+  };
+
+  try {
+    const response = await api.post("/bukuflow/office/member", body, {
+      params: { company_id: compId },
+    });
+
+    const item = response.data?.data || response.data;
+    return {
+      id: String(item.id || item.member_id || `mbr-${Date.now()}`),
+      companyId: String(item.company_id || compId),
+      memberNumber: String(item.member_number || body.member_number),
+      name: String(item.name || body.name),
+      memberType: "UMUM",
+      identityNumber: String(item.identity_number || body.identity_number),
+      phone: String(item.phone || body.phone),
+      email: String(item.email || body.email),
+      status: "ACTIVE",
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString(),
+    };
+  } catch (error: any) {
+    if (error.response?.status >= 500) {
+      throw new Error(formatApiError(error, "Gagal membuat member baru."));
+    }
+
+    // Fallback Mock create
+    const { mockMembers, ensureMockStoreHydrated, persistMockState } = await import("./mock-store");
+    ensureMockStoreHydrated();
+    const newMember: Member = {
+      id: `mbr-${Date.now()}`,
+      companyId: compId,
+      memberNumber: body.member_number,
+      name: body.name,
+      memberType: "UMUM",
+      identityNumber: body.identity_number,
+      phone: body.phone,
+      email: body.email,
+      status: "ACTIVE",
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString(),
+    };
+
+    mockMembers.unshift(newMember);
+    persistMockState();
+    return newMember;
+  }
+}
+
+export async function updateOfficeMemberApi(
+  companyId: string,
+  memberId: string,
+  payload: Partial<OfficeMemberPayload>
+): Promise<Member> {
+  const compId = companyId || "company-001";
+  const body: Record<string, any> = {};
+  if (payload.name !== undefined) body.name = payload.name.trim();
+  if (payload.member_number || payload.memberNumber) body.member_number = payload.member_number || payload.memberNumber;
+  if (payload.identity_number || payload.identityNumber) body.identity_number = payload.identity_number || payload.identityNumber;
+  if (payload.phone !== undefined) body.phone = payload.phone.trim();
+  if (payload.email !== undefined) body.email = payload.email.trim();
+  if (payload.status !== undefined) body.status = payload.status;
+
+  try {
+    const response = await api.patch(`/bukuflow/office/member/${memberId}`, body, {
+      params: { company_id: compId },
+    });
+
+    const item = response.data?.data || response.data;
+    return {
+      id: String(item.id || memberId),
+      companyId: String(item.company_id || compId),
+      memberNumber: String(item.member_number || body.member_number || "-"),
+      name: String(item.name || body.name || "-"),
+      memberType: "UMUM",
+      identityNumber: String(item.identity_number || body.identity_number || "-"),
+      phone: String(item.phone || body.phone || "-"),
+      email: String(item.email || body.email || "-"),
+      status: (item.status === "INACTIVE" ? "INACTIVE" : "ACTIVE") as any,
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString(),
+    };
+  } catch (error: any) {
+    if (error.response?.status >= 500) {
+      throw new Error(formatApiError(error, "Gagal memperbarui data member."));
+    }
+
+    // Fallback Mock update
+    const { mockMembers, ensureMockStoreHydrated, persistMockState } = await import("./mock-store");
+    ensureMockStoreHydrated();
+    const index = mockMembers.findIndex((m: Member) => m.id === memberId);
+    if (index === -1) throw new Error("Member tidak ditemukan.");
+
+    const existing = mockMembers[index];
+    const updated: Member = {
+      ...existing,
+      name: body.name ?? existing.name,
+      memberNumber: body.member_number ?? existing.memberNumber,
+      identityNumber: body.identity_number ?? existing.identityNumber,
+      phone: body.phone ?? existing.phone,
+      email: body.email ?? existing.email,
+      status: (body.status as any) ?? existing.status,
+      updatedAt: new Date().toISOString(),
+    };
+
+    mockMembers[index] = updated;
+    persistMockState();
+    return updated;
   }
 }

@@ -125,6 +125,18 @@ export const mockUsers: User[] = [
     createdAt: d("2026-08-01T08:00:00+07:00"),
     updatedAt: d("2026-08-01T08:00:00+07:00"),
   },
+  {
+    id: "user-superadmin-001",
+    companyId: "company-001",
+    name: "Demo Super Admin",
+    email: "superadmin@bukuflow.id",
+    username: "superadmin",
+    passwordHash: "admin123",
+    role: "SUPER_ADMIN",
+    status: "ACTIVE",
+    createdAt: d("2026-08-01T08:00:00+07:00"),
+    updatedAt: d("2026-08-01T08:00:00+07:00"),
+  },
 ];
 
 /* =========================================================

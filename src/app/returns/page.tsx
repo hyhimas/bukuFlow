@@ -484,7 +484,7 @@ export default function ReturnsPage() {
 
           <div
             ref={detailRef}
-            className="min-w-0 scroll-mt-5 lg:sticky lg:top-5"
+            className="min-w-0 scroll-mt-6 lg:sticky lg:top-6 lg:self-start"
           >
             {selectedLoan ? (
               <Card className="border-blue-200 p-4 sm:p-5">

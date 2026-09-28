@@ -1058,12 +1058,10 @@ export default function TransactionsPage() {
         ) : (
           <>
             {/* =================================================
-                TRANSACTIONS CARD (TABLE & MOBILE VIEW)
+                DESKTOP VIEW (TABLE CARD)
             ================================================== */}
-
-            <Card className="relative mt-5 overflow-hidden">
-              {/* DESKTOP TABLE */}
-              <div className="hidden overflow-x-auto xl:block">
+            <Card className="relative mt-5 hidden overflow-hidden xl:block">
+              <div className="overflow-x-auto">
                 <table className="w-full table-fixed border-collapse text-left text-sm">
                   <colgroup>
                     <col className="w-[15%]" />
@@ -1225,130 +1223,6 @@ export default function TransactionsPage() {
                 </table>
               </div>
 
-              {/* TABLET + MOBILE */}
-              <div className="divide-y divide-slate-100 xl:hidden">
-                {paginatedTransactions.map((transaction) => (
-                  <div key={transaction.loan.id} className="p-4 sm:p-5">
-                    {/* TRANSACTION HEADER */}
-                    <div className="flex items-start justify-between gap-3">
-                      <div className="min-w-0 flex-1">
-                        <p
-                          className="truncate text-sm font-semibold tracking-tight text-slate-900 sm:text-base"
-                          title={transaction.loan.loanNumber}
-                        >
-                          {transaction.loan.loanNumber}
-                        </p>
-
-                        <p
-                          className="mt-0.5 truncate text-sm text-slate-500"
-                          title={transaction.member?.name ?? "-"}
-                        >
-                          {transaction.member?.name ?? "-"}
-                        </p>
-                      </div>
-
-                      <div className="shrink-0">
-                        <Badge
-                          variant={getStatusVariant(transaction.loan.status)}
-                        >
-                          {getStatusLabel(transaction.loan.status)}
-                        </Badge>
-                      </div>
-                    </div>
-
-                    {/* BUKU */}
-                    <div className="mt-4">
-                      <p className="text-xs font-medium text-slate-500 sm:text-sm">
-                        Buku
-                      </p>
-
-                      {transaction.items.length === 0 ? (
-                        <p className="mt-1 text-sm text-slate-900">-</p>
-                      ) : (
-                        <ul className="mt-1 space-y-0.5 text-sm leading-5 text-slate-900 sm:text-base">
-                          {transaction.items.map(({ book, bookCopy }) => (
-                            <li
-                              key={`${transaction.loan.id}-${book?.id ?? "book"}-${bookCopy?.id ?? "copy"}`}
-                              className="break-words"
-                            >
-                              <span
-                                aria-hidden="true"
-                                className="mr-1 text-slate-400"
-                              >
-                                •
-                              </span>
-
-                              <span className="font-medium">
-                                {book?.title ?? "-"}
-                              </span>
-
-                              {bookCopy?.code && (
-                                <span className="ml-1 text-slate-400">
-                                  ({bookCopy.code})
-                                </span>
-                              )}
-                            </li>
-                          ))}
-                        </ul>
-                      )}
-                    </div>
-
-                    {/* DIVIDER */}
-                    <div className="my-4 border-t border-slate-100" />
-
-                    {/* PETUGAS */}
-                    <div className="mb-4">
-                      <p className="text-xs font-medium text-slate-500 sm:text-sm">
-                        Petugas
-                      </p>
-
-                      <p
-                        className="mt-0.5 truncate text-sm text-slate-900 sm:text-base"
-                        title={transaction.user?.name ?? "-"}
-                      >
-                        {transaction.user?.name ?? "-"}
-                      </p>
-                    </div>
-
-                    {/* DATE INFORMATION */}
-                    <div className="grid grid-cols-2 gap-x-5 gap-y-3">
-                      {/* PEMINJAMAN */}
-                      <div className="min-w-0">
-                        <p className="text-xs font-medium text-slate-500 sm:text-sm">
-                          Peminjaman
-                        </p>
-
-                        <p className="mt-0.5 whitespace-nowrap text-sm text-slate-900 sm:text-base">
-                          {formatDate(transaction.loan.borrowedAt)}
-                        </p>
-                      </div>
-
-                      {/* JATUH TEMPO */}
-                      <div className="min-w-0">
-                        <p className="text-xs font-medium text-slate-500 sm:text-sm">
-                          Jatuh tempo
-                        </p>
-
-                        <p className="mt-0.5 whitespace-nowrap text-sm text-slate-900 sm:text-base">
-                          {formatDate(transaction.loan.dueAt)}
-                        </p>
-                      </div>
-
-                      {/* PENGEMBALIAN */}
-                      <div className="min-w-0">
-                        <p className="text-xs font-medium text-slate-500 sm:text-sm">
-                          Pengembalian
-                        </p>
-
-                        <p className="mt-0.5 whitespace-nowrap text-sm text-slate-900 sm:text-base">
-                          {formatDate(transaction.loan.returnedAt)}
-                        </p>
-                      </div>
-                    </div>
-                  </div>
-                ))}
-              </div>
-
               {tableLoading && (
                 <div
                   className="absolute inset-0 flex items-center justify-center bg-white/70"
@@ -1362,7 +1236,7 @@ export default function TransactionsPage() {
                 </div>
               )}
 
-              {/* PAGINATION (MOBILE, TABLET & DESKTOP) */}
+              {/* PAGINATION (DESKTOP) */}
               <Pagination
                 currentPage={currentPage}
                 totalPages={totalPages}
@@ -1371,6 +1245,159 @@ export default function TransactionsPage() {
                 pageSize={PAGE_SIZE}
               />
             </Card>
+
+            {/* =================================================
+                TABLET + MOBILE VIEW (SEPARATE INDIVIDUAL CARDS)
+            ================================================== */}
+            <div className="relative mt-5 space-y-3.5 xl:hidden">
+              {paginatedTransactions.map((transaction) => (
+                <Card
+                  key={transaction.loan.id}
+                  className="p-4 sm:p-5 shadow-sm transition hover:border-slate-300"
+                >
+                  {/* TRANSACTION HEADER */}
+                  <div className="flex items-start justify-between gap-3">
+                    <div className="min-w-0 flex-1">
+                      <p
+                        className="truncate text-sm font-semibold tracking-tight text-slate-900 sm:text-base"
+                        title={transaction.loan.loanNumber}
+                      >
+                        {transaction.loan.loanNumber}
+                      </p>
+
+                      <p
+                        className="mt-0.5 truncate text-sm text-slate-500"
+                        title={transaction.member?.name ?? "-"}
+                      >
+                        {transaction.member?.name ?? "-"}
+                      </p>
+                    </div>
+
+                    <div className="shrink-0">
+                      <Badge
+                        variant={getStatusVariant(transaction.loan.status)}
+                      >
+                        {getStatusLabel(transaction.loan.status)}
+                      </Badge>
+                    </div>
+                  </div>
+
+                  {/* BUKU */}
+                  <div className="mt-4">
+                    <p className="text-xs font-medium text-slate-500 sm:text-sm">
+                      Buku
+                    </p>
+
+                    {transaction.items.length === 0 ? (
+                      <p className="mt-1 text-sm text-slate-900">-</p>
+                    ) : (
+                      <ul className="mt-1 space-y-0.5 text-sm leading-5 text-slate-900 sm:text-base">
+                        {transaction.items.map(({ book, bookCopy }) => (
+                          <li
+                            key={`${transaction.loan.id}-${book?.id ?? "book"}-${bookCopy?.id ?? "copy"}`}
+                            className="break-words"
+                          >
+                            <span
+                              aria-hidden="true"
+                              className="mr-1 text-slate-400"
+                            >
+                              •
+                            </span>
+
+                            <span className="font-medium">
+                              {book?.title ?? "-"}
+                            </span>
+
+                            {bookCopy?.code && (
+                              <span className="ml-1 text-slate-400">
+                                ({bookCopy.code})
+                              </span>
+                            )}
+                          </li>
+                        ))}
+                      </ul>
+                    )}
+                  </div>
+
+                  {/* DIVIDER */}
+                  <div className="my-4 border-t border-slate-100" />
+
+                  {/* PETUGAS */}
+                  <div className="mb-4">
+                    <p className="text-xs font-medium text-slate-500 sm:text-sm">
+                      Petugas
+                    </p>
+
+                    <p
+                      className="mt-0.5 truncate text-sm text-slate-900 sm:text-base"
+                      title={transaction.user?.name ?? "-"}
+                    >
+                      {transaction.user?.name ?? "-"}
+                    </p>
+                  </div>
+
+                  {/* DATE INFORMATION */}
+                  <div className="grid grid-cols-2 gap-x-5 gap-y-3">
+                    {/* PEMINJAMAN */}
+                    <div className="min-w-0">
+                      <p className="text-xs font-medium text-slate-500 sm:text-sm">
+                        Peminjaman
+                      </p>
+
+                      <p className="mt-0.5 whitespace-nowrap text-sm text-slate-900 sm:text-base">
+                        {formatDate(transaction.loan.borrowedAt)}
+                      </p>
+                    </div>
+
+                    {/* JATUH TEMPO */}
+                    <div className="min-w-0">
+                      <p className="text-xs font-medium text-slate-500 sm:text-sm">
+                        Jatuh tempo
+                      </p>
+
+                      <p className="mt-0.5 whitespace-nowrap text-sm text-slate-900 sm:text-base">
+                        {formatDate(transaction.loan.dueAt)}
+                      </p>
+                    </div>
+
+                    {/* PENGEMBALIAN */}
+                    <div className="min-w-0">
+                      <p className="text-xs font-medium text-slate-500 sm:text-sm">
+                        Pengembalian
+                      </p>
+
+                      <p className="mt-0.5 whitespace-nowrap text-sm text-slate-900 sm:text-base">
+                        {formatDate(transaction.loan.returnedAt)}
+                      </p>
+                    </div>
+                  </div>
+                </Card>
+              ))}
+
+              {tableLoading && (
+                <div
+                  className="absolute inset-0 flex items-center justify-center rounded-xl bg-white/70"
+                  role="status"
+                  aria-live="polite"
+                  aria-label="Memuat riwayat transaksi"
+                >
+                  <div className="rounded-lg bg-white px-4 py-3 text-sm font-medium text-slate-600 shadow-sm ring-1 ring-slate-200">
+                    Memuat data...
+                  </div>
+                </div>
+              )}
+
+              {/* PAGINATION (MOBILE & TABLET) */}
+              <div className="overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm">
+                <Pagination
+                  currentPage={currentPage}
+                  totalPages={totalPages}
+                  onPageChange={(nextPage) => setPage(nextPage)}
+                  totalItems={filteredTransactions.length}
+                  pageSize={PAGE_SIZE}
+                />
+              </div>
+            </div>
           </>
         )}
       </div>
