@@ -62,7 +62,8 @@ export default function AppShell({ children }: AppShellProps) {
       const current = getAuthData();
       if (!current) {
         setAuthSession(null);
-        setShowExpiredModal(true);
+        setShowExpiredModal(false);
+        router.replace("/login");
       } else {
         setAuthSession(current);
         setShowExpiredModal(false);
@@ -85,7 +86,8 @@ export default function AppShell({ children }: AppShellProps) {
     if (initialDiff <= 0) {
       setAuthSession(null);
       clearAuthData();
-      setShowExpiredModal(true);
+      setShowExpiredModal(false);
+      router.replace("/login");
       return;
     } else {
       setShowExpiredModal(false);
@@ -187,7 +189,22 @@ export default function AppShell({ children }: AppShellProps) {
   if (!isReady) {
     return (
       <div className="flex min-h-screen items-center justify-center bg-slate-50">
-        <div className="h-8 w-8 animate-spin rounded-full border-4 border-blue-600 border-t-transparent" />
+        <div className="flex flex-col items-center">
+          <div className="relative flex h-16 w-16 items-center justify-center">
+            <div
+              className="absolute inset-0 animate-spin rounded-full border-2 border-blue-100 border-t-blue-600"
+              aria-hidden="true"
+            />
+            <div className="animate-pulse">
+              <img
+                src="/logo-icon.png"
+                alt="BukuFlow Loading"
+                className="h-8 w-8 object-contain"
+              />
+            </div>
+          </div>
+          <p className="mt-3 text-xs font-medium text-slate-500">Memuat BukuFlow...</p>
+        </div>
       </div>
     );
   }
@@ -210,7 +227,11 @@ export default function AppShell({ children }: AppShellProps) {
           >
             <MenuIcon />
           </button>
-          <span className="ml-3 text-xl font-bold text-slate-900">BukuFlow</span>
+          <img
+            src="/logo.png"
+            alt="BukuFlow Logo"
+            className="ml-3.5 h-7 w-auto object-contain"
+          />
         </div>
 
         {/* Sisi Kanan: Modern Clean Session Indicator */}

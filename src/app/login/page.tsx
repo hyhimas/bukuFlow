@@ -56,10 +56,35 @@ export default function LoginPage() {
 
       router.replace("/dashboard");
     } catch (err: any) {
-      const message =
-        err.response?.data?.detail ||
-        err.message ||
-        "Email atau password salah.";
+      let message = "Email atau password salah.";
+
+      if (err.response?.status === 500) {
+        const detail = err.response?.data?.detail;
+        const serverMsg =
+          typeof detail === "object"
+            ? detail.message || detail.error || JSON.stringify(detail)
+            : detail;
+        message = `Server Error (500): ${
+          serverMsg || "Terjadi kesalahan internal pada database / server backend."
+        }`;
+      } else if (err.response?.data?.detail) {
+        const detail = err.response.data.detail;
+        message =
+          typeof detail === "string"
+            ? detail
+            : detail.message || JSON.stringify(detail);
+      } else if (err.response?.data?.message) {
+        message = err.response.data.message;
+      } else if (
+        err.code === "ECONNABORTED" ||
+        err.message?.toLowerCase().includes("timeout")
+      ) {
+        message =
+          "Koneksi ke server timeout (Server backend tidak merespons dalam 45 detik).";
+      } else if (err.message) {
+        message = err.message;
+      }
+
       setError(message);
     } finally {
       setLoading(false);
@@ -69,7 +94,22 @@ export default function LoginPage() {
   if (checkingAuth) {
     return (
       <div className="flex min-h-screen items-center justify-center bg-slate-50">
-        <div className="h-8 w-8 animate-spin rounded-full border-4 border-blue-600 border-t-transparent" />
+        <div className="flex flex-col items-center">
+          <div className="relative flex h-16 w-16 items-center justify-center">
+            <div
+              className="absolute inset-0 animate-spin rounded-full border-2 border-blue-100 border-t-blue-600"
+              aria-hidden="true"
+            />
+            <div className="animate-pulse">
+              <img
+                src="/logo-icon.png"
+                alt="BukuFlow Loading"
+                className="h-8 w-8 object-contain"
+              />
+            </div>
+          </div>
+          <p className="mt-3 text-xs font-medium text-slate-500">Memeriksa sesi...</p>
+        </div>
       </div>
     );
   }
@@ -77,10 +117,14 @@ export default function LoginPage() {
   return (
     <main className="flex min-h-screen items-center justify-center bg-slate-50 px-4 py-8">
       <div className="w-full max-w-sm md:max-w-lg xl:max-w-xl">
-        <div className="mb-6 text-center">
-          <h1 className="text-3xl font-bold text-slate-900">BukuFlow</h1>
-          <p className="mt-2 text-sm text-slate-600">
-            Sistem manajemen perpustakaan
+        <div className="mb-6 flex flex-col items-center text-center">
+          <img
+            src="/logo.png"
+            alt="BukuFlow Logo"
+            className="h-10 w-auto object-contain mb-2"
+          />
+          <p className="text-sm text-slate-600">
+            Sistem Manajemen Perpustakaan
           </p>
         </div>
 

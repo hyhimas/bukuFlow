@@ -109,15 +109,13 @@ export default function Sidebar({
             href="/dashboard"
             onClick={onClose}
             tabIndex={open ? 0 : -1}
-            className="text-xl font-bold text-slate-900"
+            className="flex items-center gap-2"
           >
-            <div>
-              <p className="text-xl font-bold text-slate-900">BukuFlow</p>
-
-              <p className="truncate text-xs text-slate-500">
-                {currentCompany?.name ?? "Perusahaan"}
-              </p>
-            </div>
+            <img
+              src="/logo.png"
+              alt="BukuFlow Logo"
+              className="h-8 w-auto object-contain"
+            />
           </Link>
 
           <button

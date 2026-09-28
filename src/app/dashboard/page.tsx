@@ -341,8 +341,10 @@ export default function DashboardPage() {
         const result = await getDashboardApi();
 
         setData(result);
-      } catch {
-        setError("Data dashboard gagal dimuat.");
+      } catch (err: any) {
+        setError(
+          err instanceof Error ? err.message : "Data dashboard gagal dimuat."
+        );
       } finally {
         setLoading(false);
       }

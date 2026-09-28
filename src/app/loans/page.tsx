@@ -16,6 +16,7 @@ import EmptyState from "@/components/ui/EmptyState";
 import FeedbackPanel from "@/components/ui/FeedbackPanel";
 import Input from "@/components/ui/Input";
 import LoadingState from "@/components/ui/LoadingState";
+import Pagination from "@/components/ui/Pagination";
 
 const PAGE_SIZE = 10;
 
@@ -76,8 +77,10 @@ export default function LoansPage() {
         );
 
         setTransactions(activeLoans);
-      } catch {
-        setError("Daftar peminjaman gagal dimuat.");
+      } catch (err: any) {
+        setError(
+          err instanceof Error ? err.message : "Daftar peminjaman gagal dimuat."
+        );
       } finally {
         setLoading(false);
       }
@@ -498,66 +501,15 @@ export default function LoansPage() {
                     </div>
                   )}
 
-                  {totalPages > 1 && (
-                    <div className="flex items-center justify-between border-t border-slate-200 px-3 py-2.5 sm:px-4">
-                      <p className="text-xs text-slate-500">
-                        Halaman {currentPage} dari {totalPages}
-                      </p>
+                  {/* PAGINATION (MOBILE, TABLET & DESKTOP) */}
 
-                      <div className="flex items-center gap-1">
-                        <button
-                          type="button"
-                          disabled={currentPage <= 1}
-                          onClick={() =>
-                            setPage((current) => Math.max(1, current - 1))
-                          }
-                          className="h-8 rounded-md border border-slate-200 bg-white px-2.5 text-xs font-medium text-slate-700 disabled:cursor-not-allowed disabled:opacity-40"
-                        >
-                          ←
-                        </button>
-
-                        {Array.from(
-                          {
-                            length: totalPages,
-                          },
-                          (_, index) => index + 1,
-                        )
-                          .filter(
-                            (number) =>
-                              number === 1 ||
-                              number === totalPages ||
-                              Math.abs(number - currentPage) <= 1,
-                          )
-                          .map((number) => (
-                            <button
-                              key={number}
-                              type="button"
-                              onClick={() => setPage(number)}
-                              className={`h-8 min-w-8 rounded-md px-2 text-xs font-semibold ${
-                                number === currentPage
-                                  ? "bg-blue-600 text-white"
-                                  : "border border-slate-200 bg-white text-slate-700 hover:bg-slate-50"
-                              }`}
-                            >
-                              {number}
-                            </button>
-                          ))}
-
-                        <button
-                          type="button"
-                          disabled={currentPage >= totalPages}
-                          onClick={() =>
-                            setPage((current) =>
-                              Math.min(totalPages, current + 1),
-                            )
-                          }
-                          className="h-8 rounded-md border border-slate-200 bg-white px-2.5 text-xs font-medium text-slate-700 disabled:cursor-not-allowed disabled:opacity-40"
-                        >
-                          →
-                        </button>
-                      </div>
-                    </div>
-                  )}
+                  <Pagination
+                    currentPage={currentPage}
+                    totalPages={totalPages}
+                    onPageChange={(nextPage) => setPage(nextPage)}
+                    totalItems={filteredTransactions.length}
+                    pageSize={PAGE_SIZE}
+                  />
                 </Card>
               </section>
 

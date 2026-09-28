@@ -11,19 +11,19 @@ import Button from "@/components/ui/Button";
 import BackLink from "@/components/ui/BackLink";
 
 import {
-  createMember,
-  createBook,
-  getMembers,
-  searchMembers,
-  searchBooks,
-  getBookCopies,
-  createLoan,
-} from "@/lib/mock-api";
-
-import { searchMembersApi, searchBooksApi } from "@/lib/api";
+  getMembersApi,
+  searchMembersApi,
+  createMemberApi,
+  searchBooksApi,
+  createBookApi,
+  getBookCopiesApi,
+  createLoanApi,
+} from "@/lib/api";
 
 import type { Book, BookCopy, Loan, Member } from "@/lib/types";
 import LoadingState from "@/components/ui/LoadingState";
+import Pagination from "@/components/ui/Pagination";
+import { useToast } from "@/context/ToastContext";
 
 type MemberFormErrors = {
   name: string;
@@ -62,6 +62,7 @@ const BOOK_PAGE_SIZE = 10;
 
 export default function NewLoanPage() {
   const router = useRouter();
+  const { toast } = useToast();
   const successModalCloseRef = useRef<HTMLButtonElement>(null);
   const memberModalCloseRef = useRef<HTMLButtonElement>(null);
   const bookModalCloseRef = useRef<HTMLButtonElement>(null);
@@ -169,7 +170,6 @@ export default function NewLoanPage() {
   const [copyLoadingBookId, setCopyLoadingBookId] = useState<string | null>(
     null,
   );
-  const [copyError, setCopyError] = useState("");
 
   // =====================================================
   // DATE
@@ -184,16 +184,7 @@ export default function NewLoanPage() {
   // =====================================================
 
   const [submitLoading, setSubmitLoading] = useState(false);
-  const [submitError, setSubmitError] = useState("");
   const [successLoan, setSuccessLoan] = useState<Loan | null>(null);
-
-  type CreationSuccess = {
-    type: "member" | "book";
-    name: string;
-  };
-
-  const [creationSuccess, setCreationSuccess] =
-    useState<CreationSuccess | null>(null);
 
   function formatDate(value: string) {
     const date = new Date(`${value.slice(0, 10)}T00:00:00`);
@@ -230,16 +221,6 @@ export default function NewLoanPage() {
       document.removeEventListener("keydown", handleEscape);
     };
   }, [successLoan]);
-
-  useEffect(() => {
-    if (!creationSuccess) return;
-
-    const timer = window.setTimeout(() => {
-      setCreationSuccess(null);
-    }, 4500);
-
-    return () => window.clearTimeout(timer);
-  }, [creationSuccess]);
 
   useEffect(() => {
     const session = getSession();
@@ -283,15 +264,24 @@ export default function NewLoanPage() {
 
         try {
           const keyword = memberQuery.trim();
-          const result = await searchMembersApi(keyword);
+          const result =
+            keyword.length > 0
+              ? await searchMembersApi(keyword)
+              : await getMembersApi();
 
           if (!cancelled) {
-            setMembers(result.filter((member) => member.status === "ACTIVE"));
+            const visibleMembers = keyword
+              ? result
+              : result.filter((member) => member.status === "ACTIVE");
+
+            setMembers(visibleMembers);
             setMemberPage(1);
           }
-        } catch {
+        } catch (err: any) {
           if (!cancelled) {
-            setMemberError("Data anggota gagal dimuat.");
+            setMemberError(
+              err instanceof Error ? err.message : "Data anggota gagal dimuat."
+            );
             setMembers([]);
             setMemberPage(1);
           }
@@ -339,9 +329,11 @@ export default function NewLoanPage() {
             setBooks(visibleBooks);
             setBookPage(1);
           }
-        } catch {
+        } catch (err: any) {
           if (!cancelled) {
-            setBookError("Data buku gagal dimuat.");
+            setBookError(
+              err instanceof Error ? err.message : "Data buku gagal dimuat."
+            );
             setBooks([]);
             setBookPage(1);
           }
@@ -383,7 +375,6 @@ export default function NewLoanPage() {
     setBookPage(1);
     setSelectedBooks([]);
     setBookError("");
-    setCopyError("");
 
     // Reset tanggal
     setBorrowedAt("");
@@ -391,7 +382,6 @@ export default function NewLoanPage() {
     setDateError("");
 
     // Reset submit
-    setSubmitError("");
     setSuccessLoan(null);
   }
 
@@ -464,39 +454,14 @@ export default function NewLoanPage() {
       return;
     }
 
-    // NIK harus unik untuk anggota dalam perusahaan yang sedang aktif.
-    try {
-      const existingMembers = await getMembers();
-      const duplicateNik = existingMembers.some(
-        (member) => member.identityNumber === memberIdentityNumber.trim(),
-      );
-
-      if (duplicateNik) {
-        setMemberFormErrors((current) => ({
-          ...current,
-          identityNumber:
-            "NIK tersebut sudah terdaftar sebagai anggota. Gunakan NIK yang berbeda.",
-        }));
-        return;
-      }
-    } catch {
-      setMemberFormErrors((current) => ({
-        ...current,
-        identityNumber: "Data anggota gagal diverifikasi. Silakan coba lagi.",
-      }));
-      return;
-    }
-
     setMemberFormLoading(true);
 
     try {
-      const member = await createMember({
+      const member = await createMemberApi({
         name: memberName.trim(),
         phone: memberPhone.trim(),
         identityNumber: memberIdentityNumber.trim(),
         email: memberEmail.trim() || undefined,
-        memberType: "UMUM",
-        status: "ACTIVE",
       });
 
       // Langsung pilih anggota yang baru dibuat
@@ -514,23 +479,40 @@ export default function NewLoanPage() {
 
       setMembers([]);
       setMemberQuery("");
-      setCreationSuccess({ type: "member", name: member.name });
+      toast.success(
+        `${member.name} berhasil ditambahkan dan dipilih sebagai anggota.`
+      );
     } catch (error) {
       const message =
         error instanceof Error ? error.message : "Anggota gagal dibuat.";
 
+      const lowerMessage = message.toLowerCase();
       if (
-        message.toLowerCase().includes("nik") &&
-        message.toLowerCase().includes("sudah terdaftar")
+        lowerMessage.includes("nik") ||
+        lowerMessage.includes("sudah terdaftar") ||
+        lowerMessage.includes("terdaftar")
       ) {
         setMemberFormErrors((current) => ({
           ...current,
           identityNumber: message,
         }));
+      } else if (lowerMessage.includes("email")) {
+        setMemberFormErrors((current) => ({
+          ...current,
+          email: message,
+        }));
+      } else if (
+        lowerMessage.includes("nomor hp") ||
+        lowerMessage.includes("phone")
+      ) {
+        setMemberFormErrors((current) => ({
+          ...current,
+          phone: message,
+        }));
       } else {
         setMemberFormErrors((current) => ({
           ...current,
-          identityNumber: message,
+          name: message,
         }));
       }
     } finally {
@@ -595,7 +577,7 @@ export default function NewLoanPage() {
     setBookError("");
 
     try {
-      const book = await createBook({
+      const book = await createBookApi({
         code: bookCode.trim(),
         title: bookTitle.trim(),
         isbn: bookIsbn.trim() || undefined,
@@ -610,6 +592,7 @@ export default function NewLoanPage() {
 
       setShowBookForm(false);
       setBookFormErrors(EMPTY_BOOK_ERRORS);
+      setBookCode("");
       setBookTitle("");
       setBookIsbn("");
       setBookAuthor("");
@@ -621,8 +604,10 @@ export default function NewLoanPage() {
       setBookQuery("");
       setBooks([book]);
       setBookError("");
-      await selectBook(book);
-      setCreationSuccess({ type: "book", name: book.title });
+      await selectBook(book, true);
+      toast.success(
+        `${book.title} berhasil ditambahkan dan dipilih untuk peminjaman.`
+      );
     } catch (error) {
       const message =
         error instanceof Error ? error.message : "Buku gagal dibuat.";
@@ -636,39 +621,42 @@ export default function NewLoanPage() {
   // SELECT BOOK
   // =====================================================
 
-  async function selectBook(book: Book) {
+  async function selectBook(book: Book, autoSelectFirstCopy = false) {
     if (book.status === "INACTIVE" || book.availableCopies <= 0) {
       return;
     }
 
     if (selectedBooks.some((item) => item.book.id === book.id)) {
-      setSubmitError("");
       return;
     }
 
-    setCopyError("");
-    setSubmitError("");
     setCopyLoadingBookId(book.id);
 
     try {
-      const copies = await getBookCopies(book.id);
+      const copies = await getBookCopiesApi(book.id);
 
       setSelectedBooks((current) => {
         if (current.some((item) => item.book.id === book.id)) {
           return current;
         }
 
+        const availableCopies = copies.filter((c) => c.status === "AVAILABLE");
+        const defaultSelected =
+          autoSelectFirstCopy && availableCopies.length > 0
+            ? [availableCopies[0].id]
+            : [];
+
         return [
           ...current,
           {
             book,
             copies,
-            selectedCopyIds: [],
+            selectedCopyIds: defaultSelected,
           },
         ];
       });
     } catch {
-      setCopyError(`Copy buku ${book.title} gagal dimuat.`);
+      toast.error(`Copy buku ${book.title} gagal dimuat.`);
     } finally {
       setCopyLoadingBookId(null);
     }
@@ -682,7 +670,6 @@ export default function NewLoanPage() {
     setSelectedBooks((current) =>
       current.filter((item) => item.book.id !== bookId),
     );
-    setSubmitError("");
   }
 
   // =====================================================
@@ -710,8 +697,6 @@ export default function NewLoanPage() {
         };
       }),
     );
-
-    setSubmitError("");
   }
 
   // =====================================================
@@ -753,22 +738,20 @@ export default function NewLoanPage() {
       return;
     }
 
-    setSubmitError("");
-
     if (!selectedMember) {
-      setSubmitError("Anggota belum dipilih.");
+      toast.error("Anggota belum dipilih.");
       return;
     }
 
     if (selectedMember.status !== "ACTIVE") {
-      setSubmitError(
+      toast.error(
         "Member tidak aktif dan tidak dapat membuat transaksi baru.",
       );
       return;
     }
 
     if (selectedBooks.length === 0) {
-      setSubmitError("Minimal satu buku harus dipilih.");
+      toast.error("Minimal satu buku harus dipilih.");
       return;
     }
 
@@ -777,7 +760,7 @@ export default function NewLoanPage() {
     );
 
     if (archivedBook) {
-      setSubmitError(
+      toast.error(
         `Buku ${archivedBook.book.title} diarsipkan dan tidak dapat dipinjam.`,
       );
       return;
@@ -788,7 +771,7 @@ export default function NewLoanPage() {
     );
 
     if (bookWithoutCopy) {
-      setSubmitError(
+      toast.error(
         `Pilih minimal satu copy untuk buku ${bookWithoutCopy.book.title}.`,
       );
       return;
@@ -806,7 +789,7 @@ export default function NewLoanPage() {
     });
 
     if (invalidSelection) {
-      setSubmitError(
+      toast.error(
         "Ada copy yang sudah tidak tersedia. Silakan periksa kembali pilihan copy buku.",
       );
       return;
@@ -819,7 +802,7 @@ export default function NewLoanPage() {
     setSubmitLoading(true);
 
     try {
-      const loan = await createLoan({
+      const loan = await createLoanApi({
         memberId: selectedMember.id,
         items: selectedBooks.map((item) => ({
           bookId: item.book.id,
@@ -830,10 +813,11 @@ export default function NewLoanPage() {
       });
 
       setSuccessLoan(loan);
+      toast.success("Peminjaman berhasil dibuat.");
     } catch (error) {
-      setSubmitError(
-        error instanceof Error ? error.message : "Peminjaman gagal diproses.",
-      );
+      const message =
+        error instanceof Error ? error.message : "Peminjaman gagal diproses.";
+      toast.error(message);
     } finally {
       setSubmitLoading(false);
     }
@@ -857,13 +841,11 @@ export default function NewLoanPage() {
     setSelectedBooks([]);
 
     setBookError("");
-    setCopyError("");
 
     setBorrowedAt("");
     setDueAt("");
     setDateError("");
 
-    setSubmitError("");
     setSuccessLoan(null);
   }
 
@@ -885,11 +867,9 @@ export default function NewLoanPage() {
     setSelectedBooks([]);
     setBookError("");
     setCopyLoadingBookId(null);
-    setCopyError("");
     setBorrowedAt("");
     setDueAt("");
     setDateError("");
-    setSubmitError("");
     setSuccessLoan(null);
   }
 
@@ -1095,66 +1075,15 @@ export default function NewLoanPage() {
                         );
                       })}
 
-                      {memberTotalPages > 1 && (
-                        <div className="mt-4 flex items-center justify-between border-t border-slate-200 pt-3">
-                          <p className="text-xs text-slate-500">
-                            Halaman {currentMemberPage} dari {memberTotalPages}
-                          </p>
-
-                          <div className="flex items-center gap-1">
-                            <button
-                              type="button"
-                              disabled={currentMemberPage <= 1}
-                              onClick={() =>
-                                setMemberPage((current) =>
-                                  Math.max(1, current - 1),
-                                )
-                              }
-                              className="h-8 rounded-md border border-slate-200 bg-white px-2.5 text-xs font-medium text-slate-700 disabled:cursor-not-allowed disabled:opacity-40"
-                            >
-                              ←
-                            </button>
-
-                            {Array.from(
-                              { length: memberTotalPages },
-                              (_, index) => index + 1,
-                            )
-                              .filter(
-                                (number) =>
-                                  number === 1 ||
-                                  number === memberTotalPages ||
-                                  Math.abs(number - currentMemberPage) <= 1,
-                              )
-                              .map((number) => (
-                                <button
-                                  key={number}
-                                  type="button"
-                                  onClick={() => setMemberPage(number)}
-                                  className={`h-8 min-w-8 rounded-md px-2 text-xs font-semibold ${
-                                    number === currentMemberPage
-                                      ? "bg-blue-600 text-white"
-                                      : "border border-slate-200 bg-white text-slate-700 hover:bg-slate-50"
-                                  }`}
-                                >
-                                  {number}
-                                </button>
-                              ))}
-
-                            <button
-                              type="button"
-                              disabled={currentMemberPage >= memberTotalPages}
-                              onClick={() =>
-                                setMemberPage((current) =>
-                                  Math.min(memberTotalPages, current + 1),
-                                )
-                              }
-                              className="h-8 rounded-md border border-slate-200 bg-white px-2.5 text-xs font-medium text-slate-700 disabled:cursor-not-allowed disabled:opacity-40"
-                            >
-                              →
-                            </button>
-                          </div>
-                        </div>
-                      )}
+                      {/* MEMBER PAGINATION (MOBILE, TABLET & DESKTOP) */}
+                      <Pagination
+                        currentPage={currentMemberPage}
+                        totalPages={memberTotalPages}
+                        onPageChange={(nextPage) => setMemberPage(nextPage)}
+                        totalItems={members.length}
+                        pageSize={MEMBER_PAGE_SIZE}
+                        className="mt-4 -mx-4 -mb-4 sm:-mx-5 sm:-mb-5 rounded-b-xl border-t"
+                      />
                     </div>
                   )}
                 </>
@@ -1424,21 +1353,39 @@ export default function NewLoanPage() {
 
                 {/* EMPTY */}
 
-                {!bookLoading && books.length === 0 && !bookError && (
-                  <div className="mt-5 rounded-lg border border-slate-200 bg-slate-50 p-4">
-                    <p className="font-medium text-slate-800">
-                      {bookQuery.trim()
-                        ? "Buku tidak ditemukan"
-                        : "Tidak ada buku tersedia"}
-                    </p>
+                {!bookLoading &&
+                  books.length === 0 &&
+                  !bookError &&
+                  !showBookForm && (
+                    <div className="mt-5 rounded-lg border border-slate-200 bg-slate-50 p-4">
+                      <p className="font-medium text-slate-800">
+                        {bookQuery.trim()
+                          ? "Buku tidak ditemukan"
+                          : "Tidak ada buku tersedia"}
+                      </p>
 
-                    <p className="mt-1 text-sm text-slate-500">
-                      {bookQuery.trim()
-                        ? "Buku yang kamu cari tidak ditemukan. Silakan minta Company Admin menambahkan buku melalui menu Master Buku."
-                        : "Saat ini tidak ada buku yang dapat dipinjam."}
-                    </p>
-                  </div>
-                )}
+                      <p className="mt-1 text-sm text-slate-500">
+                        {bookQuery.trim()
+                          ? "Buku belum ditemukan. Kamu dapat membuat buku baru."
+                          : "Saat ini tidak ada buku yang dapat dipinjam. Kamu dapat membuat buku baru."}
+                      </p>
+
+                      <Button
+                        type="button"
+                        variant="secondary"
+                        className="mt-3"
+                        onClick={() => {
+                          setShowBookForm(true);
+                          setBookFormErrors(EMPTY_BOOK_ERRORS);
+                          if (bookQuery.trim()) {
+                            setBookTitle(bookQuery.trim());
+                          }
+                        }}
+                      >
+                        Buat Buku Baru
+                      </Button>
+                    </div>
+                  )}
 
                 {/* =================================================
                 CREATE BOOK MODAL
@@ -1730,15 +1677,29 @@ export default function NewLoanPage() {
                                       {book.isbn || "-"}
                                     </p>
                                   </div>
+
+                                  {archived && (
+                                    <p className="mt-2 text-xs font-medium text-slate-500">
+                                      Buku diarsipkan dan tidak dapat dipinjam.
+                                    </p>
+                                  )}
                                 </div>
 
-                                {/* KODE BUKU */}
-                                <p className="shrink-0 whitespace-nowrap pt-0.5 text-right text-sm text-slate-500">
-                                  {" "}
+                                {/* KODE BUKU + BADGE */}
+                                <div className="flex shrink-0 flex-col items-end gap-1 pt-0.5">
                                   <span className="font-medium text-slate-700">
                                     {book.code}
                                   </span>
-                                </p>
+                                  <span
+                                    className={`rounded-full px-2.5 py-0.5 text-xs font-medium ${
+                                      archived
+                                        ? "bg-slate-200 text-slate-500"
+                                        : "bg-emerald-50 text-emerald-700"
+                                    }`}
+                                  >
+                                    {archived ? "Diarsipkan" : "Aktif"}
+                                  </span>
+                                </div>
                               </div>
                             </div>
 
@@ -1845,15 +1806,6 @@ export default function NewLoanPage() {
                                 </Button>
                               </div>
 
-                              {copyError && (
-                                <p
-                                  role="alert"
-                                  className="mt-3 text-sm text-red-600"
-                                >
-                                  {copyError}
-                                </p>
-                              )}
-
                               {selectedItem.copies.length === 0 ? (
                                 <div className="mt-3 rounded-lg border border-slate-200 bg-white p-3">
                                   <p className="text-sm font-medium text-slate-800">
@@ -1922,66 +1874,15 @@ export default function NewLoanPage() {
                       );
                     })}
 
-                    {bookTotalPages > 1 && (
-                      <div className="mt-4 flex items-center justify-between border-t border-slate-200 pt-3">
-                        <p className="text-xs text-slate-500">
-                          Halaman {currentBookPage} dari {bookTotalPages}
-                        </p>
-
-                        <div className="flex items-center gap-1">
-                          <button
-                            type="button"
-                            disabled={currentBookPage <= 1}
-                            onClick={() =>
-                              setBookPage((current) =>
-                                Math.max(1, current - 1),
-                              )
-                            }
-                            className="h-8 rounded-md border border-slate-200 bg-white px-2.5 text-xs font-medium text-slate-700 disabled:cursor-not-allowed disabled:opacity-40"
-                          >
-                            ←
-                          </button>
-
-                          {Array.from(
-                            { length: bookTotalPages },
-                            (_, index) => index + 1,
-                          )
-                            .filter(
-                              (number) =>
-                                number === 1 ||
-                                number === bookTotalPages ||
-                                Math.abs(number - currentBookPage) <= 1,
-                            )
-                            .map((number) => (
-                              <button
-                                key={number}
-                                type="button"
-                                onClick={() => setBookPage(number)}
-                                className={`h-8 min-w-8 rounded-md px-2 text-xs font-semibold ${
-                                  number === currentBookPage
-                                    ? "bg-blue-600 text-white"
-                                    : "border border-slate-200 bg-white text-slate-700 hover:bg-slate-50"
-                                }`}
-                              >
-                                {number}
-                              </button>
-                            ))}
-
-                          <button
-                            type="button"
-                            disabled={currentBookPage >= bookTotalPages}
-                            onClick={() =>
-                              setBookPage((current) =>
-                                Math.min(bookTotalPages, current + 1),
-                              )
-                            }
-                            className="h-8 rounded-md border border-slate-200 bg-white px-2.5 text-xs font-medium text-slate-700 disabled:cursor-not-allowed disabled:opacity-40"
-                          >
-                            →
-                          </button>
-                        </div>
-                      </div>
-                    )}
+                    {/* BOOK PAGINATION (MOBILE, TABLET & DESKTOP) */}
+                    <Pagination
+                      currentPage={currentBookPage}
+                      totalPages={bookTotalPages}
+                      onPageChange={(nextPage) => setBookPage(nextPage)}
+                      totalItems={books.length}
+                      pageSize={BOOK_PAGE_SIZE}
+                      className="mt-4 -mx-4 -mb-4 sm:-mx-5 sm:-mb-5 rounded-b-xl border-t"
+                    />
                   </div>
                 )}
               </Card>
@@ -2201,12 +2102,6 @@ export default function NewLoanPage() {
                     {/* SUBMIT */}
 
                     <div className="mt-5 border-t border-slate-200 pt-5">
-                      {submitError && (
-                        <p role="alert" className="mb-4 text-sm text-red-600">
-                          {submitError}
-                        </p>
-                      )}
-
                       <Button
                         type="button"
                         loading={submitLoading}
@@ -2221,45 +2116,6 @@ export default function NewLoanPage() {
             </Card>
           </div>
         </div>
-
-        {creationSuccess && (
-          <div
-            className="fixed right-4 top-4 z-[80] w-[min(380px,calc(100vw-2rem))]"
-            role="status"
-            aria-live="polite"
-          >
-            <div className="flex items-start gap-3 rounded-xl border border-green-200 bg-white p-4 shadow-lg ring-1 ring-slate-900/5">
-              <div
-                className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-green-100 text-green-700"
-                aria-hidden="true"
-              >
-                ✓
-              </div>
-              <div className="min-w-0 flex-1">
-                <p className="text-sm font-semibold text-slate-900">
-                  {creationSuccess.type === "member"
-                    ? "Anggota berhasil ditambahkan"
-                    : "Buku berhasil ditambahkan"}
-                </p>
-                <p className="mt-1 text-sm leading-5 text-slate-500">
-                  {creationSuccess.type === "member"
-                    ? `${creationSuccess.name} berhasil ditambahkan dan dipilih sebagai anggota.`
-                    : `${creationSuccess.name} berhasil ditambahkan dan dipilih untuk peminjaman.`}
-                </p>
-              </div>
-              <button
-                type="button"
-                aria-label="Tutup notifikasi sukses"
-                onClick={() => setCreationSuccess(null)}
-                className="rounded-md p-1 text-slate-400 transition hover:bg-slate-100 hover:text-slate-700 focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-500"
-              >
-                <span aria-hidden="true" className="text-lg leading-none">
-                  ×
-                </span>
-              </button>
-            </div>
-          </div>
-        )}
 
         {/* =================================================
             SUCCESS

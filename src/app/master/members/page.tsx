@@ -12,9 +12,11 @@ import Button from "@/components/ui/Button";
 import BackLink from "@/components/ui/BackLink";
 import LoadingState from "@/components/ui/LoadingState";
 import ConfirmationDialog from "@/components/ui/ConfirmationDialog";
+import Pagination from "@/components/ui/Pagination";
 
 import type { Member, MemberStatus } from "@/lib/types";
 import { masterDataRepository } from "@/lib/master-data/repository";
+import { useToast } from "@/context/ToastContext";
 
 type MemberFormErrors = {
   name: string;
@@ -34,6 +36,7 @@ const PAGE_SIZE = 10;
 
 export default function MasterMembersPage() {
   const router = useRouter();
+  const { toast } = useToast();
 
   // =====================================================
   // PAGE
@@ -52,9 +55,6 @@ export default function MasterMembersPage() {
   const [page, setPage] = useState(1);
   const [total, setTotal] = useState(0);
   const [totalPages, setTotalPages] = useState(1);
-
-  const [successMessage, setSuccessMessage] = useState("");
-  const [warningMessage, setWarningMessage] = useState("");
 
   // =====================================================
   // FORM
@@ -173,34 +173,6 @@ export default function MasterMembersPage() {
       window.clearTimeout(timer);
     };
   }, [search, statusFilter, page]);
-
-  // =====================================================
-  // SUCCESS MESSAGE
-  // =====================================================
-
-  useEffect(() => {
-    if (!successMessage) {
-      return;
-    }
-
-    const timer = window.setTimeout(() => {
-      setSuccessMessage("");
-    }, 3500);
-
-    return () => window.clearTimeout(timer);
-  }, [successMessage]);
-
-  useEffect(() => {
-    if (!warningMessage) {
-      return;
-    }
-
-    const timer = window.setTimeout(() => {
-      setWarningMessage("");
-    }, 3500);
-
-    return () => window.clearTimeout(timer);
-  }, [warningMessage]);
 
   // =====================================================
   // FORM ESCAPE + FOCUS TRAP
@@ -413,9 +385,6 @@ export default function MasterMembersPage() {
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
 
-    setSuccessMessage("");
-    setWarningMessage("");
-
     if (!validateForm()) {
       return;
     }
@@ -438,7 +407,7 @@ export default function MasterMembersPage() {
           newEmail !== currentEmail;
 
         if (!hasChanges) {
-          setWarningMessage("Tidak ada perubahan yang disimpan.");
+          toast.warning("Tidak ada perubahan yang disimpan.");
           closeForm();
           return;
         }
@@ -450,7 +419,7 @@ export default function MasterMembersPage() {
           email: newEmail || undefined,
         });
 
-        setSuccessMessage("Data member berhasil diperbarui.");
+        toast.success("Data member berhasil diperbarui.");
       } else {
         await masterDataRepository.createMember({
           name: name.trim(),
@@ -459,7 +428,7 @@ export default function MasterMembersPage() {
           email: email.trim() || undefined,
         });
 
-        setSuccessMessage("Member berhasil ditambahkan.");
+        toast.success("Member berhasil ditambahkan.");
       }
 
       closeForm();
@@ -551,7 +520,7 @@ export default function MasterMembersPage() {
         status: confirmStatus,
       });
 
-      setSuccessMessage(
+      toast.success(
         confirmStatus === "ACTIVE"
           ? "Member berhasil diaktifkan."
           : "Member berhasil dinonaktifkan.",
@@ -578,7 +547,7 @@ export default function MasterMembersPage() {
         });
       }
     } catch (error) {
-      setError(
+      toast.error(
         error instanceof Error ? error.message : "Status member gagal diubah.",
       );
 
@@ -671,88 +640,6 @@ export default function MasterMembersPage() {
             </div>
           </div>
         </div>
-
-        {/* =================================================
-            SUCCESS
-        ================================================= */}
-
-        {successMessage && (
-          <div
-            className="fixed right-4 top-4 z-[80] w-[min(380px,calc(100vw-2rem))]"
-            role="status"
-            aria-live="polite"
-          >
-            <div className="flex items-start gap-3 rounded-xl border border-green-200 bg-white p-4 shadow-lg ring-1 ring-slate-900/5">
-              <div
-                className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-green-100 text-green-700"
-                aria-hidden="true"
-              >
-                ✓
-              </div>
-
-              <div className="min-w-0 flex-1">
-                <p className="text-sm font-semibold text-slate-900">Berhasil</p>
-
-                <p className="mt-1 text-sm leading-5 text-slate-500">
-                  {successMessage}
-                </p>
-              </div>
-
-              <button
-                type="button"
-                aria-label="Tutup notifikasi sukses"
-                onClick={() => setSuccessMessage("")}
-                className="rounded-md p-1 text-slate-400 transition hover:bg-slate-100 hover:text-slate-700 focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-500"
-              >
-                <span aria-hidden="true" className="text-lg leading-none">
-                  ×
-                </span>
-              </button>
-            </div>
-          </div>
-        )}
-
-        {/* =================================================
-            WARNING
-        ================================================= */}
-
-        {warningMessage && (
-          <div
-            className="fixed right-4 top-4 z-[80] w-[min(380px,calc(100vw-2rem))]"
-            role="status"
-            aria-live="polite"
-          >
-            <div className="flex items-start gap-3 rounded-xl border border-amber-200 bg-white p-4 shadow-lg ring-1 ring-slate-900/5">
-              <div
-                className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-amber-100 text-amber-700"
-                aria-hidden="true"
-              >
-                !
-              </div>
-
-              <div className="min-w-0 flex-1">
-                <p className="text-sm font-semibold text-slate-900">
-                  Tidak ada perubahan
-                </p>
-
-                <p className="mt-1 text-sm leading-5 text-slate-500">
-                  {warningMessage}
-                </p>
-              </div>
-
-              <button
-                type="button"
-                aria-label="Tutup notifikasi"
-                onClick={() => setWarningMessage("")}
-                className="rounded-md p-1 text-slate-400 transition hover:bg-slate-100 hover:text-slate-700 focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-500"
-              >
-                <span aria-hidden="true" className="text-lg leading-none">
-                  ×
-                </span>
-              </button>
-            </div>
-          </div>
-        )}
 
         {/* =================================================
             SEARCH
@@ -1126,60 +1013,16 @@ export default function MasterMembersPage() {
           )}
 
           {/* =================================================
-              PAGINATION
+              PAGINATION (MOBILE, TABLET & DESKTOP)
           ================================================= */}
 
-          {totalPages > 1 && (
-            <div className="flex items-center justify-between border-t border-slate-200 px-3 py-2.5 sm:px-4">
-              <p className="text-xs text-slate-500">
-                Halaman {page} dari {totalPages}
-              </p>
-
-              <div className="flex items-center gap-1">
-                <button
-                  type="button"
-                  disabled={page <= 1}
-                  onClick={() => setPage((current) => Math.max(1, current - 1))}
-                  className="h-8 rounded-md border border-slate-200 bg-white px-2.5 text-xs font-medium text-slate-700 disabled:cursor-not-allowed disabled:opacity-40"
-                >
-                  ←
-                </button>
-
-                {Array.from({ length: totalPages }, (_, index) => index + 1)
-                  .filter(
-                    (number) =>
-                      number === 1 ||
-                      number === totalPages ||
-                      Math.abs(number - page) <= 1,
-                  )
-                  .map((number) => (
-                    <button
-                      key={number}
-                      type="button"
-                      onClick={() => setPage(number)}
-                      className={`h-8 min-w-8 rounded-md px-2 text-xs font-semibold ${
-                        number === page
-                          ? "bg-blue-600 text-white"
-                          : "border border-slate-200 bg-white text-slate-700 hover:bg-slate-50"
-                      }`}
-                    >
-                      {number}
-                    </button>
-                  ))}
-
-                <button
-                  type="button"
-                  disabled={page >= totalPages}
-                  onClick={() =>
-                    setPage((current) => Math.min(totalPages, current + 1))
-                  }
-                  className="h-8 rounded-md border border-slate-200 bg-white px-2.5 text-xs font-medium text-slate-700 disabled:cursor-not-allowed disabled:opacity-40"
-                >
-                  →
-                </button>
-              </div>
-            </div>
-          )}
+          <Pagination
+            currentPage={page}
+            totalPages={totalPages}
+            onPageChange={(nextPage) => setPage(nextPage)}
+            totalItems={total}
+            pageSize={PAGE_SIZE}
+          />
         </Card>
       </div>
 

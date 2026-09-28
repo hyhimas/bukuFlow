@@ -11,6 +11,7 @@ import BackLink from "@/components/ui/BackLink";
 import EmptyState from "@/components/ui/EmptyState";
 import FeedbackPanel from "@/components/ui/FeedbackPanel";
 import LoadingState from "@/components/ui/LoadingState";
+import Pagination from "@/components/ui/Pagination";
 
 import { useRouter } from "next/navigation";
 import { getSession } from "@/lib/auth";
@@ -24,6 +25,7 @@ import {
 } from "@/lib/export/excel";
 
 import type { Loan, TransactionData } from "@/lib/types";
+import { useToast } from "@/context/ToastContext";
 
 type TransactionStatus = "ACTIVE" | "OVERDUE" | "COMPLETED";
 
@@ -53,6 +55,7 @@ const STATUS_OPTIONS: {
 
 export default function TransactionsPage() {
   const router = useRouter();
+  const { toast } = useToast();
 
   // =========================================================
   // DATA
@@ -148,8 +151,10 @@ export default function TransactionsPage() {
 
         setTransactions(result);
         hasLoadedTransactions.current = true;
-      } catch {
-        setError("Riwayat transaksi gagal dimuat.");
+      } catch (err: any) {
+        setError(
+          err instanceof Error ? err.message : "Riwayat transaksi gagal dimuat."
+        );
       } finally {
         setLoading(false);
         setTableLoading(false);
@@ -467,7 +472,7 @@ export default function TransactionsPage() {
     }));
 
     if (rows.length === 0) {
-      alert("Tidak ada transaksi pada periode yang dipilih.");
+      toast.warning("Tidak ada transaksi pada periode yang dipilih.");
       return;
     }
 
@@ -477,6 +482,7 @@ export default function TransactionsPage() {
       "Riwayat Transaksi",
     );
 
+    toast.success("Laporan riwayat transaksi berhasil diunduh.");
     setIsExportOpen(false);
   }
 
@@ -1052,179 +1058,297 @@ export default function TransactionsPage() {
         ) : (
           <>
             {/* =================================================
-                DESKTOP TABLE
+                TRANSACTIONS CARD (TABLE & MOBILE VIEW)
             ================================================== */}
 
-            <Card className="relative mt-5 hidden overflow-hidden xl:block">
-              <table className="w-full table-fixed border-collapse text-left text-sm">
-                <colgroup>
-                  <col className="w-[15%]" />
-                  <col className="w-[12%]" />
-                  <col className="w-[19%]" />
-                  <col className="w-[13%]" />
-                  <col className="w-[10%]" />
-                  <col className="w-[9%]" />
-                  <col className="w-[10%]" />
-                  <col className="w-[12%]" />
-                </colgroup>
+            <Card className="relative mt-5 overflow-hidden">
+              {/* DESKTOP TABLE */}
+              <div className="hidden overflow-x-auto xl:block">
+                <table className="w-full table-fixed border-collapse text-left text-sm">
+                  <colgroup>
+                    <col className="w-[15%]" />
+                    <col className="w-[12%]" />
+                    <col className="w-[19%]" />
+                    <col className="w-[13%]" />
+                    <col className="w-[10%]" />
+                    <col className="w-[9%]" />
+                    <col className="w-[10%]" />
+                    <col className="w-[12%]" />
+                  </colgroup>
 
-                {/* TABLE HEADER */}
+                  {/* TABLE HEADER */}
+                  <thead>
+                    <tr className="border-b border-slate-200 bg-slate-50">
+                      <th className="px-4 py-3 text-center text-xs font-semibold tracking-wide text-slate-500">
+                        Nomor transaksi
+                      </th>
 
-                <thead>
-                  <tr className="border-b border-slate-200 bg-slate-50">
-                    <th className="px-4 py-3 text-center text-xs font-semibold tracking-wide text-slate-500">
-                      Nomor transaksi
-                    </th>
+                      <th className="px-4 py-3 text-center text-xs font-semibold tracking-wide text-slate-500">
+                        Anggota
+                      </th>
 
-                    <th className="px-4 py-3 text-center text-xs font-semibold tracking-wide text-slate-500">
-                      Anggota
-                    </th>
+                      <th className="px-4 py-3 text-center text-xs font-semibold tracking-wide text-slate-500">
+                        Buku
+                      </th>
 
-                    <th className="px-4 py-3 text-center text-xs font-semibold tracking-wide text-slate-500">
-                      Buku
-                    </th>
+                      <th className="px-4 py-3 text-center text-xs font-semibold tracking-wide text-slate-500">
+                        Petugas
+                      </th>
 
-                    <th className="px-4 py-3 text-center text-xs font-semibold tracking-wide text-slate-500">
-                      Petugas
-                    </th>
+                      <th className="px-4 py-3 text-center text-xs font-semibold tracking-wide text-slate-500">
+                        Peminjaman
+                      </th>
 
-                    <th className="px-4 py-3 text-center text-xs font-semibold tracking-wide text-slate-500">
-                      Peminjaman
-                    </th>
+                      <th className="px-4 py-3 text-center text-xs font-semibold tracking-wide text-slate-500">
+                        Jatuh tempo
+                      </th>
 
-                    <th className="px-4 py-3 text-center text-xs font-semibold tracking-wide text-slate-500">
-                      Jatuh tempo
-                    </th>
+                      <th className="px-4 py-3 text-center text-xs font-semibold tracking-wide text-slate-500">
+                        Pengembalian
+                      </th>
 
-                    <th className="px-4 py-3 text-center text-xs font-semibold tracking-wide text-slate-500">
-                      Pengembalian
-                    </th>
+                      <th className="px-4 py-3 text-center text-xs font-semibold tracking-wide text-slate-500">
+                        Status
+                      </th>
+                    </tr>
+                  </thead>
 
-                    <th className="px-4 py-3 text-center text-xs font-semibold tracking-wide text-slate-500">
-                      Status
-                    </th>
-                  </tr>
-                </thead>
+                  {/* TABLE BODY */}
+                  <tbody>
+                    {paginatedTransactions.map((transaction) => (
+                      <tr
+                        key={transaction.loan.id}
+                        className="border-b border-slate-100 last:border-b-0 hover:bg-slate-50/70"
+                      >
+                        {/* NOMOR TRANSAKSI */}
+                        <td className="min-w-0 px-4 py-3.5 align-middle">
+                          <p
+                            className="truncate whitespace-nowrap font-semibold tracking-tight text-slate-900"
+                            title={transaction.loan.loanNumber}
+                          >
+                            {transaction.loan.loanNumber}
+                          </p>
+                        </td>
 
-                {/* TABLE BODY */}
+                        {/* ANGGOTA */}
+                        <td className="min-w-0 px-4 py-3.5 align-middle">
+                          <p
+                            className="truncate text-slate-700"
+                            title={transaction.member?.name ?? "-"}
+                          >
+                            {transaction.member?.name ?? "-"}
+                          </p>
+                        </td>
 
-                <tbody>
-                  {paginatedTransactions.map((transaction) => (
-                    <tr
-                      key={transaction.loan.id}
-                      className="border-b border-slate-100 last:border-b-0 hover:bg-slate-50/70"
-                    >
-                      {/* NOMOR TRANSAKSI */}
+                        {/* BUKU */}
+                        <td className="min-w-0 px-4 py-3.5 align-middle">
+                          {transaction.items.length === 0 ? (
+                            <span className="text-slate-400">-</span>
+                          ) : (
+                            <ul className="min-w-0 space-y-1">
+                              {transaction.items.map(({ book, bookCopy }) => (
+                                <li
+                                  key={`${transaction.loan.id}-${book?.id ?? "book"}-${bookCopy?.id ?? "copy"}`}
+                                  className="grid min-w-0 grid-cols-[10px_minmax(0,1fr)]"
+                                >
+                                  <span
+                                    className="text-slate-300"
+                                    aria-hidden="true"
+                                  >
+                                    •
+                                  </span>
 
-                      <td className="min-w-0 px-4 py-3.5 align-middle">
+                                  <span
+                                    className="min-w-0 leading-5 text-slate-700"
+                                    title={`${book?.title ?? "-"}${bookCopy?.code ? ` (${bookCopy.code})` : ""}`}
+                                  >
+                                    <span className="font-medium">
+                                      {book?.title ?? "-"}
+                                    </span>
+
+                                    {bookCopy?.code && (
+                                      <span className="ml-1 text-slate-400">
+                                        ({bookCopy.code})
+                                      </span>
+                                    )}
+                                  </span>
+                                </li>
+                              ))}
+                            </ul>
+                          )}
+                        </td>
+
+                        {/* PETUGAS */}
+                        <td className="min-w-0 px-4 py-3.5 align-middle">
+                          <p
+                            className="truncate text-slate-700"
+                            title={transaction.user?.name ?? "-"}
+                          >
+                            {transaction.user?.name ?? "-"}
+                          </p>
+                        </td>
+
+                        {/* PEMINJAMAN */}
+                        <td className="px-4 py-3.5 text-center align-middle">
+                          <span className="whitespace-nowrap text-slate-700">
+                            {formatDate(transaction.loan.borrowedAt)}
+                          </span>
+                        </td>
+
+                        {/* JATUH TEMPO */}
+                        <td className="px-4 py-3.5 text-center align-middle">
+                          <span className="whitespace-nowrap text-slate-700">
+                            {formatDate(transaction.loan.dueAt)}
+                          </span>
+                        </td>
+
+                        {/* PENGEMBALIAN */}
+                        <td className="px-4 py-3.5 text-center align-middle">
+                          <span className="whitespace-nowrap text-slate-700">
+                            {formatDate(transaction.loan.returnedAt)}
+                          </span>
+                        </td>
+
+                        {/* STATUS */}
+                        <td className="px-4 py-3.5 align-middle">
+                          <div className="flex justify-center">
+                            <Badge
+                              variant={getStatusVariant(transaction.loan.status)}
+                            >
+                              {getStatusLabel(transaction.loan.status)}
+                            </Badge>
+                          </div>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+
+              {/* TABLET + MOBILE */}
+              <div className="divide-y divide-slate-100 xl:hidden">
+                {paginatedTransactions.map((transaction) => (
+                  <div key={transaction.loan.id} className="p-4 sm:p-5">
+                    {/* TRANSACTION HEADER */}
+                    <div className="flex items-start justify-between gap-3">
+                      <div className="min-w-0 flex-1">
                         <p
-                          className="truncate whitespace-nowrap font-semibold tracking-tight text-slate-900"
+                          className="truncate text-sm font-semibold tracking-tight text-slate-900 sm:text-base"
                           title={transaction.loan.loanNumber}
                         >
                           {transaction.loan.loanNumber}
                         </p>
-                      </td>
 
-                      {/* ANGGOTA */}
-
-                      <td className="min-w-0 px-4 py-3.5 align-middle">
                         <p
-                          className="truncate text-slate-700"
+                          className="mt-0.5 truncate text-sm text-slate-500"
                           title={transaction.member?.name ?? "-"}
                         >
                           {transaction.member?.name ?? "-"}
                         </p>
-                      </td>
+                      </div>
 
-                      {/* BUKU */}
-
-                      <td className="min-w-0 px-4 py-3.5 align-middle">
-                        {transaction.items.length === 0 ? (
-                          <span className="text-slate-400">-</span>
-                        ) : (
-                          <ul className="min-w-0 space-y-1">
-                            {transaction.items.map(({ book, bookCopy }) => (
-                              <li
-                                key={`${transaction.loan.id}-${book?.id ?? "book"}-${bookCopy?.id ?? "copy"}`}
-                                className="grid min-w-0 grid-cols-[10px_minmax(0,1fr)]"
-                              >
-                                <span
-                                  className="text-slate-300"
-                                  aria-hidden="true"
-                                >
-                                  •
-                                </span>
-
-                                <span
-                                  className="min-w-0 leading-5 text-slate-700"
-                                  title={`${book?.title ?? "-"}${bookCopy?.code ? ` (${bookCopy.code})` : ""}`}
-                                >
-                                  <span className="font-medium">
-                                    {book?.title ?? "-"}
-                                  </span>
-
-                                  {bookCopy?.code && (
-                                    <span className="ml-1 text-slate-400">
-                                      ({bookCopy.code})
-                                    </span>
-                                  )}
-                                </span>
-                              </li>
-                            ))}
-                          </ul>
-                        )}
-                      </td>
-
-                      {/* PETUGAS */}
-
-                      <td className="min-w-0 px-4 py-3.5 align-middle">
-                        <p
-                          className="truncate text-slate-700"
-                          title={transaction.user?.name ?? "-"}
+                      <div className="shrink-0">
+                        <Badge
+                          variant={getStatusVariant(transaction.loan.status)}
                         >
-                          {transaction.user?.name ?? "-"}
-                        </p>
-                      </td>
+                          {getStatusLabel(transaction.loan.status)}
+                        </Badge>
+                      </div>
+                    </div>
 
+                    {/* BUKU */}
+                    <div className="mt-4">
+                      <p className="text-xs font-medium text-slate-500 sm:text-sm">
+                        Buku
+                      </p>
+
+                      {transaction.items.length === 0 ? (
+                        <p className="mt-1 text-sm text-slate-900">-</p>
+                      ) : (
+                        <ul className="mt-1 space-y-0.5 text-sm leading-5 text-slate-900 sm:text-base">
+                          {transaction.items.map(({ book, bookCopy }) => (
+                            <li
+                              key={`${transaction.loan.id}-${book?.id ?? "book"}-${bookCopy?.id ?? "copy"}`}
+                              className="break-words"
+                            >
+                              <span
+                                aria-hidden="true"
+                                className="mr-1 text-slate-400"
+                              >
+                                •
+                              </span>
+
+                              <span className="font-medium">
+                                {book?.title ?? "-"}
+                              </span>
+
+                              {bookCopy?.code && (
+                                <span className="ml-1 text-slate-400">
+                                  ({bookCopy.code})
+                                </span>
+                              )}
+                            </li>
+                          ))}
+                        </ul>
+                      )}
+                    </div>
+
+                    {/* DIVIDER */}
+                    <div className="my-4 border-t border-slate-100" />
+
+                    {/* PETUGAS */}
+                    <div className="mb-4">
+                      <p className="text-xs font-medium text-slate-500 sm:text-sm">
+                        Petugas
+                      </p>
+
+                      <p
+                        className="mt-0.5 truncate text-sm text-slate-900 sm:text-base"
+                        title={transaction.user?.name ?? "-"}
+                      >
+                        {transaction.user?.name ?? "-"}
+                      </p>
+                    </div>
+
+                    {/* DATE INFORMATION */}
+                    <div className="grid grid-cols-2 gap-x-5 gap-y-3">
                       {/* PEMINJAMAN */}
+                      <div className="min-w-0">
+                        <p className="text-xs font-medium text-slate-500 sm:text-sm">
+                          Peminjaman
+                        </p>
 
-                      <td className="px-4 py-3.5 text-center align-middle">
-                        <span className="whitespace-nowrap text-slate-700">
+                        <p className="mt-0.5 whitespace-nowrap text-sm text-slate-900 sm:text-base">
                           {formatDate(transaction.loan.borrowedAt)}
-                        </span>
-                      </td>
+                        </p>
+                      </div>
 
                       {/* JATUH TEMPO */}
+                      <div className="min-w-0">
+                        <p className="text-xs font-medium text-slate-500 sm:text-sm">
+                          Jatuh tempo
+                        </p>
 
-                      <td className="px-4 py-3.5 text-center align-middle">
-                        <span className="whitespace-nowrap text-slate-700">
+                        <p className="mt-0.5 whitespace-nowrap text-sm text-slate-900 sm:text-base">
                           {formatDate(transaction.loan.dueAt)}
-                        </span>
-                      </td>
+                        </p>
+                      </div>
 
                       {/* PENGEMBALIAN */}
+                      <div className="min-w-0">
+                        <p className="text-xs font-medium text-slate-500 sm:text-sm">
+                          Pengembalian
+                        </p>
 
-                      <td className="px-4 py-3.5 text-center align-middle">
-                        <span className="whitespace-nowrap text-slate-700">
+                        <p className="mt-0.5 whitespace-nowrap text-sm text-slate-900 sm:text-base">
                           {formatDate(transaction.loan.returnedAt)}
-                        </span>
-                      </td>
+                        </p>
+                      </div>
+                    </div>
+                  </div>
+                ))}
+              </div>
 
-                      {/* STATUS */}
-
-                      <td className="px-4 py-3.5 align-middle">
-                        <div className="flex justify-center">
-                          <Badge
-                            variant={getStatusVariant(transaction.loan.status)}
-                          >
-                            {getStatusLabel(transaction.loan.status)}
-                          </Badge>
-                        </div>
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
               {tableLoading && (
                 <div
                   className="absolute inset-0 flex items-center justify-center bg-white/70"
@@ -1237,225 +1361,16 @@ export default function TransactionsPage() {
                   </div>
                 </div>
               )}
+
+              {/* PAGINATION (MOBILE, TABLET & DESKTOP) */}
+              <Pagination
+                currentPage={currentPage}
+                totalPages={totalPages}
+                onPageChange={(nextPage) => setPage(nextPage)}
+                totalItems={filteredTransactions.length}
+                pageSize={PAGE_SIZE}
+              />
             </Card>
-
-            {/* =================================================
-                TABLET + MOBILE
-            ================================================== */}
-
-            <div className="relative mt-5 space-y-3 xl:hidden">
-              {paginatedTransactions.map((transaction) => (
-                <Card key={transaction.loan.id} className="p-4 sm:p-5">
-                  {/* =================================================
-                      TRANSACTION HEADER
-                  ================================================== */}
-
-                  <div className="flex items-start justify-between gap-3">
-                    <div className="min-w-0 flex-1">
-                      <p
-                        className="truncate text-sm font-semibold tracking-tight text-slate-900 sm:text-base"
-                        title={transaction.loan.loanNumber}
-                      >
-                        {transaction.loan.loanNumber}
-                      </p>
-
-                      <p
-                        className="mt-0.5 truncate text-sm text-slate-500"
-                        title={transaction.member?.name ?? "-"}
-                      >
-                        {transaction.member?.name ?? "-"}
-                      </p>
-                    </div>
-
-                    <div className="shrink-0">
-                      <Badge
-                        variant={getStatusVariant(transaction.loan.status)}
-                      >
-                        {getStatusLabel(transaction.loan.status)}
-                      </Badge>
-                    </div>
-                  </div>
-
-                  {/* =================================================
-                      BUKU
-                  ================================================== */}
-
-                  <div className="mt-4">
-                    <p className="text-xs font-medium text-slate-500 sm:text-sm">
-                      Buku
-                    </p>
-
-                    {transaction.items.length === 0 ? (
-                      <p className="mt-1 text-sm text-slate-900">-</p>
-                    ) : (
-                      <ul className="mt-1 space-y-0.5 text-sm leading-5 text-slate-900 sm:text-base">
-                        {transaction.items.map(({ book, bookCopy }) => (
-                          <li
-                            key={`${transaction.loan.id}-${book?.id ?? "book"}-${bookCopy?.id ?? "copy"}`}
-                            className="break-words"
-                          >
-                            <span
-                              aria-hidden="true"
-                              className="mr-1 text-slate-400"
-                            >
-                              •
-                            </span>
-
-                            <span className="font-medium">
-                              {book?.title ?? "-"}
-                            </span>
-
-                            {bookCopy?.code && (
-                              <span className="ml-1 text-slate-400">
-                                ({bookCopy.code})
-                              </span>
-                            )}
-                          </li>
-                        ))}
-                      </ul>
-                    )}
-                  </div>
-
-                  {/* DIVIDER */}
-
-                  <div className="my-4 border-t border-slate-100" />
-
-                  {/* =================================================
-                      PETUGAS
-                  ================================================== */}
-
-                  <div className="mb-4">
-                    <p className="text-xs font-medium text-slate-500 sm:text-sm">
-                      Petugas
-                    </p>
-
-                    <p
-                      className="mt-0.5 truncate text-sm text-slate-900 sm:text-base"
-                      title={transaction.user?.name ?? "-"}
-                    >
-                      {transaction.user?.name ?? "-"}
-                    </p>
-                  </div>
-
-                  {/* =================================================
-                      DATE INFORMATION
-                  ================================================== */}
-
-                  <div className="grid grid-cols-2 gap-x-5 gap-y-3">
-                    {/* PEMINJAMAN */}
-
-                    <div className="min-w-0">
-                      <p className="text-xs font-medium text-slate-500 sm:text-sm">
-                        Peminjaman
-                      </p>
-
-                      <p className="mt-0.5 whitespace-nowrap text-sm text-slate-900 sm:text-base">
-                        {formatDate(transaction.loan.borrowedAt)}
-                      </p>
-                    </div>
-
-                    {/* JATUH TEMPO */}
-
-                    <div className="min-w-0">
-                      <p className="text-xs font-medium text-slate-500 sm:text-sm">
-                        Jatuh tempo
-                      </p>
-
-                      <p className="mt-0.5 whitespace-nowrap text-sm text-slate-900 sm:text-base">
-                        {formatDate(transaction.loan.dueAt)}
-                      </p>
-                    </div>
-
-                    {/* PENGEMBALIAN */}
-
-                    <div className="min-w-0">
-                      <p className="text-xs font-medium text-slate-500 sm:text-sm">
-                        Pengembalian
-                      </p>
-
-                      <p className="mt-0.5 whitespace-nowrap text-sm text-slate-900 sm:text-base">
-                        {formatDate(transaction.loan.returnedAt)}
-                      </p>
-                    </div>
-                  </div>
-                </Card>
-              ))}
-              {tableLoading && (
-                <div
-                  className="absolute inset-0 flex items-center justify-center rounded-xl bg-white/70"
-                  role="status"
-                  aria-live="polite"
-                  aria-label="Memuat riwayat transaksi"
-                >
-                  <div className="rounded-lg bg-white px-4 py-3 text-sm font-medium text-slate-600 shadow-sm ring-1 ring-slate-200">
-                    Memuat data...
-                  </div>
-                </div>
-              )}
-            </div>
-
-            {/* =================================================
-                PAGINATION
-            ================================================== */}
-
-            {totalPages > 1 && (
-              <div className="flex items-center justify-between border-t border-slate-200 px-3 py-2.5 sm:px-4">
-                <p className="text-xs text-slate-500">
-                  Halaman {currentPage} dari {totalPages}
-                </p>
-
-                <div className="flex items-center gap-1">
-                  <button
-                    type="button"
-                    disabled={currentPage <= 1}
-                    onClick={() =>
-                      setPage((current) => Math.max(1, current - 1))
-                    }
-                    className="h-8 rounded-md border border-slate-200 bg-white px-2.5 text-xs font-medium text-slate-700 disabled:cursor-not-allowed disabled:opacity-40"
-                  >
-                    ←
-                  </button>
-
-                  {Array.from(
-                    {
-                      length: totalPages,
-                    },
-                    (_, index) => index + 1,
-                  )
-                    .filter(
-                      (number) =>
-                        number === 1 ||
-                        number === totalPages ||
-                        Math.abs(number - currentPage) <= 1,
-                    )
-                    .map((number) => (
-                      <button
-                        key={number}
-                        type="button"
-                        onClick={() => setPage(number)}
-                        className={`h-8 min-w-8 rounded-md px-2 text-xs font-semibold ${
-                          number === currentPage
-                            ? "bg-blue-600 text-white"
-                            : "border border-slate-200 bg-white text-slate-700 hover:bg-slate-50"
-                        }`}
-                      >
-                        {number}
-                      </button>
-                    ))}
-
-                  <button
-                    type="button"
-                    disabled={currentPage >= totalPages}
-                    onClick={() =>
-                      setPage((current) => Math.min(totalPages, current + 1))
-                    }
-                    className="h-8 rounded-md border border-slate-200 bg-white px-2.5 text-xs font-medium text-slate-700 disabled:cursor-not-allowed disabled:opacity-40"
-                  >
-                    →
-                  </button>
-                </div>
-              </div>
-            )}
           </>
         )}
       </div>

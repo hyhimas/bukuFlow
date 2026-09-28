@@ -15,13 +15,16 @@ import ConfirmationDialog from "@/components/ui/ConfirmationDialog";
 import EmptyState from "@/components/ui/EmptyState";
 import FeedbackPanel from "@/components/ui/FeedbackPanel";
 import LoadingState from "@/components/ui/LoadingState";
+import Pagination from "@/components/ui/Pagination";
 import type { ReturnLoanData, Loan } from "@/lib/types";
 import { getActiveReturnsApi, returnLoanItemsApi } from "@/lib/api";
+import { useToast } from "@/context/ToastContext";
 
 const PAGE_SIZE = 10;
 
 export default function ReturnsPage() {
   const router = useRouter();
+  const { toast } = useToast();
 
   const detailRef = useRef<HTMLDivElement>(null);
   const successModalCloseRef = useRef<HTMLButtonElement>(null);
@@ -40,7 +43,6 @@ export default function ReturnsPage() {
   const [isStaff, setIsStaff] = useState(false);
 
   const [error, setError] = useState("");
-  const [returnError, setReturnError] = useState("");
 
   const [successLoan, setSuccessLoan] = useState<Loan | null>(null);
   const [returnedCopies, setReturnedCopies] = useState<string[]>([]);
@@ -84,10 +86,18 @@ export default function ReturnsPage() {
       try {
         const result = await getActiveReturnsApi();
 
-        setLoans(result);
-        setFilteredLoans(result);
-      } catch {
-        setError("Transaksi aktif gagal dimuat.");
+        const activeOnly = result.filter(
+          (item) =>
+            item.loan.status !== "COMPLETED" &&
+            item.items.some((it) => it.loanItem.status === "BORROWED")
+        );
+
+        setLoans(activeOnly);
+        setFilteredLoans(activeOnly);
+      } catch (err: any) {
+        setError(
+          err instanceof Error ? err.message : "Transaksi aktif gagal dimuat."
+        );
       } finally {
         setLoading(false);
       }
@@ -174,7 +184,6 @@ export default function ReturnsPage() {
   function selectLoan(loanData: ReturnLoanData) {
     setSelectedLoan(loanData);
     setSelectedItemIds([]);
-    setReturnError("");
     setSuccessLoan(null);
   }
 
@@ -189,23 +198,34 @@ export default function ReturnsPage() {
   }
 
   async function handleReturn() {
-    setReturnError("");
-
     if (!selectedLoan) {
-      setReturnError("Transaksi belum dipilih.");
+      toast.error("Transaksi belum dipilih.");
       return;
     }
 
     if (selectedItemIds.length === 0) {
-      setReturnError("Pilih minimal satu buku yang dikembalikan.");
+      toast.error("Pilih minimal satu buku yang dikembalikan.");
       return;
     }
 
     setReturnLoading(true);
 
     try {
-      const loan = await returnLoanItemsApi(selectedLoan.loan.id, selectedItemIds);
+      const selectedCopies = selectedLoan.items
+        .filter(({ loanItem }) => selectedItemIds.includes(loanItem.id))
+        .map(
+          ({ bookCopy, loanItem }) =>
+            bookCopy.id || loanItem.bookCopyId || loanItem.id
+        );
 
+      const loan = await returnLoanItemsApi(
+        selectedLoan.loan.id,
+        selectedCopies,
+        selectedItemIds,
+        selectedLoan.loan.companyId
+      );
+
+      toast.success("Buku berhasil dikembalikan.");
       setSuccessLoan(loan);
 
       setReturnedCopies(
@@ -236,9 +256,9 @@ export default function ReturnsPage() {
       setFilteredLoans(updatedLoans);
       setSelectedLoan(null);
     } catch (error) {
-      setReturnError(
-        error instanceof Error ? error.message : "Pengembalian gagal diproses.",
-      );
+      const message =
+        error instanceof Error ? error.message : "Pengembalian gagal diproses.";
+      toast.error(message);
     } finally {
       setReturnLoading(false);
     }
@@ -449,64 +469,16 @@ export default function ReturnsPage() {
                 </div>
               )}
 
-              {totalPages > 1 && (
-                <div className="mt-4 flex items-center justify-between border-t border-slate-200 pt-3">
-                  <p className="text-xs text-slate-500">
-                    Halaman {currentPage} dari {totalPages}
-                  </p>
+              {/* PAGINATION (MOBILE, TABLET & DESKTOP) */}
 
-                  <div className="flex items-center gap-1">
-                    <button
-                      type="button"
-                      disabled={currentPage <= 1}
-                      onClick={() =>
-                        setPage((current) => Math.max(1, current - 1))
-                      }
-                      className="h-8 rounded-md border border-slate-200 bg-white px-2.5 text-xs font-medium text-slate-700 disabled:cursor-not-allowed disabled:opacity-40"
-                    >
-                      ←
-                    </button>
-
-                    {Array.from(
-                      {
-                        length: totalPages,
-                      },
-                      (_, index) => index + 1,
-                    )
-                      .filter(
-                        (number) =>
-                          number === 1 ||
-                          number === totalPages ||
-                          Math.abs(number - currentPage) <= 1,
-                      )
-                      .map((number) => (
-                        <button
-                          key={number}
-                          type="button"
-                          onClick={() => setPage(number)}
-                          className={`h-8 min-w-8 rounded-md px-2 text-xs font-semibold ${
-                            number === currentPage
-                              ? "bg-blue-600 text-white"
-                              : "border border-slate-200 bg-white text-slate-700 hover:bg-slate-50"
-                          }`}
-                        >
-                          {number}
-                        </button>
-                      ))}
-
-                    <button
-                      type="button"
-                      disabled={currentPage >= totalPages}
-                      onClick={() =>
-                        setPage((current) => Math.min(totalPages, current + 1))
-                      }
-                      className="h-8 rounded-md border border-slate-200 bg-white px-2.5 text-xs font-medium text-slate-700 disabled:cursor-not-allowed disabled:opacity-40"
-                    >
-                      →
-                    </button>
-                  </div>
-                </div>
-              )}
+              <Pagination
+                currentPage={currentPage}
+                totalPages={totalPages}
+                onPageChange={(nextPage) => setPage(nextPage)}
+                totalItems={filteredLoans.length}
+                pageSize={PAGE_SIZE}
+                className="mt-4 -mx-4 -mb-4 sm:-mx-5 sm:-mb-5 rounded-b-xl border-t"
+              />
             </Card>
           </div>
 
@@ -688,15 +660,6 @@ export default function ReturnsPage() {
                         </div>
                       </div>
 
-                      {returnError && (
-                        <p
-                          role="alert"
-                          className="mt-4 rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700"
-                        >
-                          {returnError}
-                        </p>
-                      )}
-
                       {isStaff && (
                         <div className="mt-5 flex flex-col-reverse gap-2 border-t border-slate-200 pt-4 sm:flex-row sm:justify-end">
                           <Button
@@ -706,7 +669,6 @@ export default function ReturnsPage() {
                             onClick={() => {
                               setSelectedLoan(null);
                               setSelectedItemIds([]);
-                              setReturnError("");
                             }}
                           >
                             Batal

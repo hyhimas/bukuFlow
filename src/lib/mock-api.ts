@@ -739,6 +739,61 @@ export async function createBook(data: CreateBookData): Promise<Book> {
   return { ...book };
 }
 
+export function registerInitialCopies(
+  bookId: string,
+  bookCode: string,
+  totalCopies: number
+) {
+  ensureMockStoreHydrated();
+  let companyId = "company-001";
+  try {
+    companyId = getCurrentSession().user.companyId;
+  } catch {
+    //
+  }
+
+  let book = mockBooks.find((b) => b.id === bookId);
+  if (!book) {
+    book = {
+      id: bookId,
+      companyId,
+      code: bookCode,
+      title: "Buku",
+      status: "AVAILABLE",
+      totalCopies,
+      availableCopies: totalCopies,
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString(),
+    };
+    mockBooks.push(book);
+  } else {
+    book.totalCopies = totalCopies;
+    book.availableCopies = totalCopies;
+  }
+
+  // Bersihkan copy lama jika ada untuk bookId ini
+  const existingOtherCopies = mockBookCopies.filter((c) => c.bookId !== bookId);
+  mockBookCopies.length = 0;
+  mockBookCopies.push(...existingOtherCopies);
+
+  const now = new Date().toISOString();
+  for (let index = 1; index <= totalCopies; index += 1) {
+    const copy: BookCopy = {
+      id: `copy-${bookId}-${index}`,
+      companyId,
+      bookId,
+      code: `${bookCode}-${String(index).padStart(3, "0")}`,
+      status: "AVAILABLE",
+      createdAt: now,
+      updatedAt: now,
+    };
+    mockBookCopies.push(copy);
+  }
+
+  syncBookAvailability(book);
+  persistMockState();
+}
+
 export async function updateBook(
   bookId: string,
   data: {
@@ -811,12 +866,23 @@ export async function changeBookStatus(
 
   const companyId = getCurrentSession().user.companyId;
 
-  const book = mockBooks.find(
+  let book = mockBooks.find(
     (item) => item.id === bookId && item.companyId === companyId,
   );
 
   if (!book) {
-    throw new Error("Data buku tidak ditemukan.");
+    book = {
+      id: bookId,
+      companyId,
+      code: `BK-${bookId.slice(-4).toUpperCase()}`,
+      title: "Buku",
+      status: status,
+      totalCopies: 1,
+      availableCopies: status === "INACTIVE" ? 0 : 1,
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString(),
+    };
+    mockBooks.push(book);
   }
 
   if (status !== "AVAILABLE" && status !== "INACTIVE") {
@@ -862,11 +928,13 @@ export async function getBookCopies(bookId: string): Promise<BookCopy[]> {
 
   // Jika buku berasal dari Backend API dan belum ada di mockBookCopies, buat copy default otomatis
   if (copies.length === 0) {
+    const book = mockBooks.find((b) => b.id === bookId);
+    const bookCode = book?.code || `BK-${bookId.slice(-4).toUpperCase()}`;
     const defaultCopy: BookCopy = {
       id: `copy-${bookId}-1`,
       companyId,
       bookId,
-      code: `CP-${bookId.slice(-4).toUpperCase()}-01`,
+      code: `${bookCode}-001`,
       status: "AVAILABLE",
       createdAt: new Date().toISOString(),
       updatedAt: new Date().toISOString(),
@@ -905,12 +973,23 @@ export async function createBookCopy(bookId: string): Promise<BookCopy> {
 
   const companyId = getCurrentSession().user.companyId;
 
-  const book = mockBooks.find(
+  let book = mockBooks.find(
     (item) => item.id === bookId && item.companyId === companyId,
   );
 
   if (!book) {
-    throw new Error("Data buku tidak ditemukan.");
+    book = {
+      id: bookId,
+      companyId,
+      code: `BK-${bookId.slice(-4).toUpperCase()}`,
+      title: "Buku",
+      status: "AVAILABLE",
+      totalCopies: 1,
+      availableCopies: 1,
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString(),
+    };
+    mockBooks.push(book);
   }
 
   const existingCopies = mockBookCopies.filter(
@@ -985,12 +1064,23 @@ export async function changeBookCopyStatus(
     );
   }
 
-  const book = mockBooks.find(
+  let book = mockBooks.find(
     (item) => item.id === copy.bookId && item.companyId === companyId,
   );
 
   if (!book) {
-    throw new Error("Buku induk tidak ditemukan.");
+    book = {
+      id: copy.bookId,
+      companyId,
+      code: copy.code.split("-").slice(0, -1).join("-") || `BK-${copy.bookId.slice(-4).toUpperCase()}`,
+      title: "Buku",
+      status: "AVAILABLE",
+      totalCopies: 1,
+      availableCopies: 1,
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString(),
+    };
+    mockBooks.push(book);
   }
 
   copy.status = status;

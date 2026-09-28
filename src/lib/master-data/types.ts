@@ -97,6 +97,7 @@ export interface CreateBookCopyInput {
 
 export interface ChangeBookCopyStatusInput {
   status: BookCopyStatus;
+  bookId?: string;
 }
 
 /**

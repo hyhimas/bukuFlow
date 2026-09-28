@@ -1,5 +1,4 @@
 import {
-  createMember,
   createBook,
   getBookCopies,
   getBookById,
@@ -8,12 +7,25 @@ import {
   changeBookStatus,
   createBookCopy,
   changeBookCopyStatus,
-  getMemberById,
-  updateMember,
-  changeMemberStatus,
 } from "@/lib/mock-api";
 
-import { searchMembersApi, searchBooksApi } from "@/lib/api";
+import {
+  getMembersApi,
+  searchMembersApi,
+  getMemberApi,
+  createMemberApi,
+  updateMemberApi,
+  changeMemberStatusApi,
+  searchBooksApi,
+  getBooksApi,
+  createBookApi,
+  getBookApi,
+  updateBookApi,
+  changeBookStatusApi,
+  getBookCopiesApi,
+  createBookCopyApi,
+  changeBookCopyStatusApi,
+} from "@/lib/api";
 
 import type {
   Book,
@@ -44,7 +56,7 @@ import type {
  * Repository Master Data
  *
  * UI hanya berkomunikasi dengan repository ini.
- * Mengambil data member dari Backend API jika tersedia.
+ * Mengambil data member dan buku dari Backend API secara terintegrasi.
  */
 export const masterDataRepository = {
   /**
@@ -54,8 +66,11 @@ export const masterDataRepository = {
   async listMembers(
     input: MemberListInput = {},
   ): Promise<PaginatedResult<Member>> {
-    const keyword = input.search ?? "";
-    const members = await searchMembersApi(keyword);
+    const keyword = input.search?.trim() ?? "";
+    const members =
+      keyword.length > 0
+        ? await searchMembersApi(keyword)
+        : await getMembersApi();
 
     const filtered =
       input.status !== undefined
@@ -71,7 +86,7 @@ export const masterDataRepository = {
 
   async getMember(id: string): Promise<Member | null> {
     try {
-      return await getMemberById(id);
+      return await getMemberApi(id);
     } catch {
       return null;
     }
@@ -80,10 +95,11 @@ export const masterDataRepository = {
   async createMember(
     input: CreateMemberInput,
   ): Promise<MutationResult<Member>> {
-    const member = await createMember({
-      ...input,
-      memberType: "UMUM",
-      status: "ACTIVE",
+    const member = await createMemberApi({
+      name: input.name,
+      phone: input.phone,
+      identityNumber: input.identityNumber,
+      email: input.email,
     });
 
     return {
@@ -93,31 +109,31 @@ export const masterDataRepository = {
   },
 
   async updateMember(
-  id: string,
-  input: UpdateMemberInput,
-): Promise<MutationResult<Member>> {
-  const member = await updateMember(id, input);
+    id: string,
+    input: UpdateMemberInput,
+  ): Promise<MutationResult<Member>> {
+    const member = await updateMemberApi(id, input);
 
-  return {
-    data: member,
-    message: "Member berhasil diperbarui.",
-  };
-},
+    return {
+      data: member,
+      message: "Member berhasil diperbarui.",
+    };
+  },
 
   async changeMemberStatus(
-  id: string,
-  input: ChangeMemberStatusInput,
-): Promise<MutationResult<Member>> {
-  const member = await changeMemberStatus(id, input.status);
+    id: string,
+    input: ChangeMemberStatusInput,
+  ): Promise<MutationResult<Member>> {
+    const member = await changeMemberStatusApi(id, input.status);
 
-  return {
-    data: member,
-    message:
-      input.status === "ACTIVE"
-        ? "Member berhasil diaktifkan."
-        : "Member berhasil dinonaktifkan.",
-  };
-},
+    return {
+      data: member,
+      message:
+        input.status === "ACTIVE"
+          ? "Member berhasil diaktifkan."
+          : "Member berhasil dinonaktifkan.",
+    };
+  },
 
   /**
    * BOOK
@@ -126,8 +142,10 @@ export const masterDataRepository = {
   async listBooks(
     input: BookListInput = {},
   ): Promise<PaginatedResult<Book>> {
-    const keyword = input.search ?? "";
-    const books = await searchBooksApi(keyword);
+    const keyword = input.search?.trim() ?? "";
+    const books = keyword.length > 0
+      ? await searchBooksApi(keyword)
+      : await getBooksApi();
 
     const filtered =
       input.status !== undefined
@@ -142,17 +160,13 @@ export const masterDataRepository = {
   },
 
   async getBook(id: string): Promise<Book | null> {
-  try {
-    return await getBookById(id);
-  } catch {
-    return null;
-  }
-},
+    return await getBookApi(id);
+  },
 
   async createBook(
     input: CreateBookInput,
   ): Promise<MutationResult<Book>> {
-    const book = await createBook(input);
+    const book = await createBookApi(input);
 
     return {
       data: book,
@@ -161,107 +175,100 @@ export const masterDataRepository = {
   },
 
   async updateBook(
-  id: string,
-  input: UpdateBookInput,
-): Promise<MutationResult<Book>> {
-  const book = await updateBook(id, input);
+    id: string,
+    input: UpdateBookInput,
+  ): Promise<MutationResult<Book>> {
+    const book = await updateBookApi(id, input);
 
-  return {
-    data: book,
-    message: "Buku berhasil diperbarui.",
-  };
-},
+    return {
+      data: book,
+      message: "Buku berhasil diperbarui.",
+    };
+  },
 
-async changeBookStatus(
-  id: string,
-  input: ChangeBookStatusInput,
-): Promise<MutationResult<Book>> {
-  const book = await changeBookStatus(
-    id,
-    input.status,
-  );
+  async changeBookStatus(
+    id: string,
+    input: ChangeBookStatusInput,
+  ): Promise<MutationResult<Book>> {
+    const book = await changeBookStatusApi(id, input.status);
 
-  return {
-    data: book,
-    message:
-      input.status === "AVAILABLE"
-        ? "Buku berhasil diaktifkan."
-        : "Buku berhasil diarsipkan.",
-  };
-},
+    return {
+      data: book,
+      message:
+        input.status === "AVAILABLE"
+          ? "Buku berhasil diaktifkan."
+          : "Buku berhasil diarsipkan.",
+    };
+  },
 
   /**
    * BOOK COPY
    */
 
-  /**
- * BOOK COPY
- */
+  async listBookCopies(
+    input: BookCopyListInput = {},
+  ): Promise<PaginatedResult<BookCopy>> {
+    if (!input.bookId) {
+      return paginate(
+        [],
+        input.page ?? 1,
+        input.pageSize ?? 10,
+      );
+    }
 
-async listBookCopies(
-  input: BookCopyListInput = {},
-): Promise<PaginatedResult<BookCopy>> {
-  if (!input.bookId) {
+    const copies = await getBookCopiesApi(input.bookId);
+
+    const filtered =
+      input.status !== undefined
+        ? copies.filter(
+            (copy) => copy.status === input.status,
+          )
+        : copies;
+
     return paginate(
-      [],
+      filtered,
       input.page ?? 1,
       input.pageSize ?? 10,
     );
-  }
+  },
 
-  const copies = await getBookCopies(
-    input.bookId,
-  );
+  async getBookCopy(
+    id: string,
+  ): Promise<BookCopy | null> {
+    try {
+      return await getBookCopy(id);
+    } catch {
+      return null;
+    }
+  },
 
-  const filtered =
-    input.status !== undefined
-      ? copies.filter(
-          (copy) => copy.status === input.status,
-        )
-      : copies;
+  async createBookCopy(
+    input: CreateBookCopyInput,
+  ): Promise<MutationResult<BookCopy>> {
+    const copy = await createBookCopyApi(input.bookId);
 
-  return paginate(
-    filtered,
-    input.page ?? 1,
-    input.pageSize ?? 10,
-  );
-},
+    return {
+      data: copy,
+      message: `Copy ${copy.code} berhasil ditambahkan.`,
+    };
+  },
 
-async getBookCopy(
-  id: string,
-): Promise<BookCopy | null> {
-  try {
-    return await getBookCopy(id);
-  } catch {
-    return null;
-  }
-},
+  async changeBookCopyStatus(
+    id: string,
+    input: ChangeBookCopyStatusInput,
+  ): Promise<MutationResult<BookCopy>> {
+    const bookId = input.bookId || "";
+    const copy = await changeBookCopyStatusApi(
+      bookId,
+      id,
+      input.status,
+    );
 
-async createBookCopy(
-  input: CreateBookCopyInput,
-): Promise<MutationResult<BookCopy>> {
-  const copy = await createBookCopy(input.bookId);
-
-  return {
-    data: copy,
-    message: `Copy ${copy.code} berhasil ditambahkan.`,
-  };
-},
-
-async changeBookCopyStatus(
-  id: string,
-  input: ChangeBookCopyStatusInput,
-): Promise<MutationResult<BookCopy>> {
-  const copy = await changeBookCopyStatus(
-    id,
-    input.status,
-  );
-
-  return {
-    data: copy,
-    message: `Status copy ${copy.code} berhasil diubah.`,
-  };
-},
+    return {
+      data: copy,
+      message: `Status copy ${copy.code} berhasil diubah.`,
+    };
+  },
 
 };
 
