@@ -14,6 +14,7 @@ import {
   getMembersApi,
   searchMembersApi,
   createMemberApi,
+  getBooksApi,
   searchBooksApi,
   createBookApi,
   getBookCopiesApi,
@@ -24,6 +25,7 @@ import type { Book, BookCopy, Loan, Member } from "@/lib/types";
 import LoadingState from "@/components/ui/LoadingState";
 import Pagination from "@/components/ui/Pagination";
 import { useToast } from "@/context/ToastContext";
+import BookCameraScannerModal from "@/components/scanner/BookCameraScannerModal";
 
 type MemberFormErrors = {
   name: string;
@@ -172,6 +174,16 @@ export default function NewLoanPage() {
   );
 
   // =====================================================
+  // SCANNER & BARCODE STATE
+  // =====================================================
+
+  const [scannerModalOpen, setScannerModalOpen] = useState(false);
+  const [scanLoading, setScanLoading] = useState(false);
+  const [highlightedBookId, setHighlightedBookId] = useState<string | null>(
+    null,
+  );
+
+  // =====================================================
   // DATE
   // =====================================================
 
@@ -185,6 +197,71 @@ export default function NewLoanPage() {
 
   const [submitLoading, setSubmitLoading] = useState(false);
   const [successLoan, setSuccessLoan] = useState<Loan | null>(null);
+
+  // =====================================================
+  // GLOBAL HARDWARE USB BARCODE SCANNER LISTENER
+  // =====================================================
+
+  useEffect(() => {
+    if (!selectedMember || showMemberForm || showBookForm || successLoan) {
+      return;
+    }
+
+    let buffer = "";
+    let lastKeyTime = 0;
+
+    const handleGlobalKeyDown = (e: KeyboardEvent) => {
+      if (e.key === "Escape" || e.key === "Tab" || e.key.startsWith("F")) {
+        return;
+      }
+
+      const activeEl = document.activeElement as HTMLElement | null;
+      const isInputFocused =
+        activeEl &&
+        (activeEl.tagName === "INPUT" ||
+          activeEl.tagName === "TEXTAREA" ||
+          activeEl.tagName === "SELECT");
+
+      const now = Date.now();
+      const elapsed = now - lastKeyTime;
+      lastKeyTime = now;
+
+      if (e.key === "Enter") {
+        const clean = buffer.trim();
+        if (clean.length >= 2) {
+          e.preventDefault();
+          buffer = "";
+          void handleScanCode(clean);
+        }
+        return;
+      }
+
+      // If user typing slowly in input, reset buffer
+      if (elapsed > 100) {
+        buffer = "";
+      }
+
+      if (e.key.length === 1 && !e.ctrlKey && !e.altKey && !e.metaKey) {
+        if (isInputFocused && elapsed > 60) {
+          return;
+        }
+        buffer += e.key;
+      }
+    };
+
+    window.addEventListener("keydown", handleGlobalKeyDown);
+    return () => {
+      window.removeEventListener("keydown", handleGlobalKeyDown);
+    };
+  }, [
+    selectedMember,
+    showMemberForm,
+    showBookForm,
+    successLoan,
+    selectedBooks,
+    books,
+    scanLoading,
+  ]);
 
   function formatDate(value: string) {
     const date = new Date(`${value.slice(0, 10)}T00:00:00`);
@@ -697,6 +774,261 @@ export default function NewLoanPage() {
         };
       }),
     );
+  }
+
+  // =====================================================
+  // SCANNER & BARCODE LOOKUP HANDLER
+  // =====================================================
+
+  async function handleScanCode(scannedRaw: string) {
+    const rawCode = scannedRaw.trim();
+    if (!rawCode || scanLoading) return;
+    const code = rawCode.toUpperCase();
+
+    setScanLoading(true);
+    try {
+      // 1. Check if the copy is already in currently loaded selectedBooks
+      const foundInSelected = selectedBooks.find((item) =>
+        item.copies.some(
+          (c) =>
+            c.code.toUpperCase() === code ||
+            c.id.toUpperCase() === code ||
+            c.code.toUpperCase().replace(/[^A-Z0-9]/g, "") ===
+              code.replace(/[^A-Z0-9]/g, ""),
+        ),
+      );
+
+      if (foundInSelected) {
+        const targetCopy = foundInSelected.copies.find(
+          (c) =>
+            c.code.toUpperCase() === code ||
+            c.id.toUpperCase() === code ||
+            c.code.toUpperCase().replace(/[^A-Z0-9]/g, "") ===
+              code.replace(/[^A-Z0-9]/g, ""),
+        );
+        if (targetCopy) {
+          if (targetCopy.status !== "AVAILABLE") {
+            toast.warning(
+              `Copy ${targetCopy.code} berstatus "${targetCopy.status}" (tidak dapat dipinjam).`,
+            );
+            return;
+          }
+          if (foundInSelected.selectedCopyIds.includes(targetCopy.id)) {
+            toast.info(`Copy ${targetCopy.code} sudah terpilih.`);
+            return;
+          }
+          toggleCopy(foundInSelected.book.id, targetCopy);
+          toast.success(
+            `Copy ${targetCopy.code} (${foundInSelected.book.title}) berhasil dipilih!`,
+          );
+          return;
+        }
+      }
+
+      // 2. Candidate prefix if code is formatted like CP-333E-01 -> CP-333E
+      const prefixCandidate = code.includes("-")
+        ? code.substring(0, code.lastIndexOf("-")).trim()
+        : code;
+
+      let matchedBook: Book | null = null;
+      let matchedCopy: BookCopy | null = null;
+      let allLoadedCopies: BookCopy[] = [];
+
+      // A. Check in current books on page
+      for (const b of books) {
+        if (
+          b.code.toUpperCase() === code ||
+          b.code.toUpperCase() === prefixCandidate ||
+          (b.isbn && b.isbn.toUpperCase() === code)
+        ) {
+          matchedBook = b;
+          break;
+        }
+        const bCopies = await getBookCopiesApi(b.id).catch(() => []);
+        const foundCopy = bCopies.find(
+          (c) =>
+            c.code.toUpperCase() === code ||
+            c.id.toUpperCase() === code ||
+            c.code.toUpperCase().replace(/[^A-Z0-9]/g, "") ===
+              code.replace(/[^A-Z0-9]/g, ""),
+        );
+        if (foundCopy) {
+          matchedBook = b;
+          matchedCopy = foundCopy;
+          allLoadedCopies = bCopies;
+          break;
+        }
+      }
+
+      // B. If not found in current page books, search via searchBooksApi (both code & prefix)
+      if (!matchedBook) {
+        const [searchExact, searchPrefix] = await Promise.all([
+          searchBooksApi(code).catch(() => []),
+          prefixCandidate !== code
+            ? searchBooksApi(prefixCandidate).catch(() => [])
+            : Promise.resolve([]),
+        ]);
+
+        const candidates = [...searchExact, ...searchPrefix];
+        for (const b of candidates) {
+          const bCopies = await getBookCopiesApi(b.id).catch(() => []);
+          const foundCopy = bCopies.find(
+            (c) =>
+              c.code.toUpperCase() === code ||
+              c.id.toUpperCase() === code ||
+              c.code.toUpperCase().replace(/[^A-Z0-9]/g, "") ===
+                code.replace(/[^A-Z0-9]/g, ""),
+          );
+          if (foundCopy) {
+            matchedBook = b;
+            matchedCopy = foundCopy;
+            allLoadedCopies = bCopies;
+            break;
+          }
+          if (
+            b.code.toUpperCase() === code ||
+            b.code.toUpperCase() === prefixCandidate
+          ) {
+            matchedBook = b;
+            allLoadedCopies = bCopies;
+            break;
+          }
+        }
+      }
+
+      // C. Fallback: Search all catalog books
+      if (!matchedBook) {
+        const allBooks = await getBooksApi({ size: 100 }).catch(() => []);
+        const directBook = allBooks.find(
+          (b) =>
+            b.code.toUpperCase() === code ||
+            b.code.toUpperCase() === prefixCandidate ||
+            (b.isbn && b.isbn.toUpperCase() === code) ||
+            code.startsWith(b.code.toUpperCase()),
+        );
+
+        if (directBook) {
+          matchedBook = directBook;
+          allLoadedCopies = await getBookCopiesApi(directBook.id).catch(() => []);
+          matchedCopy =
+            allLoadedCopies.find(
+              (c) =>
+                c.code.toUpperCase() === code ||
+                c.id.toUpperCase() === code ||
+                c.code.toUpperCase().replace(/[^A-Z0-9]/g, "") ===
+                  code.replace(/[^A-Z0-9]/g, ""),
+            ) || null;
+        } else {
+          // Scan all copies across all books
+          for (const b of allBooks) {
+            const bCopies = await getBookCopiesApi(b.id).catch(() => []);
+            const foundCopy = bCopies.find(
+              (c) =>
+                c.code.toUpperCase() === code ||
+                c.id.toUpperCase() === code ||
+                c.code.toUpperCase().replace(/[^A-Z0-9]/g, "") ===
+                  code.replace(/[^A-Z0-9]/g, ""),
+            );
+            if (foundCopy) {
+              matchedBook = b;
+              matchedCopy = foundCopy;
+              allLoadedCopies = bCopies;
+              break;
+            }
+          }
+        }
+      }
+
+      if (!matchedBook) {
+        toast.error(`Buku dengan kode "${rawCode}" tidak ditemukan.`);
+        return;
+      }
+
+      if (matchedBook.status === "INACTIVE") {
+        toast.error(
+          `Buku "${matchedBook.title}" berstatus diarsipkan / non-aktif.`,
+        );
+        return;
+      }
+
+      // Ensure copies are loaded
+      if (allLoadedCopies.length === 0) {
+        allLoadedCopies = await getBookCopiesApi(matchedBook.id).catch(() => []);
+      }
+
+      const availableCopies = allLoadedCopies.filter(
+        (c) => c.status === "AVAILABLE",
+      );
+      if (availableCopies.length === 0) {
+        toast.warning(
+          `Semua copy untuk buku "${matchedBook.title}" sedang dipinjam atau tidak tersedia.`,
+        );
+        return;
+      }
+
+      const copyToSelect =
+        matchedCopy && matchedCopy.status === "AVAILABLE"
+          ? matchedCopy
+          : availableCopies[0];
+
+      setSelectedBooks((current) => {
+        const existing = current.find((item) => item.book.id === matchedBook!.id);
+        if (existing) {
+          if (existing.selectedCopyIds.includes(copyToSelect.id)) {
+            return current;
+          }
+          return current.map((item) =>
+            item.book.id === matchedBook!.id
+              ? {
+                  ...item,
+                  selectedCopyIds: [...item.selectedCopyIds, copyToSelect.id],
+                }
+              : item,
+          );
+        } else {
+          return [
+            ...current,
+            {
+              book: matchedBook!,
+              copies: allLoadedCopies,
+              selectedCopyIds: [copyToSelect.id],
+            },
+          ];
+        }
+      });
+
+      // Ensure matchedBook is placed in books and shown on Page 1
+      setBooks((prev) => [
+        matchedBook!,
+        ...prev.filter((b) => b.id !== matchedBook!.id),
+      ]);
+      setBookPage(1);
+
+      // Highlight scanned book & auto-scroll
+      setHighlightedBookId(matchedBook.id);
+      setTimeout(() => setHighlightedBookId(null), 3500);
+
+      setTimeout(() => {
+        const bookCardEl = document.getElementById(
+          `book-card-${matchedBook!.id}`,
+        );
+        const selectedEl = document.getElementById(
+          `selected-book-${matchedBook!.id}`,
+        );
+        const targetEl = bookCardEl || selectedEl;
+        if (targetEl) {
+          targetEl.scrollIntoView({ behavior: "smooth", block: "center" });
+        }
+      }, 150);
+
+      toast.success(
+        `✅ Berhasil menambahkan: ${matchedBook.title} (Copy: ${copyToSelect.code})`,
+      );
+    } catch (err: any) {
+      toast.error(err?.message || "Gagal memproses scan barcode.");
+    } finally {
+      setScanLoading(false);
+    }
   }
 
   // =====================================================
@@ -1299,18 +1631,28 @@ export default function NewLoanPage() {
 
             {selectedMember && (
               <Card className="mt-5 p-4 sm:p-5">
-                <h3 className="text-base font-semibold text-slate-900">
-                  2. Pilih Buku
-                </h3>
+                <div className="flex items-center justify-between gap-3">
+                  <div className="min-w-0">
+                    <h3 className="text-base font-semibold text-slate-900">
+                      2. Pilih Buku
+                    </h3>
+                    <p className="mt-0.5 text-xs sm:text-sm text-slate-500">
+                      Cari buku atau arahkan scanner USB / kamera.
+                    </p>
+                  </div>
 
-                <p className="mt-1 text-sm text-slate-500">
-                  Semua buku yang tersedia ditampilkan. Gunakan pencarian untuk
-                  mempersempit daftar.
-                </p>
+                  <button
+                    type="button"
+                    onClick={() => setScannerModalOpen(true)}
+                    className="inline-flex shrink-0 items-center gap-1.5 rounded-lg border border-blue-200 bg-blue-50/80 px-3 py-1.5 text-xs font-semibold text-blue-700 transition hover:bg-blue-100 hover:border-blue-300 focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-500"
+                  >
+                    <span aria-hidden="true" className="text-sm">📷</span>
+                    <span>Scan Kamera</span>
+                  </button>
+                </div>
 
                 {/* SEARCH BOOK */}
-
-                <div className="mt-5">
+                <div className="mt-4">
                   <Input
                     id="book-search"
                     label="Cari Buku"
@@ -1633,16 +1975,20 @@ export default function NewLoanPage() {
                       );
                       const selected = Boolean(selectedItem);
                       const loading = copyLoadingBookId === book.id;
+                      const isHighlighted = highlightedBookId === book.id;
 
                       return (
                         <div
                           key={book.id}
-                          className={`rounded-xl border p-4 transition ${
-                            selected
-                              ? "border-blue-400 bg-blue-50/60"
-                              : unavailable
-                                ? "border-slate-200 bg-slate-50"
-                                : "border-slate-200 bg-white"
+                          id={`book-card-${book.id}`}
+                          className={`rounded-xl border p-4 transition-all duration-300 ${
+                            isHighlighted
+                              ? "border-blue-500 bg-blue-50/90 ring-4 ring-blue-500/30 shadow-md scale-[1.01]"
+                              : selected
+                                ? "border-blue-400 bg-blue-50/60"
+                                : unavailable
+                                  ? "border-slate-200 bg-slate-50"
+                                  : "border-slate-200 bg-white hover:border-slate-300"
                           }`}
                         >
                           <div className="grid gap-4 md:grid-cols-[minmax(0,1fr)_230px] md:items-center">
@@ -1918,10 +2264,15 @@ export default function NewLoanPage() {
                         )
                         .map((copy) => copy.code);
 
+                      const isHighlighted = highlightedBookId === item.book.id;
+
                       return (
                         <div
                           key={item.book.id}
-                          className="flex items-center gap-2.5 px-3 py-2.5"
+                          id={`selected-book-${item.book.id}`}
+                          className={`flex items-center gap-2.5 px-3 py-2.5 transition-colors ${
+                            isHighlighted ? "bg-blue-50/80 ring-2 ring-blue-500/40" : ""
+                          }`}
                         >
                           <div className="min-w-0 flex-1">
                             <div className="flex min-w-0 items-center gap-2">
@@ -2259,6 +2610,20 @@ export default function NewLoanPage() {
             </div>
           </div>
         )}
+
+        {/* =====================================================
+            CAMERA SCANNER MODAL
+        ===================================================== */}
+
+        <BookCameraScannerModal
+          isOpen={scannerModalOpen}
+          onClose={() => setScannerModalOpen(false)}
+          onScan={async (code) => {
+            await handleScanCode(code);
+          }}
+          title="Scan Barcode / QR Code Buku"
+          subtitle="Arahkan kamera ke barcode stiker buku untuk memilih secara instan"
+        />
       </div>
     </main>
   );

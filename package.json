@@ -10,8 +10,13 @@
     "lint": "eslint"
   },
   "dependencies": {
+    "@types/jsbarcode": "^3.11.4",
+    "@types/qrcode": "^1.5.6",
     "axios": "^1.20.0",
+    "html5-qrcode": "^2.3.8",
+    "jsbarcode": "^3.12.3",
     "next": "16.3.3",
+    "qrcode": "^1.5.4",
     "react": "19.2.8",
     "react-dom": "19.2.8",
     "xlsx": "^0.18.5"

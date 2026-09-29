@@ -17,7 +17,11 @@ import Pagination from "@/components/ui/Pagination";
 import type { Book, BookCopy, BookCopyStatus, BookStatus } from "@/lib/types";
 
 import { masterDataRepository } from "@/lib/master-data/repository";
+import { getBookCopiesApi } from "@/lib/api";
 import { useToast } from "@/context/ToastContext";
+import BookBarcodePrintModal, {
+  PrintableBookItem,
+} from "@/components/barcode/BookBarcodePrintModal";
 
 type BookFormErrors = {
   code: string;
@@ -127,6 +131,15 @@ export default function MasterBooksPage() {
     useState<BookStatus | null>(null);
 
   const [bookStatusLoading, setBookStatusLoading] = useState(false);
+
+  // =====================================================
+  // BARCODE & QR PRINT
+  // =====================================================
+
+  const [printModalOpen, setPrintModalOpen] = useState(false);
+  const [printItems, setPrintItems] = useState<PrintableBookItem[]>([]);
+  const [printTitle, setPrintTitle] = useState("Cetak Label Barcode & QR Code");
+  const [bulkPrintLoading, setBulkPrintLoading] = useState(false);
 
   // =====================================================
   // SESSION
@@ -871,6 +884,105 @@ export default function MasterBooksPage() {
   }
 
   // =====================================================
+  // BARCODE & QR HANDLERS
+  // =====================================================
+
+  async function handlePrintAllCurrentBooks() {
+    if (bulkPrintLoading) return;
+    setBulkPrintLoading(true);
+    try {
+      const allBooksResponse = await masterDataRepository
+        .listBooks({ pageSize: 500 })
+        .catch(() => null);
+      const catalogBooks =
+        allBooksResponse?.data && allBooksResponse.data.length > 0
+          ? allBooksResponse.data
+          : books;
+
+      const items: PrintableBookItem[] = [];
+      for (const book of catalogBooks) {
+        try {
+          const copies = await getBookCopiesApi(book.id);
+          if (copies.length > 0) {
+            for (const copy of copies) {
+              items.push({
+                bookTitle: book.title,
+                bookCode: book.code,
+                copyCode: copy.code,
+                category: book.category,
+              });
+            }
+          } else {
+            items.push({
+              bookTitle: book.title,
+              bookCode: book.code,
+              copyCode: book.code,
+              category: book.category,
+            });
+          }
+        } catch {
+          items.push({
+            bookTitle: book.title,
+            bookCode: book.code,
+            copyCode: book.code,
+            category: book.category,
+          });
+        }
+      }
+      setPrintItems(items);
+      setPrintTitle(`Cetak Barcode & QR Code (${items.length} Copy Buku)`);
+      setPrintModalOpen(true);
+    } catch {
+      toast.error("Gagal menyiapkan data cetak barcode.");
+    } finally {
+      setBulkPrintLoading(false);
+    }
+  }
+
+  async function handlePrintBookCopies(book: Book, existingCopies?: BookCopy[]) {
+    try {
+      let copies = existingCopies;
+      if (!copies || copies.length === 0) {
+        copies = await getBookCopiesApi(book.id);
+      }
+      const items: PrintableBookItem[] =
+        copies && copies.length > 0
+          ? copies.map((copy) => ({
+              bookTitle: book.title,
+              bookCode: book.code,
+              copyCode: copy.code,
+              category: book.category,
+            }))
+          : [
+              {
+                bookTitle: book.title,
+                bookCode: book.code,
+                copyCode: book.code,
+                category: book.category,
+              },
+            ];
+      setPrintItems(items);
+      setPrintTitle(`Cetak Label Barcode - ${book.title}`);
+      setPrintModalOpen(true);
+    } catch {
+      toast.error("Gagal menyiapkan label barcode buku.");
+    }
+  }
+
+  function handlePrintSingleCopy(book: Book, copy: BookCopy) {
+    setPrintItems([
+      {
+        bookTitle: book.title,
+        bookCode: book.code,
+        copyCode: copy.code,
+        category: book.category,
+      },
+    ]);
+    setPrintTitle(`Cetak Label Copy - ${copy.code}`);
+    setPrintModalOpen(true);
+  }
+
+  // =====================================================
   // INITIAL LOADING
   // =====================================================
 
@@ -887,14 +999,14 @@ export default function MasterBooksPage() {
   // =====================================================
 
   return (
-    <main className="min-h-screen bg-slate-50">
-      <div className="mx-auto w-full max-w-7xl px-3 py-4 sm:px-5 sm:py-5 lg:px-6">
+    <main className="min-h-screen bg-slate-50 print:bg-white print:min-h-0">
+      <div className="barcode-page-content print:hidden mx-auto w-full max-w-7xl px-3 py-4 sm:px-5 sm:py-5 lg:px-6">
         {/* HEADER */}
 
         <div className="mb-4">
           <BackLink href="/dashboard" />
 
-          <div className="mt-3 flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
+          <div className="mt-3 flex flex-col gap-3.5 xl:flex-row xl:items-end xl:justify-between">
             <div>
               <h1 className="text-xl font-bold tracking-tight text-slate-900 sm:text-2xl">
                 Master Buku
@@ -905,32 +1017,45 @@ export default function MasterBooksPage() {
               </p>
             </div>
 
-            <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-end">
-              <button
+            <div className="grid grid-cols-2 gap-2 sm:flex sm:flex-row sm:items-center sm:gap-2.5">
+              <Button
                 type="button"
+                variant="secondary"
                 onClick={() => {
                   alert("Fitur Import Excel belum tersedia.");
                 }}
-                className="inline-flex h-11 items-center justify-center rounded-lg bg-blue-600 px-4 text-sm font-semibold text-white transition hover:bg-blue-700"
+                className="w-full sm:w-auto text-xs h-9 px-3 text-center whitespace-nowrap"
               >
                 Import Excel
-              </button>
+              </Button>
 
-              <button
+              <Button
                 type="button"
+                variant="secondary"
                 onClick={() => {
                   alert("Fitur Export Excel belum tersedia.");
                 }}
-                className="inline-flex h-11 items-center justify-center rounded-lg bg-blue-600 px-4 text-sm font-semibold text-white transition hover:bg-blue-700"
+                className="w-full sm:w-auto text-xs h-9 px-3 text-center whitespace-nowrap"
               >
                 Export Excel
-              </button>
+              </Button>
+
+              <Button
+                type="button"
+                variant="secondary"
+                onClick={() => void handlePrintAllCurrentBooks()}
+                loading={bulkPrintLoading}
+                className="w-full sm:w-auto text-xs h-9 px-3 text-center whitespace-nowrap"
+              >
+                🖨️ Cetak Semua Barcode
+              </Button>
 
               {canManageMasterData(getSession()?.user.role ?? "MEMBER") && (
                 <Button
                   type="button"
+                  variant="primary"
                   onClick={openCreateForm}
-                  className="w-full sm:w-auto"
+                  className="w-full sm:w-auto text-xs h-9 px-3.5 font-semibold text-center whitespace-nowrap"
                 >
                   + Tambah Buku
                 </Button>
@@ -1025,33 +1150,19 @@ export default function MasterBooksPage() {
             </div>
           )}
 
-          {/* DESKTOP TABLE */}
+          {/* TABLE (Tablet & Desktop) */}
 
           {books.length > 0 && (
-            <div className="relative hidden overflow-hidden lg:block">
-              <table className="w-full table-fixed text-sm">
-                <colgroup>
-                  <col className="w-[125px]" />
-                  <col />
-                  <col className="w-[150px]" />
-                  <col className="w-[130px]" />
-                  <col className="w-[130px]" />
-                  <col className="w-[270px]" />
-                </colgroup>
-
-                <thead className="border-b border-slate-200 bg-slate-50">
-                  <tr className="text-left text-[11px] font-semibold uppercase tracking-wide text-slate-500">
-                    <th className="px-4 py-2.5">Kode</th>
-
-                    <th className="px-4 py-2.5">Buku</th>
-
-                    <th className="px-4 py-2.5">Kategori</th>
-
-                    <th className="px-4 py-2.5">Copy</th>
-
-                    <th className="px-4 py-2.5">Status</th>
-
-                    <th className="px-4 py-2.5 text-right">Aksi</th>
+            <div className="relative hidden overflow-x-auto md:block">
+              <table className="w-full text-left text-sm text-slate-600">
+                <thead className="border-b border-slate-200 bg-slate-50 text-[11px] font-bold uppercase tracking-wider text-slate-500">
+                  <tr>
+                    <th className="px-2.5 sm:px-3 py-3 w-[65px] sm:w-[75px]">Kode</th>
+                    <th className="px-2.5 sm:px-3 py-3">Buku</th>
+                    <th className="hidden lg:table-cell px-2.5 sm:px-3 py-3 w-[110px]">Kategori</th>
+                    <th className="px-2.5 sm:px-3 py-3 w-[65px] sm:w-[75px] text-center">Copy</th>
+                    <th className="px-2.5 sm:px-3 py-3 w-[90px] sm:w-[100px]">Status</th>
+                    <th className="px-2.5 sm:px-3 py-3 text-right w-[190px] sm:w-[210px]">Aksi</th>
                   </tr>
                 </thead>
 
@@ -1064,28 +1175,28 @@ export default function MasterBooksPage() {
                         key={book.id}
                         className="transition hover:bg-slate-50/70"
                       >
-                        <td className="px-4 py-3 font-semibold text-slate-900">
+                        <td className="px-2.5 sm:px-3 py-3 font-semibold text-slate-900 whitespace-nowrap text-xs">
                           {book.code}
                         </td>
 
-                        <td className="min-w-0 px-4 py-3">
-                          <p className="truncate font-medium text-slate-800">
+                        <td className="px-2.5 sm:px-3 py-3 min-w-[120px]">
+                          <p className="truncate font-semibold text-slate-800 text-xs sm:text-sm" title={book.title}>
                             {book.title}
                           </p>
 
-                          <p className="mt-0.5 truncate text-xs text-slate-400">
+                          <p className="mt-0.5 truncate text-[11px] text-slate-400">
                             {book.isbn
                               ? `ISBN ${book.isbn}`
                               : (book.author ?? "Tidak ada ISBN/pengarang")}
                           </p>
                         </td>
 
-                        <td className="px-4 py-3 text-slate-600">
+                        <td className="hidden lg:table-cell px-2.5 sm:px-3 py-3 text-slate-600 truncate max-w-[110px] text-xs">
                           {book.category ?? "-"}
                         </td>
 
-                        <td className="px-4 py-3">
-                          <span className="font-semibold text-slate-800">
+                        <td className="px-2.5 sm:px-3 py-3 whitespace-nowrap text-xs text-center">
+                          <span className="font-bold text-slate-900">
                             {book.availableCopies}
                           </span>
 
@@ -1095,9 +1206,9 @@ export default function MasterBooksPage() {
                           </span>
                         </td>
 
-                        <td className="px-4 py-3">
+                        <td className="px-2.5 sm:px-3 py-3 whitespace-nowrap">
                           <span
-                            className={`inline-flex whitespace-nowrap items-center gap-1.5 rounded-full px-2.5 py-1.5 text-xs font-semibold ${getBookStatusClass(
+                            className={`inline-flex whitespace-nowrap items-center gap-1 rounded-full px-2 py-0.5 text-[11px] font-semibold ${getBookStatusClass(
                               book.status,
                             )}`}
                           >
@@ -1107,20 +1218,29 @@ export default function MasterBooksPage() {
                           </span>
                         </td>
 
-                        <td className="px-4 py-3">
-                          <div className="flex items-center justify-end gap-1.5">
+                        <td className="px-2.5 sm:px-3 py-3 text-right whitespace-nowrap">
+                          <div className="flex items-center justify-end gap-1">
                             <button
                               type="button"
                               onClick={() => void openDetail(book)}
-                              className="inline-flex h-8 min-w-[56px] items-center justify-center rounded-md border border-slate-200 bg-white px-2.5 text-xs font-semibold text-slate-700 transition hover:bg-slate-50 focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-500"
+                              className="inline-flex h-7 items-center justify-center rounded-md border border-slate-200 bg-white px-2 text-[11px] font-medium text-slate-700 shadow-2xs transition hover:bg-slate-50 focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-500"
                             >
                               Detail
                             </button>
 
                             <button
                               type="button"
+                              onClick={() => void handlePrintBookCopies(book)}
+                              title="Cetak Barcode & QR Code Semua Copy"
+                              className="inline-flex h-7 items-center justify-center rounded-md border border-slate-200 bg-white px-1.5 text-[11px] font-medium text-slate-700 shadow-2xs transition hover:bg-slate-50 focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-500"
+                            >
+                              🏷️ Barcode
+                            </button>
+
+                            <button
+                              type="button"
                               onClick={() => openEditForm(book)}
-                              className="inline-flex h-8 min-w-[52px] items-center justify-center rounded-md border border-slate-200 bg-white px-2.5 text-xs font-semibold text-slate-700 transition hover:bg-slate-50 focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-500"
+                              className="inline-flex h-7 items-center justify-center rounded-md border border-slate-200 bg-white px-2 text-[11px] font-medium text-slate-700 shadow-2xs transition hover:bg-slate-50 focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-500"
                             >
                               Ubah
                             </button>
@@ -1128,7 +1248,7 @@ export default function MasterBooksPage() {
                             <button
                               type="button"
                               onClick={() => openBookStatusConfirm(book)}
-                              className={`inline-flex h-8 min-w-[88px] items-center justify-center rounded-md border px-2.5 text-xs font-semibold transition focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 ${
+                              className={`inline-flex h-7 items-center justify-center rounded-md border px-2 text-[11px] font-medium shadow-2xs transition focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 ${
                                 isInactive
                                   ? "border-emerald-200 bg-emerald-50 text-emerald-700 hover:bg-emerald-100"
                                   : "border-red-200 bg-red-50 text-red-600 hover:bg-red-100"
@@ -1159,10 +1279,10 @@ export default function MasterBooksPage() {
             </div>
           )}
 
-          {/* MOBILE / TABLET */}
+          {/* MOBILE CARDS (Mobile only) */}
 
           {books.length > 0 && (
-            <div className="relative grid grid-cols-1 gap-3 bg-slate-50/60 p-3 sm:grid-cols-2 lg:hidden">
+            <div className="relative grid grid-cols-1 gap-3 bg-slate-50/60 p-3 md:hidden">
               {books.map((book) => {
                 const isInactive = book.status === "INACTIVE";
 
@@ -1241,19 +1361,27 @@ export default function MasterBooksPage() {
                       </div>
                     )}
 
-                    <div className="mt-3 grid grid-cols-3 gap-1.5">
+                    <div className="mt-3.5 pt-2.5 border-t border-slate-100 grid grid-cols-2 sm:grid-cols-4 gap-2">
                       <button
                         type="button"
                         onClick={() => void openDetail(book)}
-                        className="h-9 rounded-md border border-slate-200 bg-white text-xs font-semibold text-slate-700 transition hover:bg-slate-50 focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-500"
+                        className="h-8 rounded-lg border border-slate-200 bg-white text-xs font-semibold text-slate-700 shadow-2xs transition hover:bg-slate-50 hover:border-slate-300 focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-500"
                       >
                         Detail
                       </button>
 
                       <button
                         type="button"
+                        onClick={() => void handlePrintBookCopies(book)}
+                        className="h-8 rounded-lg border border-slate-200 bg-white text-xs font-semibold text-slate-700 shadow-2xs transition hover:bg-slate-50 hover:border-slate-300 focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-500"
+                      >
+                        🖨️ Barcode
+                      </button>
+
+                      <button
+                        type="button"
                         onClick={() => openEditForm(book)}
-                        className="h-9 rounded-md border border-slate-200 bg-white text-xs font-semibold text-slate-700 transition hover:bg-slate-50 focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-500"
+                        className="h-8 rounded-lg border border-slate-200 bg-white text-xs font-semibold text-slate-700 shadow-2xs transition hover:bg-slate-50 hover:border-slate-300 focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-500"
                       >
                         Ubah
                       </button>
@@ -1261,10 +1389,10 @@ export default function MasterBooksPage() {
                       <button
                         type="button"
                         onClick={() => openBookStatusConfirm(book)}
-                        className={`h-9 rounded-md border text-xs font-semibold ${
+                        className={`h-8 rounded-lg border text-xs font-semibold shadow-2xs transition ${
                           isInactive
-                            ? "border-emerald-200 bg-emerald-50 text-emerald-700"
-                            : "border-red-200 bg-red-50 text-red-600"
+                            ? "border-emerald-200 bg-emerald-50 text-emerald-700 hover:bg-emerald-100"
+                            : "border-red-200 bg-red-50 text-red-600 hover:bg-red-100"
                         }`}
                       >
                         {isInactive ? "Aktifkan" : "Arsipkan"}
@@ -1613,28 +1741,40 @@ export default function MasterBooksPage() {
               {/* COPY */}
 
               <div className="relative mt-5 rounded-xl border border-slate-200 bg-white">
-                <div className="flex flex-col gap-3 border-b border-slate-200 px-4 py-3 sm:flex-row sm:items-center sm:justify-between">
+                <div className="flex flex-col gap-2.5 border-b border-slate-200 px-4 py-3 sm:flex-row sm:items-center sm:justify-between">
                   <div>
                     <h3 className="text-sm font-semibold text-slate-900">
                       Daftar Copy
                     </h3>
 
                     <p className="mt-0.5 text-xs text-slate-500">
-                      Total {detailCopies.length} copy.
+                      Total {detailCopies.length} copy fisik.
                     </p>
                   </div>
 
-                  {canManageMasterData(getSession()?.user.role ?? "MEMBER") && (
+                  <div className="flex flex-wrap items-center gap-2">
                     <Button
                       type="button"
-                      onClick={() => void handleAddCopy()}
-                      loading={addCopyLoading}
-                      disabled={detailBook.status === "INACTIVE"}
-                      className="w-full sm:w-auto"
+                      variant="secondary"
+                      onClick={() => void handlePrintBookCopies(detailBook, detailCopies)}
+                      disabled={detailCopies.length === 0}
+                      className="flex-1 sm:flex-initial text-xs h-8 px-3"
                     >
-                      + Tambah Copy
+                      🖨️ Cetak Semua Copy
                     </Button>
-                  )}
+
+                    {canManageMasterData(getSession()?.user.role ?? "MEMBER") && (
+                      <Button
+                        type="button"
+                        onClick={() => void handleAddCopy()}
+                        loading={addCopyLoading}
+                        disabled={detailBook.status === "INACTIVE"}
+                        className="flex-1 sm:flex-initial text-xs h-8 px-3"
+                      >
+                        + Tambah Copy
+                      </Button>
+                    )}
+                  </div>
                 </div>
 
                 {detailLoading ? (
@@ -1655,19 +1795,28 @@ export default function MasterBooksPage() {
                           key={copy.id}
                           className="flex items-center justify-between gap-3 px-4 py-3"
                         >
-                          <div>
-                            <p className="text-sm font-semibold text-slate-800">
+                          <div className="min-w-0">
+                            <p className="font-mono text-sm font-semibold text-slate-800">
                               {copy.code}
                             </p>
                             <p className="mt-0.5 text-xs text-slate-400">
-                              Copy
+                              Copy Fisik
                             </p>
                           </div>
 
-                          <div className="shrink-0">
+                          <div className="flex items-center gap-2 shrink-0">
+                            <button
+                              type="button"
+                              onClick={() => handlePrintSingleCopy(detailBook, copy)}
+                              title="Cetak Barcode Copy Ini"
+                              className="inline-flex h-8 items-center justify-center rounded-lg border border-slate-200 bg-white px-2.5 text-xs font-semibold text-slate-700 shadow-2xs transition hover:bg-slate-50 hover:border-slate-300 focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-500"
+                            >
+                              🖨️ Cetak
+                            </button>
+
                             {copy.status === "BORROWED" ? (
                               <span
-                                className={`rounded-full px-3 py-1.5 text-xs font-semibold ${getCopyStatusClass(
+                                className={`rounded-full px-3 py-1 text-xs font-semibold ${getCopyStatusClass(
                                   copy.status,
                                 )}`}
                               >
@@ -1695,7 +1844,7 @@ export default function MasterBooksPage() {
                               />
                             ) : (
                               <span
-                                className={`rounded-full px-3 py-1.5 text-xs font-semibold ${getCopyStatusClass(
+                                className={`rounded-full px-3 py-1 text-xs font-semibold ${getCopyStatusClass(
                                   copy.status,
                                 )}`}
                               >
@@ -1713,10 +1862,18 @@ export default function MasterBooksPage() {
 
             {/* FOOTER */}
 
-            <div className="flex shrink-0 flex-col-reverse gap-2 border-t border-slate-200 bg-white px-4 py-3 sm:flex-row sm:justify-end sm:px-5">
-              {" "}
+            <div className="flex shrink-0 flex-col-reverse sm:flex-row sm:items-center sm:justify-between gap-2 border-t border-slate-200 bg-white px-4 py-3 sm:px-5">
+              <Button
+                type="button"
+                variant="secondary"
+                onClick={() => setDetailBook(null)}
+                className="w-full sm:w-auto text-xs"
+              >
+                Tutup
+              </Button>
+
               {canManageMasterData(getSession()?.user.role ?? "MEMBER") && (
-                <>
+                <div className="flex items-center gap-2 w-full sm:w-auto">
                   <Button
                     type="button"
                     variant="secondary"
@@ -1724,30 +1881,27 @@ export default function MasterBooksPage() {
                       setDetailBook(null);
                       openEditForm(detailBook);
                     }}
-                    className="w-full sm:w-auto"
+                    className="flex-1 sm:flex-initial text-xs"
                   >
                     Ubah Buku
                   </Button>
 
                   <Button
                     type="button"
+                    variant={detailBook.status === "INACTIVE" ? "primary" : "secondary"}
                     onClick={() => openBookStatusConfirm(detailBook)}
-                    className="w-full sm:w-auto"
+                    className={`flex-1 sm:flex-initial text-xs ${
+                      detailBook.status !== "INACTIVE"
+                        ? "text-red-600 border-red-200 hover:bg-red-50"
+                        : ""
+                    }`}
                   >
                     {detailBook.status === "INACTIVE"
                       ? "Aktifkan Buku"
                       : "Arsipkan Buku"}
                   </Button>
-                </>
+                </div>
               )}
-              <Button
-                type="button"
-                variant="secondary"
-                onClick={() => setDetailBook(null)}
-                className="w-full sm:w-auto"
-              >
-                Tutup
-              </Button>
             </div>
           </div>
         </div>
@@ -1815,6 +1969,17 @@ export default function MasterBooksPage() {
         onConfirm={() => {
           void handleChangeBookStatus();
         }}
+      />
+
+      {/* =====================================================
+          BARCODE & QR PRINT MODAL
+      ===================================================== */}
+
+      <BookBarcodePrintModal
+        isOpen={printModalOpen}
+        onClose={() => setPrintModalOpen(false)}
+        items={printItems}
+        title={printTitle}
       />
     </main>
   );

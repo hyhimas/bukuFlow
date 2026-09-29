@@ -92,14 +92,14 @@ export default function Sidebar({
           type="button"
           aria-label="Tutup menu navigasi"
           onClick={onClose}
-          className="fixed inset-0 z-40 bg-slate-900/40"
+          className="print:hidden fixed inset-0 z-40 bg-slate-900/40"
         />
       )}
 
       {/* Sidebar */}
       <aside
         ref={sidebarRef}
-        className={`fixed inset-y-0 left-0 z-50 flex w-72 max-w-[85vw] flex-col border-r border-slate-200 bg-white shadow-xl transition-transform duration-200 ${
+        className={`print:hidden fixed inset-y-0 left-0 z-50 flex w-72 max-w-[85vw] flex-col border-r border-slate-200 bg-white shadow-xl transition-transform duration-200 ${
           open ? "translate-x-0" : "-translate-x-full"
         }`}
       >

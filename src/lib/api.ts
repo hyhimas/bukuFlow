@@ -750,12 +750,13 @@ export async function createBookApi(data: CreateBookInputData): Promise<Book> {
 }
 
 export async function searchBooksApi(keyword: string = ""): Promise<Book[]> {
-  try {
-    const cleanQuery = keyword.trim();
+  const cleanQuery = keyword.trim();
 
-    if (cleanQuery.length === 0) {
-      return getBooksApi();
-    }
+  if (cleanQuery.length === 0) {
+    return getBooksApi();
+  }
+
+  try {
 
     const response = await api
       .get("/catalog/books/search", { params: { q: cleanQuery } })
@@ -819,7 +820,8 @@ export async function searchBooksApi(keyword: string = ""): Promise<Book[]> {
     if (error.response?.status === 404 || error.response?.status === 422) {
       return [];
     }
-    throw error;
+    const { searchBooks } = await import("./mock-api");
+    return searchBooks(cleanQuery);
   }
 }
 
@@ -1028,7 +1030,8 @@ export async function getBookCopiesApi(
     }
 
     if (items.length === 0) {
-      return [];
+      const { getBookCopies } = await import("./mock-api");
+      return await getBookCopies(bookId);
     }
 
     return items.map((item: any) => ({
@@ -1050,7 +1053,8 @@ export async function getBookCopiesApi(
         formatApiError(error, "Daftar copy buku gagal dimuat karena gangguan server.")
       );
     }
-    return [];
+    const { getBookCopies } = await import("./mock-api");
+    return await getBookCopies(bookId);
   }
 }
 

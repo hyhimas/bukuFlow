@@ -217,7 +217,7 @@ export default function AppShell({ children }: AppShellProps) {
   return (
     <div className="min-h-screen bg-slate-50">
       {/* HEADER UTAMA */}
-      <div className="flex h-16 items-center justify-between border-b border-slate-200 bg-white px-4 sm:px-6">
+      <div className="print:hidden flex h-16 items-center justify-between border-b border-slate-200 bg-white px-4 sm:px-6">
         {/* Sisi Kiri: Menu & Logo */}
         <div className="flex items-center">
           <button
