@@ -1220,7 +1220,23 @@ export async function getDashboardApi(): Promise<DashboardApiResponse> {
       return !Number.isNaN(dueDate.getTime()) && dueDate < today;
     }).length;
 
-    const recentLoans = loans
+    const sortedLoans = [...loans].sort((a, b) => {
+      const getLatestTime = (tx: TransactionData) => {
+        const l = tx.loan;
+        const times = [
+          l.updatedAt ? new Date(l.updatedAt).getTime() : 0,
+          l.returnedAt ? new Date(l.returnedAt).getTime() : 0,
+          l.createdAt ? new Date(l.createdAt).getTime() : 0,
+          l.borrowedAt ? new Date(l.borrowedAt).getTime() : 0,
+        ].filter((t) => !Number.isNaN(t) && t > 0);
+
+        return times.length > 0 ? Math.max(...times) : 0;
+      };
+
+      return getLatestTime(b) - getLatestTime(a);
+    });
+
+    const recentLoans = sortedLoans
       .map((tx) => ({
         ...tx.loan,
         memberName: tx.member?.name || "-",
@@ -1454,58 +1470,68 @@ function mapRawToTransactionData(raw: any): TransactionData {
     raw.loanId ||
     `loan-${Math.random().toString(36).slice(2)}`;
 
-  const loan: Loan = {
-    id: loanId,
-    companyId: raw.company_id || raw.companyId || "company-001",
-    loanNumber: formatCleanLoanNumber(raw),
-    memberId:
-      raw.member_id ||
-      raw.memberId ||
-      raw.member?.id ||
-      raw.member?._id ||
-      raw.loan?.member_id ||
-      "-",
-    borrowedBy:
-      raw.borrowed_by ||
-      raw.borrowedBy ||
-      raw.user_id ||
-      raw.user?.id ||
-      "-",
-    borrowedAt:
-      raw.borrowed_at ||
-      raw.borrowedAt ||
-      raw.loan?.borrowed_at ||
-      new Date().toISOString(),
-    dueAt:
-      raw.due_at ||
-      raw.dueAt ||
-      raw.loan?.due_at ||
-      new Date().toISOString(),
-    returnedAt:
-      raw.returned_at ||
-      raw.returnedAt ||
-      raw.loan?.returned_at ||
-      undefined,
-    status:
-      raw.status === "COMPLETED" ||
-      raw.loan?.status === "COMPLETED" ||
-      raw.returned_at ||
-      raw.returnedAt ||
-      raw.loan?.returned_at
-        ? "COMPLETED"
-        : (raw.status || raw.loan?.status || "ACTIVE"),
-    notes: raw.notes || undefined,
-    createdAt:
+    const rawCreatedAt =
       raw.created_at ||
       raw.createdAt ||
       raw.loan?.created_at ||
-      new Date().toISOString(),
-    updatedAt:
+      raw.borrowed_at ||
+      raw.borrowedAt ||
+      raw.loan?.borrowed_at ||
+      new Date().toISOString();
+
+    const rawUpdatedAt =
       raw.updated_at ||
       raw.updatedAt ||
       raw.loan?.updated_at ||
-      new Date().toISOString(),
-  };
+      raw.returned_at ||
+      raw.returnedAt ||
+      raw.loan?.returned_at ||
+      rawCreatedAt;
+
+    const loan: Loan = {
+      id: loanId,
+      companyId: raw.company_id || raw.companyId || "company-001",
+      loanNumber: formatCleanLoanNumber(raw),
+      memberId:
+        raw.member_id ||
+        raw.memberId ||
+        raw.member?.id ||
+        raw.member?._id ||
+        raw.loan?.member_id ||
+        "-",
+      borrowedBy:
+        raw.borrowed_by ||
+        raw.borrowedBy ||
+        raw.user_id ||
+        raw.user?.id ||
+        "-",
+      borrowedAt:
+        raw.borrowed_at ||
+        raw.borrowedAt ||
+        raw.loan?.borrowed_at ||
+        rawCreatedAt,
+      dueAt:
+        raw.due_at ||
+        raw.dueAt ||
+        raw.loan?.due_at ||
+        new Date().toISOString(),
+      returnedAt:
+        raw.returned_at ||
+        raw.returnedAt ||
+        raw.loan?.returned_at ||
+        undefined,
+      status:
+        raw.status === "COMPLETED" ||
+        raw.loan?.status === "COMPLETED" ||
+        raw.returned_at ||
+        raw.returnedAt ||
+        raw.loan?.returned_at
+          ? "COMPLETED"
+          : (raw.status || raw.loan?.status || "ACTIVE"),
+      notes: raw.notes || undefined,
+      createdAt: rawCreatedAt,
+      updatedAt: rawUpdatedAt,
+    };
 
   const member: Member = raw.member
     ? {
@@ -1739,62 +1765,111 @@ async function enrichTransactions(
   try {
     const [members, books] = await Promise.all([
       getMembersApi().catch(() => []),
-      getBooksApi().catch(() => []),
+      getBooksApi({ size: 100 }).catch(() => []),
     ]);
 
-    const memberMap = new Map(members.map((m) => [m.id, m]));
-    const bookMap = new Map(books.map((b) => [b.id, b]));
+    // Fast multi-key member map (id, lowercase id, memberNumber, code)
+    const memberMap = new Map<string, Member>();
+    for (const m of members) {
+      if (m.id) {
+        memberMap.set(m.id, m);
+        memberMap.set(m.id.toLowerCase(), m);
+      }
+      if (m.memberNumber) {
+        memberMap.set(m.memberNumber, m);
+        memberMap.set(m.memberNumber.toLowerCase(), m);
+      }
+      if ((m as any).code) {
+        memberMap.set((m as any).code, m);
+        memberMap.set((m as any).code.toLowerCase(), m);
+      }
+    }
 
-    // Kumpulkan bookId dan copyId yang relevan dari transaksi saja agar loading super cepat
+    // Fast multi-key book map (id, lowercase id, code, uppercase code, isbn)
+    const bookMap = new Map<string, Book>();
+    for (const b of books) {
+      if (b.id) {
+        bookMap.set(b.id, b);
+        bookMap.set(b.id.toLowerCase(), b);
+      }
+      if (b.code) {
+        bookMap.set(b.code, b);
+        bookMap.set(b.code.toUpperCase(), b);
+      }
+      if (b.isbn) {
+        bookMap.set(b.isbn, b);
+        bookMap.set(b.isbn.replace(/[^A-Za-z0-9]/g, ""), b);
+      }
+    }
+
+    // Determine relevant books needing copies or fetch catalog books concurrently
     const neededBookIds = new Set<string>();
     for (const tx of transactions) {
       for (const it of tx.items) {
-        if (it.loanItem?.bookId) {
+        if (it.loanItem?.bookId && !it.loanItem.bookId.startsWith("book-")) {
           neededBookIds.add(it.loanItem.bookId);
+        }
+        if (it.book?.id && !it.book.id.startsWith("book-")) {
+          neededBookIds.add(it.book.id);
         }
       }
     }
 
-    // Ambil copies hanya untuk buku yang dipinjam atau maksimal beberapa buku saja
-    const relevantBooks =
-      neededBookIds.size > 0
-        ? books.filter((b) => neededBookIds.has(b.id))
-        : books.slice(0, 5);
+    const matchingBooks = books.filter((b) => neededBookIds.has(b.id));
+    const targetBooks = matchingBooks.length > 0 ? matchingBooks : books;
 
+    // Fast multi-key copies map (id, code, uppercase code, barcode)
     const copiesMap = new Map<string, { book: Book; copy: BookCopy }>();
-    await Promise.all(
-      relevantBooks.map(async (b) => {
+    await Promise.allSettled(
+      targetBooks.map(async (b) => {
         try {
           const copies = await getBookCopiesApi(b.id);
           for (const c of copies) {
-            copiesMap.set(c.id, { book: b, copy: c });
+            if (c.id) {
+              copiesMap.set(c.id, { book: b, copy: c });
+              copiesMap.set(c.id.toLowerCase(), { book: b, copy: c });
+            }
             if (c.code) {
               copiesMap.set(c.code, { book: b, copy: c });
+              copiesMap.set(c.code.toUpperCase(), { book: b, copy: c });
+              copiesMap.set(c.code.replace(/[^A-Za-z0-9]/g, "").toUpperCase(), { book: b, copy: c });
+            }
+            if ((c as any).barcode) {
+              copiesMap.set((c as any).barcode, { book: b, copy: c });
             }
           }
         } catch {
-          // ignore
+          // ignore error on single copy fetch
         }
       })
     );
 
     for (const tx of transactions) {
+      // 1. Join Member Data
       if (
         !tx.member?.name ||
         tx.member.name === "Anggota" ||
         tx.member.name === "-"
       ) {
-        const foundMember = memberMap.get(tx.loan.memberId);
+        const foundMember =
+          memberMap.get(tx.loan.memberId) ||
+          memberMap.get(tx.loan.memberId?.toLowerCase());
         if (foundMember) {
           tx.member = foundMember;
         }
       }
 
+      // 2. Join Items, Copies & Books Data
       for (const it of tx.items) {
+        const rawCode = it.bookCopy?.code || "";
+        const cleanRawCode = rawCode.replace(/[^A-Za-z0-9]/g, "").toUpperCase();
+
         const copyInfo =
-          copiesMap.get(it.loanItem.bookCopyId) ||
-          copiesMap.get(it.bookCopy.code) ||
-          copiesMap.get(it.bookCopy.id);
+          (it.loanItem?.bookCopyId && copiesMap.get(it.loanItem.bookCopyId)) ||
+          (it.bookCopy?.id && copiesMap.get(it.bookCopy.id)) ||
+          (rawCode && copiesMap.get(rawCode)) ||
+          (rawCode && copiesMap.get(rawCode.toUpperCase())) ||
+          (cleanRawCode && copiesMap.get(cleanRawCode));
 
         if (copyInfo) {
           it.book = copyInfo.book;
@@ -1804,6 +1879,7 @@ async function enrichTransactions(
           it.bookCopy.status = copyInfo.copy.status;
           it.loanItem.bookId = copyInfo.book.id;
           it.loanItem.bookCopyId = copyInfo.copy.id;
+
           if (
             copyInfo.copy.status === "AVAILABLE" ||
             tx.loan.status === "COMPLETED" ||
@@ -1811,27 +1887,37 @@ async function enrichTransactions(
           ) {
             it.loanItem.status = "RETURNED";
             it.loanItem.returnedAt =
-              tx.loan.returnedAt || new Date().toISOString();
+              tx.loan.returnedAt || it.loanItem.returnedAt || new Date().toISOString();
           }
         } else {
-          const foundBook = bookMap.get(it.loanItem.bookId);
+          // Fallback: lookup parent book by bookId or code
+          const foundBook =
+            (it.loanItem?.bookId && bookMap.get(it.loanItem.bookId)) ||
+            (it.book?.id && bookMap.get(it.book.id)) ||
+            (it.book?.code && bookMap.get(it.book.code.toUpperCase()));
+
           if (foundBook) {
             it.book = foundBook;
+            it.loanItem.bookId = foundBook.id;
+            it.bookCopy.bookId = foundBook.id;
+
             if (
               !it.bookCopy.code ||
               it.bookCopy.code === "-" ||
-              it.bookCopy.code.includes("CP-001") ||
+              it.bookCopy.code === "CP-001" ||
               it.bookCopy.code.endsWith("-001")
             ) {
-              it.bookCopy.code = `${foundBook.code}-001`;
+              it.bookCopy.code = `${foundBook.code}-C01`;
             }
           }
         }
       }
 
+      // 3. Sync loan status if all items are returned
       const allReturned =
         tx.items.length > 0 &&
         tx.items.every((it) => it.loanItem.status === "RETURNED");
+
       if (allReturned || tx.loan.status === "COMPLETED" || tx.loan.returnedAt) {
         tx.loan.status = "COMPLETED";
         if (!tx.loan.returnedAt) {
@@ -1843,7 +1929,40 @@ async function enrichTransactions(
     // Ignore enrichment failure
   }
 
-  return transactions;
+  return sortTransactionsDesc(transactions);
+}
+
+export function sortTransactionsDesc(transactions: TransactionData[]): TransactionData[] {
+  return [...transactions].sort((a, b) => {
+    const getScore = (tx: TransactionData) => {
+      const l = tx.loan;
+      let time = 0;
+      if (l.updatedAt) {
+        const t = new Date(l.updatedAt).getTime();
+        if (!Number.isNaN(t)) time = Math.max(time, t);
+      }
+      if (l.returnedAt) {
+        const t = new Date(l.returnedAt).getTime();
+        if (!Number.isNaN(t)) time = Math.max(time, t);
+      }
+      if (l.createdAt) {
+        const t = new Date(l.createdAt).getTime();
+        if (!Number.isNaN(t)) time = Math.max(time, t);
+      }
+      if (l.borrowedAt) {
+        const t = new Date(l.borrowedAt).getTime();
+        if (!Number.isNaN(t)) time = Math.max(time, t);
+      }
+      return time;
+    };
+
+    const scoreA = getScore(a);
+    const scoreB = getScore(b);
+    if (scoreA !== scoreB) {
+      return scoreB - scoreA;
+    }
+    return String(b.loan.id || "").localeCompare(String(a.loan.id || ""));
+  });
 }
 
 export async function listLoansApi(): Promise<TransactionData[]> {

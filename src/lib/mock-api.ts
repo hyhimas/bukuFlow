@@ -283,10 +283,18 @@ export async function getDashboard(): Promise<DashboardResponse> {
       .length,
 
     recentLoans: [...companyLoans]
-      .sort(
-        (a, b) =>
-          new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime(),
-      )
+      .sort((a, b) => {
+        const getLatest = (l: Loan) => {
+          const times = [
+            l.updatedAt ? new Date(l.updatedAt).getTime() : 0,
+            l.returnedAt ? new Date(l.returnedAt).getTime() : 0,
+            l.createdAt ? new Date(l.createdAt).getTime() : 0,
+            l.borrowedAt ? new Date(l.borrowedAt).getTime() : 0,
+          ].filter((t) => !Number.isNaN(t) && t > 0);
+          return times.length > 0 ? Math.max(...times) : 0;
+        };
+        return getLatest(b) - getLatest(a);
+      })
       .slice(0, 10)
       .map((loan) => {
         const member = mockMembers.find(

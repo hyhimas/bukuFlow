@@ -102,6 +102,27 @@ export default function TestApiPage() {
     }
   }
 
+  // Raw Direct Active Returns Diagnostic State
+  const [rawReturnsData, setRawReturnsData] = useState<any>(null);
+  const [rawReturnsLoading, setRawReturnsLoading] = useState(false);
+  const [rawReturnsError, setRawReturnsError] = useState("");
+
+  async function handleGetRawActiveReturns() {
+    setRawReturnsLoading(true);
+    setRawReturnsError("");
+    setRawReturnsData(null);
+    try {
+      const res = await api
+        .get("/loan/returns/active")
+        .catch(() => api.get("/returns/active"));
+      setRawReturnsData(res.data);
+    } catch (err: any) {
+      setRawReturnsError(JSON.stringify(err.response?.data || err.message, null, 2));
+    } finally {
+      setRawReturnsLoading(false);
+    }
+  }
+
   async function handleGetActiveReturns() {
     setReturnsLoading(true);
     setReturnsError("");
@@ -830,18 +851,117 @@ async function handleSearchMember(e: React.FormEvent) {
 
       {/* 8. GET ACTIVE RETURNS */}
       <section style={{ marginTop: "25px", borderTop: "1px solid #e2e8f0", paddingTop: "15px" }}>
-        <h3>8. GET /bukuflow/returns/active (Active Returns) 🔒</h3>
+        <h3>8. GET /bukuflow/loan/returns/active (Active Returns) 🔒</h3>
         <p style={{ fontSize: "14px", color: "#64748b" }}>
-          Mengambil daftar peminjaman aktif yang siap untuk dikembalikan.
+          Mengambil daftar peminjaman aktif yang siap untuk dikembalikan langsung dari backend.
         </p>
-        <button onClick={handleGetActiveReturns} disabled={returnsLoading} style={btnStyle("#d97706")}>
-          {returnsLoading ? "Mengambil Data Returns..." : "Test GET Active Returns"}
-        </button>
+
+        <div style={{ display: "flex", flexWrap: "wrap", gap: "10px", marginBottom: "15px" }}>
+          <button onClick={handleGetRawActiveReturns} disabled={rawReturnsLoading} style={btnStyle("#2563eb")}>
+            {rawReturnsLoading ? "Mengambil Raw Backend..." : "🔍 Uji RAW Response GET /loan/returns/active (Murni Backend)"}
+          </button>
+
+          <button onClick={handleGetActiveReturns} disabled={returnsLoading} style={btnStyle("#d97706")}>
+            {returnsLoading ? "Mengambil Data Returns..." : "🧪 Test GET Active Returns (Mapped FE)"}
+          </button>
+        </div>
+
+        {rawReturnsError && (
+          <div>
+            <strong style={{ color: "#dc2626" }}>Error RAW Response Returns:</strong>
+            <pre style={{ ...codeStyle, backgroundColor: "#fee2e2", color: "#dc2626" }}>{rawReturnsError}</pre>
+          </div>
+        )}
+
+        {rawReturnsData && (
+          <div style={{ marginTop: "15px" }}>
+            {/* TABEL DIAGNOSTIK FIELD OTOMATIS */}
+            {(() => {
+              const items = Array.isArray(rawReturnsData)
+                ? rawReturnsData
+                : Array.isArray(rawReturnsData?.items)
+                ? rawReturnsData.items
+                : Array.isArray(rawReturnsData?.data)
+                ? rawReturnsData.data
+                : [];
+              const sample = items[0] || {};
+              const hasCopyIds = Boolean(
+                sample.copy_ids ||
+                sample.copyIds ||
+                sample.book_copy_ids ||
+                (sample.items && sample.items.some((i: any) => i.copy_id || i.copy_ids))
+              );
+              const hasBookTitle = Boolean(
+                sample.book_title ||
+                sample.title ||
+                sample.book?.title ||
+                (sample.items && sample.items.some((i: any) => i.book_title || i.title || i.book?.title))
+              );
+              const hasMemberId = Boolean(sample.member_id || sample.memberId);
+
+              return (
+                <div
+                  style={{
+                    backgroundColor: "#f8fafc",
+                    border: "1px solid #cbd5e1",
+                    borderRadius: "8px",
+                    padding: "12px 16px",
+                    marginBottom: "12px",
+                  }}
+                >
+                  <div style={{ fontWeight: "bold", fontSize: "14px", color: "#1e293b", marginBottom: "10px" }}>
+                    📊 Hasil Verifikasi Field Raw Returns ({items.length} transaksi aktif ditemukan):
+                  </div>
+                  <table style={{ width: "100%", fontSize: "13px", borderCollapse: "collapse" }}>
+                    <tbody>
+                      <tr style={{ borderBottom: "1px solid #e2e8f0" }}>
+                        <td style={{ padding: "6px 8px", fontWeight: "bold", width: "240px" }}>🏷️ Array ID Eksemplar (copy_ids):</td>
+                        <td style={{ padding: "6px 8px" }}>
+                          {hasCopyIds ? (
+                            <span style={{ color: "#166534", fontWeight: "bold" }}>✅ ADA (Dikirim oleh BE: {JSON.stringify(sample.copy_ids || sample.copyIds)})</span>
+                          ) : (
+                            <span style={{ color: "#dc2626", fontWeight: "bold" }}>❌ BELUM ADA (Response BE belum ada copy_ids)</span>
+                          )}
+                        </td>
+                      </tr>
+                      <tr style={{ borderBottom: "1px solid #e2e8f0" }}>
+                        <td style={{ padding: "6px 8px", fontWeight: "bold" }}>📖 Judul Buku (book_title):</td>
+                        <td style={{ padding: "6px 8px" }}>
+                          {hasBookTitle ? (
+                            <span style={{ color: "#166534", fontWeight: "bold" }}>✅ ADA</span>
+                          ) : (
+                            <span style={{ color: "#64748b" }}>ℹ️ Tidak ada (Perlu di-join FE via copy_ids)</span>
+                          )}
+                        </td>
+                      </tr>
+                      <tr>
+                        <td style={{ padding: "6px 8px", fontWeight: "bold" }}>👤 ID Anggota (member_id):</td>
+                        <td style={{ padding: "6px 8px" }}>
+                          {hasMemberId ? (
+                            <span style={{ color: "#166534", fontWeight: "bold" }}>✅ ADA ({sample.member_id || sample.memberId})</span>
+                          ) : (
+                            <span style={{ color: "#dc2626", fontWeight: "bold" }}>❌ TIDAK ADA</span>
+                          )}
+                        </td>
+                      </tr>
+                    </tbody>
+                  </table>
+                </div>
+              );
+            })()}
+
+            <strong>Payload JSON Mentah Asli dari Backend:</strong>
+            <pre style={{ ...codeStyle, backgroundColor: "#eff6ff", color: "#1e40af", maxHeight: "350px" }}>
+              {JSON.stringify(rawReturnsData, null, 2)}
+            </pre>
+          </div>
+        )}
+
         {returnsError && <pre style={{ ...codeStyle, backgroundColor: "#fee2e2", color: "#dc2626" }}>{returnsError}</pre>}
         {returnsResult && (
           <div>
-            <strong>Hasil Data Active Returns:</strong>
-            <pre style={{ ...codeStyle, backgroundColor: "#fffbeb", color: "#92400e" }}>
+            <strong>Hasil Data Active Returns (Mapped FE):</strong>
+            <pre style={{ ...codeStyle, backgroundColor: "#fffbeb", color: "#92400e", maxHeight: "300px" }}>
               {JSON.stringify(returnsResult, null, 2)}
             </pre>
           </div>

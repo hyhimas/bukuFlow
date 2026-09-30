@@ -870,7 +870,7 @@ export default function MasterMembersPage() {
           )}
 
           {/* =================================================
-              TABLET + MOBILE
+              TABLET & MOBILE CARDS
           ================================================= */}
 
           {members.length > 0 && (

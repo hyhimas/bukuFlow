@@ -345,7 +345,7 @@ export default function ReturnsPage() {
           </p>
         </div>
 
-        <div className="mt-5 grid gap-5 lg:grid-cols-[minmax(0,1.55fr)_minmax(360px,0.85fr)] lg:items-start">
+        <div className="mt-5 grid gap-5 md:grid-cols-[minmax(0,1.2fr)_minmax(320px,0.9fr)] lg:grid-cols-[minmax(0,1.55fr)_minmax(360px,0.85fr)] md:items-start">
           <div className="min-w-0">
             <Card className="p-4 sm:p-5">
               <div>
@@ -484,7 +484,7 @@ export default function ReturnsPage() {
 
           <div
             ref={detailRef}
-            className="min-w-0 scroll-mt-6 lg:sticky lg:top-6 lg:self-start"
+            className="min-w-0 scroll-mt-6 md:sticky md:top-6 md:self-start"
           >
             {selectedLoan ? (
               <Card className="border-blue-200 p-4 sm:p-5">

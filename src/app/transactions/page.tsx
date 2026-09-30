@@ -1058,54 +1058,54 @@ export default function TransactionsPage() {
         ) : (
           <>
             {/* =================================================
-                DESKTOP VIEW (TABLE CARD)
+                TABLE VIEW (DESKTOP: xl+ only)
             ================================================== */}
             <Card className="relative mt-5 hidden overflow-hidden xl:block">
               <div className="overflow-x-auto">
-                <table className="w-full table-fixed border-collapse text-left text-sm">
+                <table className="w-full min-w-[720px] table-fixed border-collapse text-left text-sm">
                   <colgroup>
                     <col className="w-[15%]" />
-                    <col className="w-[12%]" />
-                    <col className="w-[19%]" />
                     <col className="w-[13%]" />
-                    <col className="w-[10%]" />
-                    <col className="w-[9%]" />
-                    <col className="w-[10%]" />
+                    <col className="w-[20%]" />
                     <col className="w-[12%]" />
+                    <col className="w-[10%]" />
+                    <col className="w-[10%]" />
+                    <col className="w-[10%]" />
+                    <col className="w-[10%]" />
                   </colgroup>
 
                   {/* TABLE HEADER */}
                   <thead>
                     <tr className="border-b border-slate-200 bg-slate-50">
-                      <th className="px-4 py-3 text-center text-xs font-semibold tracking-wide text-slate-500">
+                      <th className="px-3.5 py-3 text-center text-xs font-semibold tracking-wide text-slate-500">
                         Nomor transaksi
                       </th>
 
-                      <th className="px-4 py-3 text-center text-xs font-semibold tracking-wide text-slate-500">
+                      <th className="px-3.5 py-3 text-center text-xs font-semibold tracking-wide text-slate-500">
                         Anggota
                       </th>
 
-                      <th className="px-4 py-3 text-center text-xs font-semibold tracking-wide text-slate-500">
+                      <th className="px-3.5 py-3 text-center text-xs font-semibold tracking-wide text-slate-500">
                         Buku
                       </th>
 
-                      <th className="px-4 py-3 text-center text-xs font-semibold tracking-wide text-slate-500">
+                      <th className="px-3.5 py-3 text-center text-xs font-semibold tracking-wide text-slate-500">
                         Petugas
                       </th>
 
-                      <th className="px-4 py-3 text-center text-xs font-semibold tracking-wide text-slate-500">
+                      <th className="px-3.5 py-3 text-center text-xs font-semibold tracking-wide text-slate-500">
                         Peminjaman
                       </th>
 
-                      <th className="px-4 py-3 text-center text-xs font-semibold tracking-wide text-slate-500">
+                      <th className="px-3.5 py-3 text-center text-xs font-semibold tracking-wide text-slate-500">
                         Jatuh tempo
                       </th>
 
-                      <th className="px-4 py-3 text-center text-xs font-semibold tracking-wide text-slate-500">
+                      <th className="px-3.5 py-3 text-center text-xs font-semibold tracking-wide text-slate-500">
                         Pengembalian
                       </th>
 
-                      <th className="px-4 py-3 text-center text-xs font-semibold tracking-wide text-slate-500">
+                      <th className="px-3.5 py-3 text-center text-xs font-semibold tracking-wide text-slate-500">
                         Status
                       </th>
                     </tr>
@@ -1119,7 +1119,7 @@ export default function TransactionsPage() {
                         className="border-b border-slate-100 last:border-b-0 hover:bg-slate-50/70"
                       >
                         {/* NOMOR TRANSAKSI */}
-                        <td className="min-w-0 px-4 py-3.5 align-middle">
+                        <td className="min-w-0 px-3.5 py-3 align-middle">
                           <p
                             className="truncate whitespace-nowrap font-semibold tracking-tight text-slate-900"
                             title={transaction.loan.loanNumber}
@@ -1129,7 +1129,7 @@ export default function TransactionsPage() {
                         </td>
 
                         {/* ANGGOTA */}
-                        <td className="min-w-0 px-4 py-3.5 align-middle">
+                        <td className="min-w-0 px-3.5 py-3 align-middle">
                           <p
                             className="truncate text-slate-700"
                             title={transaction.member?.name ?? "-"}
@@ -1139,11 +1139,11 @@ export default function TransactionsPage() {
                         </td>
 
                         {/* BUKU */}
-                        <td className="min-w-0 px-4 py-3.5 align-middle">
+                        <td className="min-w-0 px-3.5 py-3 align-middle">
                           {transaction.items.length === 0 ? (
                             <span className="text-slate-400">-</span>
                           ) : (
-                            <ul className="min-w-0 space-y-1">
+                            <ul className="min-w-0 space-y-0.5">
                               {transaction.items.map(({ book, bookCopy }) => (
                                 <li
                                   key={`${transaction.loan.id}-${book?.id ?? "book"}-${bookCopy?.id ?? "copy"}`}
@@ -1177,7 +1177,7 @@ export default function TransactionsPage() {
                         </td>
 
                         {/* PETUGAS */}
-                        <td className="min-w-0 px-4 py-3.5 align-middle">
+                        <td className="min-w-0 px-3.5 py-3 align-middle">
                           <p
                             className="truncate text-slate-700"
                             title={transaction.user?.name ?? "-"}
@@ -1187,28 +1187,28 @@ export default function TransactionsPage() {
                         </td>
 
                         {/* PEMINJAMAN */}
-                        <td className="px-4 py-3.5 text-center align-middle">
+                        <td className="px-3.5 py-3 text-center align-middle">
                           <span className="whitespace-nowrap text-slate-700">
                             {formatDate(transaction.loan.borrowedAt)}
                           </span>
                         </td>
 
                         {/* JATUH TEMPO */}
-                        <td className="px-4 py-3.5 text-center align-middle">
+                        <td className="px-3.5 py-3 text-center align-middle">
                           <span className="whitespace-nowrap text-slate-700">
                             {formatDate(transaction.loan.dueAt)}
                           </span>
                         </td>
 
                         {/* PENGEMBALIAN */}
-                        <td className="px-4 py-3.5 text-center align-middle">
+                        <td className="px-3.5 py-3 text-center align-middle">
                           <span className="whitespace-nowrap text-slate-700">
                             {formatDate(transaction.loan.returnedAt)}
                           </span>
                         </td>
 
                         {/* STATUS */}
-                        <td className="px-4 py-3.5 align-middle">
+                        <td className="px-3.5 py-3 align-middle">
                           <div className="flex justify-center">
                             <Badge
                               variant={getStatusVariant(transaction.loan.status)}
@@ -1247,26 +1247,26 @@ export default function TransactionsPage() {
             </Card>
 
             {/* =================================================
-                TABLET + MOBILE VIEW (SEPARATE INDIVIDUAL CARDS)
+                CARD VIEW (TABLET & MOBILE: < xl)
             ================================================== */}
-            <div className="relative mt-5 space-y-3.5 xl:hidden">
+            <div className="relative mt-4 space-y-3 xl:hidden">
               {paginatedTransactions.map((transaction) => (
                 <Card
                   key={transaction.loan.id}
-                  className="p-4 sm:p-5 shadow-sm transition hover:border-slate-300"
+                  className="p-3.5 sm:p-4 shadow-sm transition hover:border-slate-300"
                 >
                   {/* TRANSACTION HEADER */}
-                  <div className="flex items-start justify-between gap-3">
+                  <div className="flex items-start justify-between gap-2.5">
                     <div className="min-w-0 flex-1">
                       <p
-                        className="truncate text-sm font-semibold tracking-tight text-slate-900 sm:text-base"
+                        className="truncate text-sm font-bold tracking-tight text-slate-900 sm:text-base"
                         title={transaction.loan.loanNumber}
                       >
                         {transaction.loan.loanNumber}
                       </p>
 
                       <p
-                        className="mt-0.5 truncate text-sm text-slate-500"
+                        className="mt-0.5 truncate text-xs text-slate-500 sm:text-sm"
                         title={transaction.member?.name ?? "-"}
                       >
                         {transaction.member?.name ?? "-"}
@@ -1283,15 +1283,15 @@ export default function TransactionsPage() {
                   </div>
 
                   {/* BUKU */}
-                  <div className="mt-4">
-                    <p className="text-xs font-medium text-slate-500 sm:text-sm">
-                      Buku
+                  <div className="mt-2.5 rounded-lg bg-slate-50 px-3 py-2">
+                    <p className="text-[11px] font-semibold text-slate-500">
+                      Buku Dipinjam ({transaction.items.length})
                     </p>
 
                     {transaction.items.length === 0 ? (
-                      <p className="mt-1 text-sm text-slate-900">-</p>
+                      <p className="mt-0.5 text-xs text-slate-900">-</p>
                     ) : (
-                      <ul className="mt-1 space-y-0.5 text-sm leading-5 text-slate-900 sm:text-base">
+                      <ul className="mt-1 space-y-0.5 text-xs text-slate-900 sm:text-sm">
                         {transaction.items.map(({ book, bookCopy }) => (
                           <li
                             key={`${transaction.loan.id}-${book?.id ?? "book"}-${bookCopy?.id ?? "copy"}`}
@@ -1299,17 +1299,17 @@ export default function TransactionsPage() {
                           >
                             <span
                               aria-hidden="true"
-                              className="mr-1 text-slate-400"
+                              className="mr-1.5 text-slate-400"
                             >
                               •
                             </span>
 
-                            <span className="font-medium">
+                            <span className="font-medium text-slate-800">
                               {book?.title ?? "-"}
                             </span>
 
                             {bookCopy?.code && (
-                              <span className="ml-1 text-slate-400">
+                              <span className="ml-1.5 font-mono text-xs text-slate-500">
                                 ({bookCopy.code})
                               </span>
                             )}
@@ -1319,54 +1319,32 @@ export default function TransactionsPage() {
                     )}
                   </div>
 
-                  {/* DIVIDER */}
-                  <div className="my-4 border-t border-slate-100" />
-
-                  {/* PETUGAS */}
-                  <div className="mb-4">
-                    <p className="text-xs font-medium text-slate-500 sm:text-sm">
-                      Petugas
-                    </p>
-
-                    <p
-                      className="mt-0.5 truncate text-sm text-slate-900 sm:text-base"
-                      title={transaction.user?.name ?? "-"}
-                    >
-                      {transaction.user?.name ?? "-"}
-                    </p>
-                  </div>
-
-                  {/* DATE INFORMATION */}
-                  <div className="grid grid-cols-2 gap-x-5 gap-y-3">
-                    {/* PEMINJAMAN */}
-                    <div className="min-w-0">
-                      <p className="text-xs font-medium text-slate-500 sm:text-sm">
-                        Peminjaman
+                  {/* DATES & PETUGAS GRID (2 col di mobile, 4 col di tablet) */}
+                  <div className="mt-3 grid grid-cols-2 gap-2.5 border-t border-slate-100 pt-2.5 text-xs sm:grid-cols-4 sm:text-sm">
+                    <div>
+                      <span className="text-[11px] text-slate-400">Petugas:</span>
+                      <p className="truncate font-semibold text-slate-700" title={transaction.user?.name ?? "-"}>
+                        {transaction.user?.name ?? "-"}
                       </p>
+                    </div>
 
-                      <p className="mt-0.5 whitespace-nowrap text-sm text-slate-900 sm:text-base">
+                    <div>
+                      <span className="text-[11px] text-slate-400">Pinjam:</span>
+                      <p className="whitespace-nowrap font-semibold text-slate-700">
                         {formatDate(transaction.loan.borrowedAt)}
                       </p>
                     </div>
 
-                    {/* JATUH TEMPO */}
-                    <div className="min-w-0">
-                      <p className="text-xs font-medium text-slate-500 sm:text-sm">
-                        Jatuh tempo
-                      </p>
-
-                      <p className="mt-0.5 whitespace-nowrap text-sm text-slate-900 sm:text-base">
+                    <div>
+                      <span className="text-[11px] text-slate-400">Jatuh Tempo:</span>
+                      <p className="whitespace-nowrap font-semibold text-slate-700">
                         {formatDate(transaction.loan.dueAt)}
                       </p>
                     </div>
 
-                    {/* PENGEMBALIAN */}
-                    <div className="min-w-0">
-                      <p className="text-xs font-medium text-slate-500 sm:text-sm">
-                        Pengembalian
-                      </p>
-
-                      <p className="mt-0.5 whitespace-nowrap text-sm text-slate-900 sm:text-base">
+                    <div>
+                      <span className="text-[11px] text-slate-400">Pengembalian:</span>
+                      <p className="whitespace-nowrap font-semibold text-slate-700">
                         {formatDate(transaction.loan.returnedAt)}
                       </p>
                     </div>
@@ -1387,16 +1365,19 @@ export default function TransactionsPage() {
                 </div>
               )}
 
-              {/* PAGINATION (MOBILE & TABLET) */}
-              <div className="overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm">
-                <Pagination
-                  currentPage={currentPage}
-                  totalPages={totalPages}
-                  onPageChange={(nextPage) => setPage(nextPage)}
-                  totalItems={filteredTransactions.length}
-                  pageSize={PAGE_SIZE}
-                />
-              </div>
+              {/* PAGINATION (CARD VIEW) */}
+              {totalPages > 1 && (
+                <div className="overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm">
+                  <Pagination
+                    currentPage={currentPage}
+                    totalPages={totalPages}
+                    onPageChange={(nextPage) => setPage(nextPage)}
+                    totalItems={filteredTransactions.length}
+                    pageSize={PAGE_SIZE}
+                    className="border-t-0"
+                  />
+                </div>
+              )}
             </div>
           </>
         )}

@@ -545,11 +545,11 @@ export default function DashboardPage() {
               {data.recentLoans.slice(0, 10).map((loan) => (
                 <div
                   key={loan.id}
-                  className="grid grid-cols-[minmax(0,1fr)_auto] grid-rows-[auto_auto] items-center gap-x-4 gap-y-1 px-5 py-4 xl:grid-cols-[260px_minmax(180px,1fr)_minmax(280px,1fr)_120px] xl:grid-rows-1 xl:gap-x-6"
+                  className="grid grid-cols-[minmax(0,1fr)_auto] grid-rows-[auto_auto] items-center gap-x-4 gap-y-1 px-4 sm:px-5 py-3 sm:py-3.5 md:grid-cols-[180px_minmax(140px,1fr)_minmax(180px,1fr)_100px] md:grid-rows-1 md:gap-x-4 xl:grid-cols-[260px_minmax(180px,1fr)_minmax(280px,1fr)_120px] xl:gap-x-6"
                 >
                   {/* Nomor transaksi */}
                   <div className="min-w-0">
-                    <p className="whitespace-nowrap text-sm font-medium text-slate-900 xl:text-base">
+                    <p className="whitespace-nowrap text-sm font-semibold text-slate-900 xl:text-base">
                       {loan.loanNumber}
                     </p>
                   </div>

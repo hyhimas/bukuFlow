@@ -27,8 +27,10 @@ export default function BookCameraScannerModal({
   const [torchOn, setTorchOn] = useState(false);
   const [hasTorch, setHasTorch] = useState(false);
   const [manualCode, setManualCode] = useState("");
+  const [retryKey, setRetryKey] = useState(0);
 
   const html5QrCodeRef = useRef<Html5Qrcode | null>(null);
+  const activeTracksRef = useRef<MediaStreamTrack[]>([]);
   const isStoppingRef = useRef(false);
   const scannerContainerId = "buku-camera-scanner-viewfinder";
 
@@ -64,53 +66,122 @@ export default function BookCameraScannerModal({
     } catch {}
   }, []);
 
-  const stopScanner = useCallback(async () => {
-    if (isStoppingRef.current) return;
-    const scanner = html5QrCodeRef.current;
-    if (!scanner) return;
-
-    isStoppingRef.current = true;
-    try {
-      if (scanner.isScanning) {
-        await scanner.stop().catch(() => {});
-      }
+  const stopAllActiveCameraTracks = useCallback(() => {
+    // 1. Force stop every track registered in memory
+    activeTracksRef.current.forEach((track) => {
       try {
-        await scanner.clear();
+        track.stop();
+        track.enabled = false;
       } catch {}
-    } catch {
-      // Suppress benign state transition logs
-    } finally {
-      html5QrCodeRef.current = null;
-      isStoppingRef.current = false;
-      setIsScanning(false);
-      setTorchOn(false);
-      setHasTorch(false);
-    }
+    });
+    activeTracksRef.current = [];
+
+    // 2. Force stop every video element in the DOM
+    try {
+      const videos = document.querySelectorAll<HTMLVideoElement>("video");
+      videos.forEach((video) => {
+        if (video.srcObject && "getTracks" in (video.srcObject as any)) {
+          const stream = video.srcObject as MediaStream;
+          stream.getTracks().forEach((track) => {
+            try {
+              track.stop();
+              track.enabled = false;
+            } catch {}
+          });
+          video.srcObject = null;
+        }
+        try {
+          video.pause();
+          video.removeAttribute("src");
+          video.load();
+        } catch {}
+      });
+    } catch {}
   }, []);
 
-  // Fetch available camera devices
+  const stopScanner = useCallback(async () => {
+    if (isStoppingRef.current) return;
+    isStoppingRef.current = true;
+
+    // Immediate track shutdown
+    stopAllActiveCameraTracks();
+
+    const scanner = html5QrCodeRef.current;
+    if (scanner) {
+      try {
+        // Also stop tracks from scanner internal references
+        const internalStream = (scanner as any)?.localMediaStream || (scanner as any)?._localMediaStream;
+        if (internalStream && typeof internalStream.getTracks === "function") {
+          internalStream.getTracks().forEach((t: MediaStreamTrack) => {
+            try {
+              t.stop();
+              t.enabled = false;
+            } catch {}
+          });
+        }
+
+        if (scanner.isScanning) {
+          await scanner.stop().catch(() => {});
+        }
+        try {
+          await scanner.clear();
+        } catch {}
+      } catch {
+        // Benign transition logs
+      } finally {
+        html5QrCodeRef.current = null;
+      }
+    }
+
+    // Final sweep
+    stopAllActiveCameraTracks();
+
+    isStoppingRef.current = false;
+    setIsScanning(false);
+    setTorchOn(false);
+    setHasTorch(false);
+  }, [stopAllActiveCameraTracks]);
+
+  const handleModalClose = useCallback(() => {
+    stopAllActiveCameraTracks();
+    void stopScanner();
+    onClose();
+  }, [stopAllActiveCameraTracks, stopScanner, onClose]);
+
+  // Fetch available camera devices using pure browser enumerateDevices (no stream leaks)
   useEffect(() => {
     if (!isOpen) return;
 
-    Html5Qrcode.getCameras()
-      .then((devices) => {
-        if (devices && devices.length > 0) {
-          setCameras(devices);
-          // Prefer back / environment camera if available
-          const backCamera = devices.find(
-            (c) =>
-              c.label.toLowerCase().includes("back") ||
-              c.label.toLowerCase().includes("rear") ||
-              c.label.toLowerCase().includes("environment") ||
-              c.label.toLowerCase().includes("belakang"),
-          );
-          setSelectedCameraId(backCamera ? backCamera.id : devices[0].id);
-        }
-      })
-      .catch((err) => {
-        console.warn("Camera enumeration warning:", err);
-      });
-  }, [isOpen]);
+    if (navigator?.mediaDevices?.enumerateDevices) {
+      navigator.mediaDevices
+        .enumerateDevices()
+        .then((devices) => {
+          const videoDevices = devices
+            .filter((d) => d.kind === "videoinput")
+            .map((d, index) => ({
+              id: d.deviceId,
+              label: d.label || `Kamera ${index + 1}`,
+            }));
+
+          if (videoDevices.length > 0) {
+            setCameras(videoDevices);
+            const backCamera = videoDevices.find(
+              (c) =>
+                c.label.toLowerCase().includes("back") ||
+                c.label.toLowerCase().includes("rear") ||
+                c.label.toLowerCase().includes("environment") ||
+                c.label.toLowerCase().includes("belakang"),
+            );
+            if (!selectedCameraId) {
+              setSelectedCameraId(backCamera ? backCamera.id : videoDevices[0].id);
+            }
+          }
+        })
+        .catch((err) => {
+          console.warn("Camera enumeration warning:", err);
+        });
+    }
+  }, [isOpen, selectedCameraId]);
 
   const toggleTorch = async () => {
     if (!html5QrCodeRef.current || !hasTorch) return;
@@ -136,11 +207,12 @@ export default function BookCameraScannerModal({
 
       void onScan(clean);
 
+      stopAllActiveCameraTracks();
       void stopScanner().then(() => {
         onClose();
       });
     },
-    [onClose, onScan, playBeep, stopScanner, triggerVibration],
+    [onClose, onScan, playBeep, stopScanner, stopAllActiveCameraTracks, triggerVibration],
   );
 
   const handleManualSubmit = (e: React.FormEvent) => {
@@ -152,11 +224,13 @@ export default function BookCameraScannerModal({
 
   useEffect(() => {
     if (!isOpen) {
+      stopAllActiveCameraTracks();
       void stopScanner();
       return;
     }
 
     let isMounted = true;
+    let trackCaptureInterval: any = null;
     setError("");
     setLastScanned("");
 
@@ -165,7 +239,11 @@ export default function BookCameraScannerModal({
         await new Promise((resolve) => setTimeout(resolve, 200));
         if (!isMounted) return;
 
-        // Initialize with optimized formats & native hardware detector acceleration
+        // Cleanup any previous scanner instance
+        if (html5QrCodeRef.current) {
+          await stopScanner();
+        }
+
         const html5QrCode = new Html5Qrcode(scannerContainerId, {
           formatsToSupport: [
             Html5QrcodeSupportedFormats.CODE_128,
@@ -187,7 +265,6 @@ export default function BookCameraScannerModal({
 
         html5QrCodeRef.current = html5QrCode;
 
-        // High FPS (25) + focused qrbox for ultra fast 1D & 2D code capture
         const scanConfig = {
           fps: 25,
           qrbox: (viewfinderWidth: number, viewfinderHeight: number) => {
@@ -199,30 +276,64 @@ export default function BookCameraScannerModal({
           disableFlip: false,
         };
 
-        const cameraConfig = selectedCameraId
-          ? {
-              deviceId: { exact: selectedCameraId },
-            }
-          : {
-              facingMode: "environment",
-            };
+        const onScanSuccess = (decodedText: string) => {
+          if (!isMounted) return;
+          const clean = decodedText.trim();
+          handleProcessCode(clean);
+        };
 
-        await html5QrCode.start(
-          cameraConfig,
-          scanConfig,
-          (decodedText) => {
-            if (!isMounted) return;
-            const clean = decodedText.trim();
-            handleProcessCode(clean);
-          },
-          () => {
-            // Frame scan callback
-          },
-        );
+        const attemptConfigs: any[] = [];
+        if (selectedCameraId) {
+          attemptConfigs.push(selectedCameraId);
+          attemptConfigs.push({ deviceId: selectedCameraId });
+        }
+        attemptConfigs.push({ facingMode: "environment" });
+        attemptConfigs.push({ facingMode: "user" });
+        attemptConfigs.push({});
+
+        let started = false;
+        let lastAttemptError: any = null;
+
+        for (const cfg of attemptConfigs) {
+          if (!isMounted) break;
+          try {
+            await html5QrCode.start(cfg, scanConfig, onScanSuccess, () => {});
+            started = true;
+            break;
+          } catch (cfgErr: any) {
+            lastAttemptError = cfgErr;
+          }
+        }
+
+        if (!started && isMounted) {
+          throw lastAttemptError || new Error("Tidak dapat mengaktifkan kamera.");
+        }
 
         if (isMounted) {
           setIsScanning(true);
-          // Check torch capability
+
+          // Continuously capture all active hardware tracks to guarantee we can stop them
+          trackCaptureInterval = setInterval(() => {
+            if (!isMounted) return;
+            const container = document.getElementById(scannerContainerId);
+            const video = container?.querySelector("video");
+            if (video && video.srcObject instanceof MediaStream) {
+              video.srcObject.getTracks().forEach((track) => {
+                if (!activeTracksRef.current.includes(track)) {
+                  activeTracksRef.current.push(track);
+                }
+              });
+            }
+            const internalStream = (html5QrCode as any)?.localMediaStream || (html5QrCode as any)?._localMediaStream;
+            if (internalStream instanceof MediaStream) {
+              internalStream.getTracks().forEach((track: MediaStreamTrack) => {
+                if (!activeTracksRef.current.includes(track)) {
+                  activeTracksRef.current.push(track);
+                }
+              });
+            }
+          }, 150);
+
           try {
             const capabilities = html5QrCode.getRunningTrackCapabilities();
             if ((capabilities as any)?.torch) {
@@ -233,10 +344,21 @@ export default function BookCameraScannerModal({
       } catch (err: any) {
         if (!isMounted) return;
         console.error("Camera scanner start failed:", err);
-        setError(
-          err?.message ||
-            "Gagal mengakses kamera. Pastikan izin kamera telah diberikan pada browser Anda.",
-        );
+
+        const errMsg = (err?.message || err?.name || "").toLowerCase();
+        let userMessage = "Gagal mengakses kamera. Pastikan izin kamera telah diberikan pada browser Anda.";
+
+        if (errMsg.includes("notallowed") || errMsg.includes("permission") || errMsg.includes("denied")) {
+          userMessage = "Izin kamera diblokir browser. Klik ikon gembok / kamera di sebelah kiri URL address bar browser, lalu ubah ke 'Allow / Izinkan'.";
+        } else if (errMsg.includes("notreadable") || errMsg.includes("trackstart") || errMsg.includes("source") || errMsg.includes("in use")) {
+          userMessage = "Kamera sedang digunakan oleh aplikasi lain (Zoom, Teams, Google Meet, atau tab browser lain). Harap tutup aplikasi tersebut lalu klik Coba Lagi.";
+        } else if (errMsg.includes("notfound") || errMsg.includes("device")) {
+          userMessage = "Tidak ada perangkat kamera / webcam yang terdeteksi di laptop/komputer ini.";
+        } else if (err?.message) {
+          userMessage = `Gagal membuka kamera: ${err.message}`;
+        }
+
+        setError(userMessage);
         setIsScanning(false);
       }
     };
@@ -245,7 +367,7 @@ export default function BookCameraScannerModal({
 
     const handleKeyDown = (e: KeyboardEvent) => {
       if (e.key === "Escape") {
-        onClose();
+        handleModalClose();
       }
     };
 
@@ -253,10 +375,12 @@ export default function BookCameraScannerModal({
 
     return () => {
       isMounted = false;
+      if (trackCaptureInterval) clearInterval(trackCaptureInterval);
       window.removeEventListener("keydown", handleKeyDown);
+      stopAllActiveCameraTracks();
       void stopScanner();
     };
-  }, [isOpen, selectedCameraId, onClose, handleProcessCode, stopScanner]);
+  }, [isOpen, selectedCameraId, retryKey, handleModalClose, stopAllActiveCameraTracks, handleProcessCode, stopScanner]);
 
   if (!isOpen) return null;
 
@@ -266,7 +390,7 @@ export default function BookCameraScannerModal({
       role="presentation"
       onMouseDown={(e) => {
         if (e.target === e.currentTarget) {
-          onClose();
+          handleModalClose();
         }
       }}
     >
@@ -294,7 +418,7 @@ export default function BookCameraScannerModal({
           </div>
           <button
             type="button"
-            onClick={onClose}
+            onClick={handleModalClose}
             className="rounded-lg p-1.5 text-slate-400 transition hover:bg-slate-100 hover:text-slate-600 focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 shrink-0"
             title="Tutup Modal"
           >
@@ -349,12 +473,24 @@ export default function BookCameraScannerModal({
         {/* Viewfinder Viewport */}
         <div className="relative flex flex-col items-center justify-center p-3 sm:p-4 bg-slate-900 min-h-[300px]">
           {error ? (
-            <div className="flex flex-col items-center justify-center text-center p-6 space-y-2.5 bg-white rounded-xl border border-red-200 shadow-2xs max-w-sm">
-              <span className="text-3xl">⚠️</span>
-              <p className="text-sm text-red-600 font-semibold">{error}</p>
-              <p className="text-xs text-slate-500">
-                Pastikan izin akses kamera pada browser telah diberikan, lalu buka kembali scanner.
-              </p>
+            <div className="flex flex-col items-center justify-center text-center p-6 space-y-3 bg-white rounded-xl border border-red-200 shadow-2xs max-w-sm">
+              <span className="text-3xl">📷⚠️</span>
+              <p className="text-sm text-red-600 font-semibold leading-relaxed">{error}</p>
+              <div className="flex flex-col gap-2 w-full pt-1">
+                <Button
+                  type="button"
+                  onClick={() => {
+                    setError("");
+                    setRetryKey((k) => k + 1);
+                  }}
+                  className="w-full text-xs font-semibold"
+                >
+                  🔄 Coba Hubungkan Kamera Lagi
+                </Button>
+                <p className="text-[11px] text-slate-500">
+                  Atau masukkan nomor barcode/copy secara manual di input bawah.
+                </p>
+              </div>
             </div>
           ) : (
             <div className="relative w-full max-w-[420px] aspect-[4/3] rounded-xl overflow-hidden bg-black border border-slate-700 shadow-inner">
