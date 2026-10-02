@@ -478,14 +478,21 @@ export default function ReturnsPage() {
     }
   }
 
-  function getItemStatusLabel(status: string) {
-    return status === "BORROWED" ? "Dipinjam" : "Dikembalikan";
+  function getItemStatusLabel(status: string, isOverdue?: boolean) {
+    if (status === "BORROWED") {
+      return isOverdue ? "Terlambat" : "Dipinjam";
+    }
+    return "Dikembalikan";
   }
 
   function getItemStatusVariant(
     status: string,
+    isOverdue?: boolean,
   ): "success" | "warning" | "danger" | "neutral" {
-    return status === "BORROWED" ? "warning" : "success";
+    if (status === "BORROWED") {
+      return isOverdue ? "danger" : "warning";
+    }
+    return "success";
   }
 
   function getOverallStatus(loanData: ReturnLoanData) {
@@ -514,8 +521,15 @@ export default function ReturnsPage() {
       };
     }
 
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    const dueDate = new Date(`${loanData.loan.dueAt.slice(0, 10)}T00:00:00`);
+    const isOverdue =
+      loanData.loan.status === "OVERDUE" ||
+      (!Number.isNaN(dueDate.getTime()) && dueDate.getTime() < today.getTime());
+
     // Masih ada buku yang dipinjam dan transaksi terlambat
-    if (loanData.loan.status === "OVERDUE") {
+    if (isOverdue) {
       return {
         label: "Terlambat",
         variant: "danger" as const,
@@ -888,9 +902,13 @@ export default function ReturnsPage() {
                                     <Badge
                                       variant={getItemStatusVariant(
                                         loanItem.status,
+                                        selectedLoan.loan.status === "OVERDUE",
                                       )}
                                     >
-                                      {getItemStatusLabel(loanItem.status)}
+                                      {getItemStatusLabel(
+                                        loanItem.status,
+                                        selectedLoan.loan.status === "OVERDUE",
+                                      )}
                                     </Badge>
 
                                     {loanItem.status === "RETURNED" &&

@@ -4,7 +4,6 @@ import { useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 
-import OfficeNavbar from "@/components/office/OfficeNavbar";
 import Card from "@/components/ui/Card";
 import Badge from "@/components/ui/Badge";
 import LoadingState from "@/components/ui/LoadingState";
@@ -192,8 +191,6 @@ export default function OfficeDashboardPage() {
 
   return (
     <main className="min-h-screen bg-slate-50">
-      <OfficeNavbar userName={userName} />
-
       <div className="mx-auto max-w-7xl px-4 py-6 sm:px-6 lg:px-8">
         {/* ===================================================
             HEADER & CUSTOM COMPANY SELECTOR

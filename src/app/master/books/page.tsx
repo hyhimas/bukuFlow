@@ -108,6 +108,8 @@ export default function MasterBooksPage() {
   // ADD COPY
   // =====================================================
 
+  const [addCopyModalOpen, setAddCopyModalOpen] = useState(false);
+  const [addCopyCount, setAddCopyCount] = useState(1);
   const [addCopyLoading, setAddCopyLoading] = useState(false);
 
   // =====================================================
@@ -635,7 +637,7 @@ export default function MasterBooksPage() {
   // ADD COPY
   // =====================================================
 
-  async function handleAddCopy() {
+  async function handleAddCopy(count: number = addCopyCount) {
     if (!detailBook || addCopyLoading) {
       return;
     }
@@ -644,11 +646,14 @@ export default function MasterBooksPage() {
     setDetailError("");
 
     try {
-      await masterDataRepository.createBookCopy({
+      const result = await masterDataRepository.createBookCopy({
         bookId: detailBook.id,
+        count,
       });
 
-      toast.success("Copy buku berhasil ditambahkan.");
+      toast.success(result.message || "Copy buku berhasil ditambahkan.");
+      setAddCopyModalOpen(false);
+      setAddCopyCount(1);
 
       await refreshDetail(detailBook.id);
     } catch (error) {
@@ -1044,9 +1049,23 @@ export default function MasterBooksPage() {
                 variant="secondary"
                 onClick={() => void handlePrintAllCurrentBooks()}
                 loading={bulkPrintLoading}
-                className="w-full sm:w-auto text-xs h-9 px-3 text-center whitespace-nowrap"
+                className="w-full sm:w-auto text-xs h-9 px-3 text-center whitespace-nowrap flex items-center justify-center gap-1.5"
               >
-                🖨️ Cetak Semua Barcode
+                <svg
+                  width="13"
+                  height="13"
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="currentColor"
+                  strokeWidth="2"
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                >
+                  <polyline points="6 9 6 2 18 2 18 9" />
+                  <path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2" />
+                  <rect width="12" height="8" x="6" y="14" />
+                </svg>
+                <span>Cetak Semua Barcode</span>
               </Button>
 
               {canManageMasterData(getSession()?.user.role ?? "MEMBER") && (
@@ -1192,9 +1211,13 @@ export default function MasterBooksPage() {
                           </p>
 
                           <p className="mt-0.5 truncate text-[11px] text-slate-400">
-                            {book.isbn
+                            {book.author && book.author !== "-"
+                              ? book.isbn && book.isbn !== "-"
+                                ? `${book.author} · ISBN ${book.isbn}`
+                                : book.author
+                              : book.isbn && book.isbn !== "-"
                               ? `ISBN ${book.isbn}`
-                              : (book.author ?? "Tidak ada ISBN/pengarang")}
+                              : "-"}
                           </p>
                         </td>
 
@@ -1282,9 +1305,19 @@ export default function MasterBooksPage() {
                                 </>
                               ) : (
                                 <>
-                                  <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                                    <circle cx="12" cy="12" r="10" />
-                                    <line x1="4.93" y1="4.93" x2="19.07" y2="19.07" />
+                                  <svg
+                                    width="13"
+                                    height="13"
+                                    viewBox="0 0 24 24"
+                                    fill="none"
+                                    stroke="currentColor"
+                                    strokeWidth="2"
+                                    strokeLinecap="round"
+                                    strokeLinejoin="round"
+                                  >
+                                    <rect width="20" height="5" x="2" y="3" rx="1" />
+                                    <path d="M4 8v11a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8" />
+                                    <path d="M10 12h4" />
                                   </svg>
                                   <span>Arsipkan</span>
                                 </>
@@ -1372,7 +1405,7 @@ export default function MasterBooksPage() {
                         </div>
                       </div>
 
-                      {book.isbn && (
+                      {book.isbn && book.isbn !== "-" && (
                         <div className="mt-2 rounded-lg border border-slate-100 bg-slate-50 px-3 py-2">
                           <p className="text-[10px] font-semibold uppercase tracking-wide text-slate-400">
                             ISBN
@@ -1384,7 +1417,7 @@ export default function MasterBooksPage() {
                         </div>
                       )}
 
-                      {book.author && (
+                      {book.author && book.author !== "-" && (
                         <div className="mt-2 rounded-lg border border-slate-100 bg-slate-50 px-3 py-2">
                           <p className="text-[10px] font-semibold uppercase tracking-wide text-slate-400">
                             Pengarang
@@ -1452,9 +1485,19 @@ export default function MasterBooksPage() {
                           </>
                         ) : (
                           <>
-                            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                              <circle cx="12" cy="12" r="10" />
-                              <line x1="4.93" y1="4.93" x2="19.07" y2="19.07" />
+                            <svg
+                              width="13"
+                              height="13"
+                              viewBox="0 0 24 24"
+                              fill="none"
+                              stroke="currentColor"
+                              strokeWidth="2"
+                              strokeLinecap="round"
+                              strokeLinejoin="round"
+                            >
+                              <rect width="20" height="5" x="2" y="3" rx="1" />
+                              <path d="M4 8v11a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8" />
+                              <path d="M10 12h4" />
                             </svg>
                             <span>Arsipkan</span>
                           </>
@@ -1821,16 +1864,32 @@ export default function MasterBooksPage() {
                       variant="secondary"
                       onClick={() => void handlePrintBookCopies(detailBook, detailCopies)}
                       disabled={detailCopies.length === 0}
-                      className="flex-1 sm:flex-initial text-xs h-8 px-3"
+                      className="flex-1 sm:flex-initial text-xs h-8 px-3 flex items-center justify-center gap-1.5"
                     >
-                      🖨️ Cetak Semua Copy
+                      <svg
+                        width="13"
+                        height="13"
+                        viewBox="0 0 24 24"
+                        fill="none"
+                        stroke="currentColor"
+                        strokeWidth="2"
+                        strokeLinecap="round"
+                        strokeLinejoin="round"
+                      >
+                        <polyline points="6 9 6 2 18 2 18 9" />
+                        <path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2" />
+                        <rect width="12" height="8" x="6" y="14" />
+                      </svg>
+                      <span>Cetak Semua Copy</span>
                     </Button>
 
                     {canManageMasterData(getSession()?.user.role ?? "MEMBER") && (
                       <Button
                         type="button"
-                        onClick={() => void handleAddCopy()}
-                        loading={addCopyLoading}
+                        onClick={() => {
+                          setAddCopyCount(1);
+                          setAddCopyModalOpen(true);
+                        }}
                         disabled={detailBook.status === "INACTIVE"}
                         className="flex-1 sm:flex-initial text-xs h-8 px-3"
                       >
@@ -1872,9 +1931,23 @@ export default function MasterBooksPage() {
                               type="button"
                               onClick={() => handlePrintSingleCopy(detailBook, copy)}
                               title="Cetak Barcode Copy Ini"
-                              className="inline-flex h-8 items-center justify-center rounded-lg border border-slate-200 bg-white px-2.5 text-xs font-semibold text-slate-700 shadow-2xs transition hover:bg-slate-50 hover:border-slate-300 focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-500"
+                              className="inline-flex h-8 items-center justify-center gap-1.5 rounded-lg border border-slate-200 bg-white px-2.5 text-xs font-semibold text-slate-700 shadow-2xs transition hover:bg-slate-50 hover:border-slate-300 focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-500"
                             >
-                              🖨️ Cetak
+                              <svg
+                                width="12"
+                                height="12"
+                                viewBox="0 0 24 24"
+                                fill="none"
+                                stroke="currentColor"
+                                strokeWidth="2"
+                                strokeLinecap="round"
+                                strokeLinejoin="round"
+                              >
+                                <polyline points="6 9 6 2 18 2 18 9" />
+                                <path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2" />
+                                <rect width="12" height="8" x="6" y="14" />
+                              </svg>
+                              <span>Cetak</span>
                             </button>
 
                             {copy.status === "BORROWED" ? (
@@ -1953,19 +2026,194 @@ export default function MasterBooksPage() {
                     type="button"
                     variant={detailBook.status === "INACTIVE" ? "primary" : "secondary"}
                     onClick={() => openBookStatusConfirm(detailBook)}
-                    className={`flex-1 sm:flex-initial text-xs ${
+                    className={`flex-1 sm:flex-initial text-xs flex items-center justify-center gap-1.5 ${
                       detailBook.status !== "INACTIVE"
-                        ? "text-red-600 border-red-200 hover:bg-red-50"
+                        ? "text-amber-700 border-amber-200 hover:bg-amber-50"
                         : ""
                     }`}
                   >
-                    {detailBook.status === "INACTIVE"
-                      ? "Aktifkan Buku"
-                      : "Arsipkan Buku"}
+                    {detailBook.status === "INACTIVE" ? (
+                      <>
+                        <svg
+                          width="13"
+                          height="13"
+                          viewBox="0 0 24 24"
+                          fill="none"
+                          stroke="currentColor"
+                          strokeWidth="2"
+                          strokeLinecap="round"
+                          strokeLinejoin="round"
+                        >
+                          <path d="M22 11.08V12a10 10 0 1 1-5.93-9.14" />
+                          <polyline points="22 4 12 14.01 9 11.01" />
+                        </svg>
+                        <span>Aktifkan Buku</span>
+                      </>
+                    ) : (
+                      <>
+                        <svg
+                          width="13"
+                          height="13"
+                          viewBox="0 0 24 24"
+                          fill="none"
+                          stroke="currentColor"
+                          strokeWidth="2"
+                          strokeLinecap="round"
+                          strokeLinejoin="round"
+                        >
+                          <rect width="20" height="5" x="2" y="3" rx="1" />
+                          <path d="M4 8v11a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8" />
+                          <path d="M10 12h4" />
+                        </svg>
+                        <span>Arsipkan Buku</span>
+                      </>
+                    )}
                   </Button>
                 </div>
               )}
             </div>
+          </div>
+        </div>
+      )}
+
+      {/* =====================================================
+          ADD COPY MODAL (BULK / SINGLE)
+      ===================================================== */}
+      {addCopyModalOpen && detailBook && (
+        <div
+          className="fixed inset-0 z-[60] flex items-center justify-center bg-black/50 p-4 backdrop-blur-xs"
+          role="presentation"
+        >
+          <div
+            className="w-full max-w-md overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-2xl"
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="add-copy-modal-title"
+          >
+            {/* Header */}
+            <div className="border-b border-slate-100 bg-slate-50/70 px-5 py-4">
+              <div className="flex items-center justify-between">
+                <div>
+                  <h3
+                    id="add-copy-modal-title"
+                    className="text-base font-bold text-slate-900"
+                  >
+                    Tambah Copy Fisik
+                  </h3>
+                  <p className="mt-0.5 text-xs text-slate-500 line-clamp-1">
+                    {detailBook.title} ({detailBook.code})
+                  </p>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => !addCopyLoading && setAddCopyModalOpen(false)}
+                  disabled={addCopyLoading}
+                  className="rounded-lg p-1.5 text-slate-400 hover:bg-slate-200 hover:text-slate-700"
+                >
+                  ✕
+                </button>
+              </div>
+            </div>
+
+            {/* Body */}
+            <form
+              onSubmit={(e) => {
+                e.preventDefault();
+                void handleAddCopy(addCopyCount);
+              }}
+              className="p-5 space-y-4"
+            >
+              <div>
+                <label className="block text-xs font-semibold text-slate-700 mb-1.5">
+                  Jumlah Copy yang Ingin Ditambahkan
+                </label>
+                <div className="flex items-center gap-3">
+                  <button
+                    type="button"
+                    onClick={() => setAddCopyCount((prev) => Math.max(1, prev - 1))}
+                    disabled={addCopyLoading || addCopyCount <= 1}
+                    className="h-10 w-10 flex items-center justify-center rounded-lg border border-slate-200 bg-slate-50 text-slate-700 font-bold hover:bg-slate-100 disabled:opacity-40 disabled:cursor-not-allowed"
+                  >
+                    -
+                  </button>
+                  <input
+                    type="number"
+                    min={1}
+                    max={100}
+                    value={addCopyCount}
+                    onChange={(e) => {
+                      const val = parseInt(e.target.value, 10);
+                      setAddCopyCount(isNaN(val) ? 1 : Math.max(1, Math.min(100, val)));
+                    }}
+                    disabled={addCopyLoading}
+                    className="h-10 flex-1 rounded-lg border border-slate-200 px-3 text-center text-base font-bold text-slate-900 focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-500/20"
+                  />
+                  <button
+                    type="button"
+                    onClick={() => setAddCopyCount((prev) => Math.min(100, prev + 1))}
+                    disabled={addCopyLoading || addCopyCount >= 100}
+                    className="h-10 w-10 flex items-center justify-center rounded-lg border border-slate-200 bg-slate-50 text-slate-700 font-bold hover:bg-slate-100 disabled:opacity-40 disabled:cursor-not-allowed"
+                  >
+                    +
+                  </button>
+                </div>
+                <div className="mt-2 flex gap-1.5">
+                  {[1, 2, 5, 10].map((preset) => (
+                    <button
+                      key={preset}
+                      type="button"
+                      onClick={() => setAddCopyCount(preset)}
+                      disabled={addCopyLoading}
+                      className={`flex-1 rounded-md py-1 text-xs font-medium transition ${
+                        addCopyCount === preset
+                          ? "bg-blue-600 text-white font-semibold shadow-xs"
+                          : "bg-slate-100 text-slate-600 hover:bg-slate-200"
+                      }`}
+                    >
+                      +{preset}
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              {/* Information Preview Box */}
+              <div className="rounded-xl border border-slate-100 bg-slate-50/80 p-3 text-xs space-y-1.5 text-slate-600">
+                <div className="flex justify-between">
+                  <span>Total copy saat ini:</span>
+                  <span className="font-semibold text-slate-800">{detailCopies.length} copy</span>
+                </div>
+                <div className="flex justify-between">
+                  <span>Akan ditambahkan:</span>
+                  <span className="font-semibold text-blue-600">+{addCopyCount} copy</span>
+                </div>
+                <div className="border-t border-slate-200/60 pt-1.5 flex justify-between font-medium">
+                  <span className="text-slate-800">Total setelah penambahan:</span>
+                  <span className="font-bold text-slate-900">{detailCopies.length + addCopyCount} copy</span>
+                </div>
+              </div>
+
+              {/* Actions */}
+              <div className="flex items-center justify-end gap-2 pt-2 border-t border-slate-100">
+                <Button
+                  type="button"
+                  variant="secondary"
+                  onClick={() => setAddCopyModalOpen(false)}
+                  disabled={addCopyLoading}
+                  className="text-xs h-9 px-4"
+                >
+                  Batal
+                </Button>
+                <Button
+                  type="submit"
+                  loading={addCopyLoading}
+                  className="text-xs h-9 px-4"
+                >
+                  {addCopyLoading
+                    ? "Menambahkan..."
+                    : `Tambahkan ${addCopyCount} Copy`}
+                </Button>
+              </div>
+            </form>
           </div>
         </div>
       )}

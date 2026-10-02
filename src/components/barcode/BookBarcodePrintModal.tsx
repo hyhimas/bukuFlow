@@ -260,7 +260,18 @@ export default function BookBarcodePrintModal({
           <div className="flex items-center justify-between px-5 py-3.5 sm:py-4">
             <div className="flex items-center gap-3 min-w-0">
               <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-blue-50 text-blue-600">
-                <span className="text-xl">🏷️</span>
+                <svg
+                  width="20"
+                  height="20"
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="currentColor"
+                  strokeWidth="2"
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                >
+                  <path d="M3 5v14M8 5v14M12 5v14M17 5v14M21 5v14" />
+                </svg>
               </div>
               <div className="min-w-0">
                 <h3
@@ -335,9 +346,23 @@ export default function BookBarcodePrintModal({
                 type="button"
                 variant="primary"
                 onClick={handlePrint}
-                className="flex-1 sm:flex-initial text-xs px-4 py-1.5 h-8 font-bold shadow-xs"
+                className="flex-1 sm:flex-initial text-xs px-4 py-1.5 h-8 font-bold shadow-xs flex items-center justify-center gap-1.5"
               >
-                🖨️ Cetak Sekarang
+                <svg
+                  width="13"
+                  height="13"
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="currentColor"
+                  strokeWidth="2"
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                >
+                  <polyline points="6 9 6 2 18 2 18 9" />
+                  <path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2" />
+                  <rect width="12" height="8" x="6" y="14" />
+                </svg>
+                <span>Cetak Sekarang</span>
               </Button>
             </div>
           </div>
@@ -374,7 +399,21 @@ export default function BookBarcodePrintModal({
         {/* Footer info (No Print) */}
         <div className="border-t border-slate-200 bg-white px-5 py-3 text-xs text-slate-500 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2.5 print:hidden">
           <div className="flex items-start sm:items-center gap-2 text-slate-600">
-            <span className="text-blue-600 font-bold shrink-0">💡 Tip:</span>
+            <svg
+              width="14"
+              height="14"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth="2"
+              strokeLinecap="round"
+              strokeLinejoin="round"
+              className="text-blue-600 shrink-0 mt-0.5 sm:mt-0"
+            >
+              <path d="M12 2v2M12 20v2M4.93 4.93l1.41 1.41M17.66 17.66l1.41 1.41M2 12h2M20 12h2M6.34 17.66l-1.41 1.41M19.07 4.93l-1.41 1.41" />
+              <path d="M9 16a5 5 0 1 1 6 0 3.5 3.5 0 0 0-1 3 2 2 0 0 1-4 0 3.5 3.5 0 0 0-1-3" />
+              <line x1="9" y1="22" x2="15" y2="22" />
+            </svg>
             <p className="text-xs leading-relaxed text-slate-600">
               Pilih opsi <span className="font-semibold text-slate-800">"None / Tidak Ada"</span> pada margin browser di jendela print untuk hasil cetak stiker yang rapi.
             </p>

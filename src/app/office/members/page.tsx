@@ -11,7 +11,6 @@ import BackLink from "@/components/ui/BackLink";
 import LoadingState from "@/components/ui/LoadingState";
 import ConfirmationDialog from "@/components/ui/ConfirmationDialog";
 import Pagination from "@/components/ui/Pagination";
-import OfficeNavbar from "@/components/office/OfficeNavbar";
 
 import { getSession } from "@/lib/auth";
 import {
@@ -398,7 +397,6 @@ export default function OfficeMembersPage() {
   if (checkingAuth || (loading && members.length === 0 && !error)) {
     return (
       <main className="min-h-screen bg-slate-50">
-        <OfficeNavbar userName={userName} />
         <div className="flex h-96 items-center justify-center">
           <LoadingState label="Memuat data member instansi..." />
         </div>
@@ -412,9 +410,11 @@ export default function OfficeMembersPage() {
 
   return (
     <main className="min-h-screen bg-slate-50">
-      <OfficeNavbar userName={userName} />
-
       <div className="mx-auto w-full max-w-7xl px-4 py-6 sm:px-6 lg:px-8">
+        <div className="mb-4">
+          <BackLink href="/office/dashboard">Kembali ke Dashboard Office</BackLink>
+        </div>
+
         {/* =================================================
             HEADER
         ================================================= */}

@@ -316,7 +316,7 @@ export default function NewLoanPage() {
   }, [router]);
 
   // =====================================================
-  // SEARCH MEMBER WITH DEBOUNCE (Instant saat kosong, 350ms saat mengetik)
+  // SEARCH MEMBER WITH DEBOUNCE 
   // =====================================================
 
   useEffect(() => {

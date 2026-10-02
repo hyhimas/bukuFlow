@@ -93,6 +93,7 @@ export interface BookCopyListInput extends PaginationInput {
 
 export interface CreateBookCopyInput {
   bookId: string;
+  count?: number;
 }
 
 export interface ChangeBookCopyStatusInput {

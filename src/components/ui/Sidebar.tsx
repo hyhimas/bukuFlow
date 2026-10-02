@@ -169,9 +169,9 @@ export default function Sidebar({
                 </p>
                 <div className="space-y-1">
                   <NavItem
-                    href="/office/catalog"
-                    label="Inspeksi Katalog"
-                    active={isActive("/office/catalog")}
+                    href="/office/books"
+                    label="Inspeksi Katalog (Buku)"
+                    active={isActive("/office/books") || isActive("/office/catalog")}
                     onClick={onClose}
                     disabled={!open}
                   />
@@ -403,7 +403,7 @@ function NavIcon({ label }: { label: string }) {
   if (label === "Pengembalian") return <ReturnIcon />;
   if (label === "Riwayat Transaksi") return <HistoryIcon />;
   if (label === "Member" || label === "Inspeksi Anggota") return <MemberIcon />;
-  if (label === "Buku" || label === "Inspeksi Katalog") return <BookIcon />;
+  if (label === "Buku" || label === "Inspeksi Katalog" || label === "Inspeksi Katalog (Buku)") return <BookIcon />;
   if (label === "Company" || label === "Manajemen Company" || label === "Konfigurasi Instansi") return <CompanyIcon />;
 
   return <UsersIcon />;

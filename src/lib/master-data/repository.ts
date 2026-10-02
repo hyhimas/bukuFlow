@@ -24,6 +24,7 @@ import {
   changeBookStatusApi,
   getBookCopiesApi,
   createBookCopyApi,
+  createBookCopiesBulkApi,
   changeBookCopyStatusApi,
 } from "@/lib/api";
 
@@ -245,11 +246,16 @@ export const masterDataRepository = {
   async createBookCopy(
     input: CreateBookCopyInput,
   ): Promise<MutationResult<BookCopy>> {
-    const copy = await createBookCopyApi(input.bookId);
+    const count = input.count ?? 1;
+    const copies = await createBookCopiesBulkApi(input.bookId, count);
+    const firstCopy = copies[0];
 
     return {
-      data: copy,
-      message: `Copy ${copy.code} berhasil ditambahkan.`,
+      data: firstCopy,
+      message:
+        count > 1
+          ? `${count} copy buku berhasil ditambahkan.`
+          : `Copy ${firstCopy.code} berhasil ditambahkan.`,
     };
   },
 

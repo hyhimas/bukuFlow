@@ -628,20 +628,25 @@ export async function getBooksApi(params?: ListBooksParams): Promise<Book[]> {
           ? Number(rawAvailable)
           : totalCopies;
 
+      const cleanIsbn = item.isbn && item.isbn !== "-" && item.isbn.trim() !== "" ? item.isbn.trim() : undefined;
+      const cleanAuthor = item.author && item.author !== "-" && item.author.trim() !== "" ? item.author.trim() : undefined;
+      const cleanPublisher = item.publisher && item.publisher !== "-" && item.publisher.trim() !== "" ? item.publisher.trim() : undefined;
+      const cleanCategory = item.category && item.category !== "-" && item.category.trim() !== "" ? item.category.trim() : undefined;
+
       return {
-        id: item.id || item._id || `book-${Math.random().toString(36).slice(2)}`,
+        id: item._id || item.id || `book-${Math.random().toString(36).slice(2)}`,
         companyId: item.company_id || item.companyId || "company-001",
         code: item.code || "-",
-        isbn: item.isbn || undefined,
+        isbn: cleanIsbn,
         title: item.title || "-",
-        author: item.author || "-",
-        publisher: item.publisher || "-",
+        author: cleanAuthor,
+        publisher: cleanPublisher,
         publicationYear:
           item.published_year ||
           item.publication_year ||
           item.publicationYear ||
           undefined,
-        category: item.category || "-",
+        category: cleanCategory,
         coverUrl: item.cover_url || item.coverUrl || undefined,
         status: parseBookStatus(item.status, totalCopies, availableCopies),
         totalCopies,
@@ -687,10 +692,10 @@ export async function createBookApi(data: CreateBookInputData): Promise<Book> {
   const payload: Record<string, any> = {
     code: bookCode,
     title: data.title.trim(),
-    isbn: data.isbn?.trim() || "",
-    author: data.author?.trim() || "",
-    category: data.category?.trim() || "",
-    publisher: data.publisher?.trim() || "",
+    isbn: data.isbn?.trim() || "-",
+    author: data.author?.trim() || "-",
+    publisher: data.publisher?.trim() || "-",
+    category: data.category?.trim() || "-",
     published_year:
       data.publicationYear && !Number.isNaN(Number(data.publicationYear))
         ? Number(data.publicationYear)
@@ -701,17 +706,13 @@ export async function createBookApi(data: CreateBookInputData): Promise<Book> {
     const response = await api.post("/catalog/books", payload);
 
     const raw = response.data?.book || response.data?.data || response.data;
-    const bookId =
-      raw?._id ||
-      raw?.id ||
-      raw?.book_id ||
-      raw?.inserted_id ||
-      raw?.insertedId;
+    const bookId = raw?._id || raw?.id;
+    const finalCode = raw?.code || bookCode;
 
     const createdBook: Book = {
       id: bookId || `book-${Date.now()}`,
       companyId: raw?.company_id || raw?.companyId || "company-001",
-      code: raw?.code || bookCode,
+      code: finalCode,
       isbn: raw?.isbn || data.isbn || undefined,
       title: raw?.title || data.title,
       author: raw?.author || data.author || undefined,
@@ -730,42 +731,42 @@ export async function createBookApi(data: CreateBookInputData): Promise<Book> {
       updatedAt: raw?.updated_at || new Date().toISOString(),
     };
 
-    // Auto-create initial book copies if totalCopies > 0
-    if (createdBook.id && totalCopies > 0) {
+    // Auto-create initial book copies (Mendukung Array Bulk maupun Single Object Fallback)
+    if (bookId && totalCopies > 0) {
       try {
-        // Cek apakah backend sudah membuat copy otomatis (misal copy ke-1)
-        const existingCopies = await getBookCopiesApi(createdBook.id, createdBook.companyId).catch(() => []);
-        const copiesNeeded = totalCopies - existingCopies.length;
+        const copiesPayload = Array.from({ length: totalCopies }, (_, index) => ({
+          copy_code: `${finalCode}-cp-${index + 1}`,
+          location: "-",
+          status: "AVAILABLE",
+        }));
 
-        if (copiesNeeded > 0) {
-          for (let i = 0; i < copiesNeeded; i++) {
-            const copyIndex = existingCopies.length + i + 1;
-            const copyCode = `${createdBook.code}-${String(copyIndex).padStart(3, "0")}`;
-            await api
-              .post(`/catalog/books/${createdBook.id}/copies`, {
-                copy_code: copyCode,
-                location: "-",
-                status: "AVAILABLE",
-              })
-              .catch(async () => {
-                // Fallback dengan alternative endpoint jika diperlukan
-                return api
-                  .post(`/office/catalog/books/${createdBook.id}/copies`, {
-                    copy_code: copyCode,
-                    location: "-",
-                    status: "AVAILABLE",
-                  })
+        // 1. Coba kirim langsung sebagai Array (Sesuai alur baru)
+        await api
+          .post(`/catalog/books/${bookId}/copies`, copiesPayload)
+          .catch(async (err) => {
+            // 2. Jika BE menolak (karena masih format single object), looping kirim per item
+            if (err.response?.status === 422 || err.response?.status === 400) {
+              for (const copy of copiesPayload) {
+                await api
+                  .post(`/catalog/books/${bookId}/copies`, copy)
                   .catch(() => null);
-              });
-          }
-        }
+              }
+            }
+          });
       } catch (copyErr) {
-        console.warn("Failed to auto-create initial copies on backend:", copyErr);
+        console.warn("Gagal membuat copies:", copyErr);
       }
     }
 
     return createdBook;
   } catch (error: any) {
+    console.error(">>> [DEBUG CREATE BOOK ERROR]", {
+      status: error.response?.status,
+      statusText: error.response?.statusText,
+      data: error.response?.data,
+      sentPayload: payload,
+    });
+
     if (
       error.response?.status >= 500 ||
       error.code === "ECONNABORTED" ||
@@ -822,20 +823,25 @@ export async function searchBooksApi(keyword: string = ""): Promise<Book[]> {
           ? Number(rawAvailable)
           : totalCopies;
 
+      const cleanIsbn = item.isbn && item.isbn !== "-" && item.isbn.trim() !== "" ? item.isbn.trim() : undefined;
+      const cleanAuthor = item.author && item.author !== "-" && item.author.trim() !== "" ? item.author.trim() : undefined;
+      const cleanPublisher = item.publisher && item.publisher !== "-" && item.publisher.trim() !== "" ? item.publisher.trim() : undefined;
+      const cleanCategory = item.category && item.category !== "-" && item.category.trim() !== "" ? item.category.trim() : undefined;
+
       return {
-        id: item.id || item._id || `book-${Math.random().toString(36).slice(2)}`,
+        id: item._id || item.id || `book-${Math.random().toString(36).slice(2)}`,
         companyId: item.company_id || item.companyId || "company-001",
         code: item.code || "-",
-        isbn: item.isbn || undefined,
+        isbn: cleanIsbn,
         title: item.title || "-",
-        author: item.author || "-",
-        publisher: item.publisher || "-",
+        author: cleanAuthor,
+        publisher: cleanPublisher,
         publicationYear:
           item.published_year ||
           item.publication_year ||
           item.publicationYear ||
           undefined,
-        category: item.category || "-",
+        category: cleanCategory,
         coverUrl: item.cover_url || item.coverUrl || undefined,
         status: parseBookStatus(item.status, totalCopies, availableCopies),
         totalCopies,
@@ -880,20 +886,25 @@ export async function getBookApi(bookId: string): Promise<Book | null> {
         ? Number(rawAvailable)
         : totalCopies;
 
+    const cleanIsbn = item.isbn && item.isbn !== "-" && item.isbn.trim() !== "" ? item.isbn.trim() : undefined;
+    const cleanAuthor = item.author && item.author !== "-" && item.author.trim() !== "" ? item.author.trim() : undefined;
+    const cleanPublisher = item.publisher && item.publisher !== "-" && item.publisher.trim() !== "" ? item.publisher.trim() : undefined;
+    const cleanCategory = item.category && item.category !== "-" && item.category.trim() !== "" ? item.category.trim() : undefined;
+
     return {
       id: item._id || item.id || bookId,
       companyId: item.company_id || item.companyId || "company-001",
       code: item.code || "-",
-      isbn: item.isbn || undefined,
+      isbn: cleanIsbn,
       title: item.title || "-",
-      author: item.author || "-",
-      publisher: item.publisher || "-",
+      author: cleanAuthor,
+      publisher: cleanPublisher,
       publicationYear:
         item.published_year ||
         item.publication_year ||
         item.publicationYear ||
         undefined,
-      category: item.category || "-",
+      category: cleanCategory,
       coverUrl: item.cover_url || item.coverUrl || undefined,
       status: parseBookStatus(item.status, totalCopies, availableCopies),
       totalCopies,
@@ -1090,11 +1101,11 @@ export async function getBookCopiesApi(
   }
 }
 
-export async function createBookCopyApi(
+export async function createBookCopiesBulkApi(
   bookId: string,
-  copyCode?: string,
+  count: number = 1,
   companyId?: string
-): Promise<BookCopy> {
+): Promise<BookCopy[]> {
   const auth = getAuthData();
   const compId = companyId || auth?.user?.companyId || "company-001";
 
@@ -1102,40 +1113,81 @@ export async function createBookCopyApi(
   
   let maxNumber = 0;
   for (const c of existingCopies) {
-    const parts = c.code.split("-");
-    const lastPart = parts[parts.length - 1];
-    const num = parseInt(lastPart, 10);
-    if (!isNaN(num) && num > maxNumber) {
-      maxNumber = num;
+    const match = c.code.match(/(\d+)$/);
+    if (match) {
+      const num = parseInt(match[1], 10);
+      if (!isNaN(num) && num > maxNumber) {
+        maxNumber = num;
+      }
     }
   }
-  const nextNumber = Math.max(existingCopies.length + 1, maxNumber + 1);
+  const startingNumber = Math.max(existingCopies.length, maxNumber);
 
   const book = await getBookApi(bookId).catch(() => null);
   const bookCode = book?.code || `BK-${bookId.slice(-4).toUpperCase()}`;
-  const defaultCode = `${bookCode}-${String(nextNumber).padStart(3, "0")}`;
-  const code = copyCode?.trim() || defaultCode;
 
-  const copyPayload = {
-    copy_code: code,
-    location: "-",
-    status: "AVAILABLE",
-  };
+  const countToAdd = Math.max(1, count);
+  const copiesPayload = Array.from({ length: countToAdd }, (_, idx) => {
+    const num = startingNumber + idx + 1;
+    return {
+      copy_code: `${bookCode}-cp-${num}`,
+      location: "-",
+      status: "AVAILABLE",
+    };
+  });
 
   try {
-    const response = await api.post(`/catalog/books/${bookId}/copies`, copyPayload);
+    // 1. Coba kirim langsung sebagai Array (Sesuai update backend terbaru)
+    const response = await api.post(`/catalog/books/${bookId}/copies`, copiesPayload);
 
-    const item = response.data?.copy || response.data?.data || response.data;
-    return {
-      id: item?._id || item?.id || `copy-${Date.now()}`,
+    const rawData =
+      response.data?.copies ||
+      response.data?.data ||
+      response.data?.items ||
+      response.data;
+
+    let items: any[] = [];
+    if (Array.isArray(rawData)) {
+      items = rawData;
+    } else if (rawData && typeof rawData === "object") {
+      items = [rawData];
+    } else {
+      items = copiesPayload;
+    }
+
+    return items.map((item: any, idx: number) => ({
+      id: item?._id || item?.id || `copy-${bookId}-${Date.now()}-${idx}`,
       companyId: item?.company_id || item?.companyId || compId,
       bookId: item?.book_id || item?.bookId || bookId,
-      code: item?.copy_code || item?.code || code,
+      code: item?.copy_code || item?.code || copiesPayload[idx]?.copy_code || "-",
       status: (item?.status as BookCopyStatus) || "AVAILABLE",
       createdAt: item?.created_at || new Date().toISOString(),
       updatedAt: item?.updated_at || new Date().toISOString(),
-    };
+    }));
   } catch (error: any) {
+    // Fallback: Jika BE masih mendukung single object atau butuh looping
+    if (error.response?.status === 422 || error.response?.status === 400) {
+      try {
+        const createdList: BookCopy[] = [];
+        for (const payload of copiesPayload) {
+          const res = await api.post(`/catalog/books/${bookId}/copies`, payload);
+          const item = res.data?.copy || res.data?.data || res.data;
+          createdList.push({
+            id: item?._id || item?.id || `copy-${Date.now()}`,
+            companyId: item?.company_id || item?.companyId || compId,
+            bookId: item?.book_id || item?.bookId || bookId,
+            code: item?.copy_code || item?.code || payload.copy_code,
+            status: (item?.status as BookCopyStatus) || "AVAILABLE",
+            createdAt: item?.created_at || new Date().toISOString(),
+            updatedAt: item?.updated_at || new Date().toISOString(),
+          });
+        }
+        return createdList;
+      } catch (innerErr) {
+        // Biarkan lanjut ke error handling utama di bawah jika gagal
+      }
+    }
+
     if (
       error.response?.status >= 500 ||
       error.code === "ECONNABORTED" ||
@@ -1145,9 +1197,28 @@ export async function createBookCopyApi(
         formatApiError(error, "Gagal membuat copy buku karena gangguan server.")
       );
     }
+
+    const errorMsg = formatApiError(error, "");
+    if (errorMsg) {
+      throw new Error(errorMsg);
+    }
+
     const { createBookCopy } = await import("./mock-api");
-    return await createBookCopy(bookId);
+    const mockList: BookCopy[] = [];
+    for (let i = 0; i < countToAdd; i++) {
+      mockList.push(await createBookCopy(bookId));
+    }
+    return mockList;
   }
+}
+
+export async function createBookCopyApi(
+  bookId: string,
+  copyCode?: string,
+  companyId?: string
+): Promise<BookCopy> {
+  const created = await createBookCopiesBulkApi(bookId, 1, companyId);
+  return created[0];
 }
 
 export async function changeBookCopyStatusApi(
@@ -1531,6 +1602,31 @@ function mapRawToTransactionData(raw: any): TransactionData {
       raw.loan?.returned_at ||
       rawCreatedAt;
 
+    const dueAtValue =
+      raw.due_at ||
+      raw.dueAt ||
+      raw.loan?.due_at ||
+      new Date().toISOString();
+
+    const todayDate = new Date();
+    todayDate.setHours(0, 0, 0, 0);
+    const parsedDueDate = new Date(`${dueAtValue.slice(0, 10)}T00:00:00`);
+    const isOverdueRealtime =
+      !Number.isNaN(parsedDueDate.getTime()) && parsedDueDate.getTime() < todayDate.getTime();
+
+    const isLoanCompleted =
+      raw.status === "COMPLETED" ||
+      raw.loan?.status === "COMPLETED" ||
+      raw.returned_at ||
+      raw.returnedAt ||
+      raw.loan?.returned_at;
+
+    const computedLoanStatus: Loan["status"] = isLoanCompleted
+      ? "COMPLETED"
+      : raw.status === "OVERDUE" || raw.loan?.status === "OVERDUE" || isOverdueRealtime
+      ? "OVERDUE"
+      : (raw.status || raw.loan?.status || "ACTIVE");
+
     const loan: Loan = {
       id: loanId,
       companyId: raw.company_id || raw.companyId || "company-001",
@@ -1553,24 +1649,13 @@ function mapRawToTransactionData(raw: any): TransactionData {
         raw.borrowedAt ||
         raw.loan?.borrowed_at ||
         rawCreatedAt,
-      dueAt:
-        raw.due_at ||
-        raw.dueAt ||
-        raw.loan?.due_at ||
-        new Date().toISOString(),
+      dueAt: dueAtValue,
       returnedAt:
         raw.returned_at ||
         raw.returnedAt ||
         raw.loan?.returned_at ||
         undefined,
-      status:
-        raw.status === "COMPLETED" ||
-        raw.loan?.status === "COMPLETED" ||
-        raw.returned_at ||
-        raw.returnedAt ||
-        raw.loan?.returned_at
-          ? "COMPLETED"
-          : (raw.status || raw.loan?.status || "ACTIVE"),
+      status: computedLoanStatus,
       notes: raw.notes || undefined,
       createdAt: rawCreatedAt,
       updatedAt: rawUpdatedAt,
