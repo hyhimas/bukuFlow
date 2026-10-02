@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import BookBarcodeLabel from "./BookBarcodeLabel";
 import Button from "@/components/ui/Button";
+import Dropdown from "@/components/ui/Dropdown";
 
 export interface PrintableBookItem {
   bookTitle: string;
@@ -289,30 +290,34 @@ export default function BookBarcodePrintModal({
           {/* Controls toolbar */}
           <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-t border-slate-100 bg-slate-50/80 px-5 py-2.5">
             <div className="flex flex-wrap items-center gap-3">
-              <div className="flex items-center gap-1.5 text-xs">
+              <div className="flex items-center gap-1.5 text-xs min-w-[180px]">
                 <span className="font-semibold text-slate-600 shrink-0">Format:</span>
-                <select
+                <Dropdown
                   value={format}
-                  onChange={(e) => setFormat(e.target.value as any)}
-                  className="rounded-lg border border-slate-300 bg-white px-2.5 py-1 text-xs font-medium text-slate-700 shadow-2xs focus:border-blue-500 focus:outline-none focus-ring-1 focus:ring-blue-500"
-                >
-                  <option value="both">Kombinasi (1D + QR)</option>
-                  <option value="barcode">Barcode 1D Only</option>
-                  <option value="qrcode">QR Code 2D Only</option>
-                </select>
+                  size="sm"
+                  onChange={(val) => setFormat(val as any)}
+                  className="flex-1"
+                  options={[
+                    { value: "both", label: "Kombinasi (1D + QR)" },
+                    { value: "barcode", label: "Barcode 1D Only" },
+                    { value: "qrcode", label: "QR Code 2D Only" },
+                  ]}
+                />
               </div>
 
-              <div className="flex items-center gap-1.5 text-xs">
+              <div className="flex items-center gap-1.5 text-xs min-w-[150px]">
                 <span className="font-semibold text-slate-600 shrink-0">Ukuran:</span>
-                <select
+                <Dropdown
                   value={size}
-                  onChange={(e) => setSize(e.target.value as any)}
-                  className="rounded-lg border border-slate-300 bg-white px-2.5 py-1 text-xs font-medium text-slate-700 shadow-2xs focus:border-blue-500 focus:outline-none focus-ring-1 focus:ring-blue-500"
-                >
-                  <option value="sm">Kecil (Kompak)</option>
-                  <option value="md">Sedang (Standar)</option>
-                  <option value="lg">Besar (Jelas)</option>
-                </select>
+                  size="sm"
+                  onChange={(val) => setSize(val as any)}
+                  className="flex-1"
+                  options={[
+                    { value: "sm", label: "Kecil (Kompak)" },
+                    { value: "md", label: "Sedang (Standar)" },
+                    { value: "lg", label: "Besar (Jelas)" },
+                  ]}
+                />
               </div>
             </div>
 

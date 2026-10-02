@@ -251,6 +251,40 @@ function MemberIcon() {
   );
 }
 
+function CompanyIcon() {
+  return (
+    <svg
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="1.8"
+      className="h-5 w-5"
+      aria-hidden="true"
+    >
+      <path strokeLinecap="round" strokeLinejoin="round" d="M4 20V5l8-2v17M12 20h8V8l-8-3" />
+      <path strokeLinecap="round" strokeLinejoin="round" d="M7 8h2M7 12h2M7 16h2M15 11h2M15 15h2" />
+    </svg>
+  );
+}
+
+function UsersIcon() {
+  return (
+    <svg
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="1.8"
+      className="h-5 w-5"
+      aria-hidden="true"
+    >
+      <circle cx="9" cy="8" r="3" />
+      <path strokeLinecap="round" strokeLinejoin="round" d="M3 20a6 6 0 0 1 12 0" />
+      <circle cx="17" cy="9" r="2.5" />
+      <path strokeLinecap="round" strokeLinejoin="round" d="M16 14a5 5 0 0 1 5 5" />
+    </svg>
+  );
+}
+
 function DashboardStatCard({
   label,
   value,
@@ -487,6 +521,23 @@ export default function DashboardPage() {
                   icon={<MemberIcon />}
                 />
               </div>
+
+              {/* Pengaturan Instansi: 2 */}
+              <div className="grid gap-4 md:grid-cols-2">
+                <QuickAccessCard
+                  href="/settings/company"
+                  title="Konfigurasi Instansi & Kebijakan"
+                  description="Atur identitas perpustakaan, durasi pinjam, batas kuota, dan tarif denda."
+                  icon={<CompanyIcon />}
+                />
+
+                <QuickAccessCard
+                  href="/settings/users"
+                  title="Kelola Staf & Pengguna"
+                  description="Kelola akun dan hak akses Admin Perpustakaan serta Staf."
+                  icon={<UsersIcon />}
+                />
+              </div>
             </div>
           ) : (
             <div className="mt-3 grid gap-4 md:grid-cols-2 xl:grid-cols-6">
@@ -522,12 +573,21 @@ export default function DashboardPage() {
 
         {/* Aktivitas Terbaru */}
         <Card className="mt-6 overflow-hidden">
-          <div className="border-b border-slate-200 p-5">
+          <div className="flex items-center justify-between border-b border-slate-200 px-5 py-4">
             <h2 className="font-semibold text-slate-900">
               {isCompanyAdmin
                 ? "Aktivitas Transaksi Terbaru"
                 : "Aktivitas Terbaru"}
             </h2>
+
+            {data.recentLoans.length > 0 && (
+              <a
+                href="/transactions"
+                className="text-xs font-semibold text-blue-600 hover:text-blue-700 transition"
+              >
+                Lihat semua →
+              </a>
+            )}
           </div>
 
           {data.recentLoans.length === 0 ? (
@@ -541,55 +601,56 @@ export default function DashboardPage() {
               </p>
             </div>
           ) : (
-            <div className="divide-y divide-slate-100">
-              {data.recentLoans.slice(0, 10).map((loan) => (
-                <div
-                  key={loan.id}
-                  className="grid grid-cols-[minmax(0,1fr)_auto] grid-rows-[auto_auto] items-center gap-x-4 gap-y-1 px-4 sm:px-5 py-3 sm:py-3.5 md:grid-cols-[180px_minmax(140px,1fr)_minmax(180px,1fr)_100px] md:grid-rows-1 md:gap-x-4 xl:grid-cols-[260px_minmax(180px,1fr)_minmax(280px,1fr)_120px] xl:gap-x-6"
-                >
-                  {/* Nomor transaksi */}
-                  <div className="min-w-0">
-                    <p className="whitespace-nowrap text-sm font-semibold text-slate-900 xl:text-base">
-                      {loan.loanNumber}
-                    </p>
-                  </div>
+            <div>
+              {/* Table Header (Tablet & Desktop) */}
+              <div className="hidden md:grid md:grid-cols-[minmax(140px,1.2fr)_minmax(130px,1fr)_minmax(180px,1.4fr)_100px] md:items-center md:gap-x-4 xl:gap-x-6 border-b border-slate-100 bg-slate-50/80 px-4 sm:px-5 py-2.5 text-[11px] font-semibold uppercase tracking-wider text-slate-500">
+                <div>Nomor Transaksi</div>
+                <div>Anggota</div>
+                <div>Tanggal Pinjam → Selesai</div>
+                <div className="text-right">Status</div>
+              </div>
 
-                  {/* Nama member */}
-                  <div className="min-w-0">
-                    <p className="truncate text-xs text-slate-500 xl:text-sm">
-                      {loan.memberName}
-                    </p>
-                  </div>
+              <div className="divide-y divide-slate-100">
+                {data.recentLoans.slice(0, 10).map((loan) => (
+                  <div
+                    key={loan.id}
+                    className="grid grid-cols-[1fr_auto] gap-x-3 gap-y-1 px-4 sm:px-5 py-3 transition hover:bg-slate-50/70 md:grid-cols-[minmax(140px,1.2fr)_minmax(130px,1fr)_minmax(180px,1.4fr)_100px] md:items-center md:gap-x-4 xl:gap-x-6"
+                  >
+                    {/* 1. Nomor transaksi */}
+                    <div className="min-w-0 md:order-1">
+                      <p className="whitespace-nowrap text-sm font-semibold text-slate-900 font-mono">
+                        {loan.loanNumber}
+                      </p>
+                    </div>
 
-                  {/* Tanggal */}
-                  <div className="min-w-0 text-right">
-                    <p className="hidden whitespace-nowrap text-sm text-slate-500 sm:block">
-                      {formatDate(loan.borrowedAt)} -{" "}
-                      {formatDate(
-                        loan.status === "COMPLETED" && loan.returnedAt
-                          ? loan.returnedAt
-                          : loan.dueAt,
-                      )}
-                    </p>
+                    {/* 2. Status Badge */}
+                    <div className="flex justify-end md:order-4 md:shrink-0">
+                      <Badge variant={getStatusVariant(loan.status)}>
+                        {statusLabel[loan.status]}
+                      </Badge>
+                    </div>
 
-                    <p className="whitespace-nowrap text-xs text-slate-500 sm:hidden">
-                      {formatShortDate(loan.borrowedAt)} -{" "}
-                      {formatShortDate(
-                        loan.status === "COMPLETED" && loan.returnedAt
-                          ? loan.returnedAt
-                          : loan.dueAt,
-                      )}
-                    </p>
-                  </div>
+                    {/* 3. Nama member */}
+                    <div className="min-w-0 md:order-2">
+                      <p className="truncate text-xs sm:text-sm text-slate-600">
+                        {loan.memberName}
+                      </p>
+                    </div>
 
-                  {/* Status */}
-                  <div className="col-start-2 row-start-1 flex justify-center xl:col-start-4 xl:row-start-1">
-                    <Badge variant={getStatusVariant(loan.status)}>
-                      {statusLabel[loan.status]}
-                    </Badge>
+                    {/* 4. Tanggal */}
+                    <div className="min-w-0 text-right md:order-3 md:text-left">
+                      <p className="whitespace-nowrap text-xs sm:text-sm text-slate-500">
+                        {formatDate(loan.borrowedAt)} →{" "}
+                        {formatDate(
+                          loan.status === "COMPLETED" && loan.returnedAt
+                            ? loan.returnedAt
+                            : loan.dueAt,
+                        )}
+                      </p>
+                    </div>
                   </div>
-                </div>
-              ))}
+                ))}
+              </div>
             </div>
           )}
         </Card>

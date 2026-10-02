@@ -11,6 +11,7 @@ import BackLink from "@/components/ui/BackLink";
 import LoadingState from "@/components/ui/LoadingState";
 import ConfirmationDialog from "@/components/ui/ConfirmationDialog";
 import Pagination from "@/components/ui/Pagination";
+import OfficeNavbar from "@/components/office/OfficeNavbar";
 
 import { getSession } from "@/lib/auth";
 import {
@@ -19,15 +20,10 @@ import {
   createOfficeMemberApi,
   updateOfficeMemberApi,
   getOfficeMemberDetailApi,
+  getCompaniesApi,
 } from "@/lib/api";
-import type { Member, MemberStatus } from "@/lib/types";
+import type { Company, Member, MemberStatus } from "@/lib/types";
 import { useToast } from "@/context/ToastContext";
-
-const AVAILABLE_COMPANIES = [
-  { id: "company-001", name: "SMA Negeri 1 Jakarta", code: "SMAN1-JKT" },
-  { id: "company-002", name: "SMP Negeri 2 Bandung", code: "SMPN2-BDG" },
-  { id: "company-003", name: "Institut Teknologi Nusantara", code: "ITN-SBY" },
-];
 
 const PAGE_SIZE = 10;
 
@@ -52,7 +48,9 @@ export default function OfficeMembersPage() {
   // =====================================================
   // AUTH & TENANT SELECTION
   // =====================================================
+  const [userName, setUserName] = useState("Super Admin");
   const [checkingAuth, setCheckingAuth] = useState(true);
+  const [companies, setCompanies] = useState<Company[]>([]);
   const [selectedCompanyId, setSelectedCompanyId] = useState("company-001");
   const [isCompanyDropdownOpen, setIsCompanyDropdownOpen] = useState(false);
   const companyDropdownRef = useRef<HTMLDivElement>(null);
@@ -129,8 +127,23 @@ export default function OfficeMembersPage() {
       router.replace("/dashboard");
       return;
     }
+    setUserName(session.user.name || "Super Admin");
     setCheckingAuth(false);
   }, [router]);
+
+  // Load Companies
+  useEffect(() => {
+    if (!checkingAuth) {
+      getCompaniesApi().then((comps) => {
+        if (comps.length > 0) {
+          setCompanies(comps);
+          if (!selectedCompanyId) {
+            setSelectedCompanyId(comps[0].id);
+          }
+        }
+      }).catch(() => {});
+    }
+  }, [checkingAuth]);
 
   // 2. Fetch Members (with debounce on search)
   useEffect(() => {
@@ -385,30 +398,33 @@ export default function OfficeMembersPage() {
   if (checkingAuth || (loading && members.length === 0 && !error)) {
     return (
       <main className="min-h-screen bg-slate-50">
-        <LoadingState label="Memuat data member instansi..." />
+        <OfficeNavbar userName={userName} />
+        <div className="flex h-96 items-center justify-center">
+          <LoadingState label="Memuat data member instansi..." />
+        </div>
       </main>
     );
   }
 
   const selectedCompany =
-    AVAILABLE_COMPANIES.find((c) => c.id === selectedCompanyId) ||
-    AVAILABLE_COMPANIES[0];
+    companies.find((c) => c.id === selectedCompanyId) ||
+    (companies.length > 0 ? companies[0] : { id: selectedCompanyId, name: "SMA Negeri 1 Jakarta", code: "SMAN1-JKT" });
 
   return (
     <main className="min-h-screen bg-slate-50">
-      <div className="mx-auto w-full max-w-7xl px-3 py-4 sm:px-5 sm:py-5 lg:px-6">
+      <OfficeNavbar userName={userName} />
+
+      <div className="mx-auto w-full max-w-7xl px-4 py-6 sm:px-6 lg:px-8">
         {/* =================================================
             HEADER
         ================================================= */}
-        <div className="mb-4">
-          <BackLink href="/office/dashboard" />
-
-          <div className="mt-3 flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
+        <div className="mb-6">
+          <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
             <div>
-              <h1 className="text-xl font-bold tracking-tight text-slate-900 sm:text-2xl">
-                Master Member
+              <h1 className="text-2xl font-bold tracking-tight text-slate-900 sm:text-3xl">
+                Master Anggota (Members)
               </h1>
-              <p className="mt-0.5 text-sm text-slate-500">
+              <p className="mt-1 text-sm text-slate-500">
                 Inspeksi dan kelola data anggota perpustakaan seluruh instansi.
               </p>
             </div>
@@ -422,7 +438,7 @@ export default function OfficeMembersPage() {
                   onClick={() => setIsCompanyDropdownOpen((prev) => !prev)}
                   aria-expanded={isCompanyDropdownOpen}
                   aria-label="Pilih instansi"
-                  className="flex h-10 w-full items-center justify-between gap-3 rounded-lg border border-slate-200 bg-white px-3 py-2 text-left text-xs font-semibold text-slate-800 shadow-xs transition hover:bg-slate-50 focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 sm:w-64"
+                  className="flex h-10 w-full items-center justify-between gap-3 rounded-xl border border-slate-200 bg-white px-3 py-2 text-left text-xs font-semibold text-slate-800 shadow-xs transition hover:bg-slate-50 focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 sm:w-64"
                 >
                   <div className="min-w-0 flex-1">
                     <p className="truncate text-xs font-semibold text-slate-900">
@@ -442,7 +458,7 @@ export default function OfficeMembersPage() {
                       Pilih Instansi
                     </div>
                     <div className="space-y-0.5">
-                      {AVAILABLE_COMPANIES.map((company) => {
+                      {companies.map((company) => {
                         const isSelected = company.id === selectedCompanyId;
                         return (
                           <button

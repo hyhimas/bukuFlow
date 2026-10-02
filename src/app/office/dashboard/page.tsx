@@ -4,18 +4,13 @@ import { useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 
+import OfficeNavbar from "@/components/office/OfficeNavbar";
 import Card from "@/components/ui/Card";
 import Badge from "@/components/ui/Badge";
 import LoadingState from "@/components/ui/LoadingState";
 import { getSession } from "@/lib/auth";
-import { getOfficeDashboardApi, type OfficeDashboardData } from "@/lib/api";
-import type { Loan } from "@/lib/types";
-
-const AVAILABLE_COMPANIES = [
-  { id: "company-001", name: "SMA Negeri 1 Jakarta", code: "SMAN1-JKT" },
-  { id: "company-002", name: "SMP Negeri 2 Bandung", code: "SMPN2-BDG" },
-  { id: "company-003", name: "Institut Teknologi Nusantara", code: "ITN-SBY" },
-];
+import { getOfficeDashboardApi, getCompaniesApi, type OfficeDashboardData } from "@/lib/api";
+import type { Company, Loan } from "@/lib/types";
 
 function formatDate(value: string) {
   const date = new Date(`${value.slice(0, 10)}T00:00:00`);
@@ -99,6 +94,7 @@ export default function OfficeDashboardPage() {
   const [userName, setUserName] = useState("Super Admin");
   const [checkingAuth, setCheckingAuth] = useState(true);
 
+  const [companies, setCompanies] = useState<Company[]>([]);
   const [selectedCompanyId, setSelectedCompanyId] = useState("company-001");
   const [dashboardData, setDashboardData] = useState<OfficeDashboardData | null>(null);
   const [loading, setLoading] = useState(true);
@@ -138,9 +134,23 @@ export default function OfficeDashboardPage() {
     setCheckingAuth(false);
   }, [router]);
 
+  // Load Companies
+  useEffect(() => {
+    if (!checkingAuth) {
+      getCompaniesApi().then((comps) => {
+        if (comps.length > 0) {
+          setCompanies(comps);
+          if (!selectedCompanyId) {
+            setSelectedCompanyId(comps[0].id);
+          }
+        }
+      }).catch(() => {});
+    }
+  }, [checkingAuth]);
+
   // 2. Fetch Office Dashboard per Company
   useEffect(() => {
-    if (checkingAuth) return;
+    if (checkingAuth || !selectedCompanyId) return;
 
     let isMounted = true;
     async function loadData() {
@@ -177,22 +187,24 @@ export default function OfficeDashboardPage() {
   }
 
   const selectedCompany =
-    AVAILABLE_COMPANIES.find((c) => c.id === selectedCompanyId) ||
-    AVAILABLE_COMPANIES[0];
+    companies.find((c) => c.id === selectedCompanyId) ||
+    (companies.length > 0 ? companies[0] : { id: selectedCompanyId, name: "SMA Negeri 1 Jakarta", code: "SMAN1-JKT" });
 
   return (
     <main className="min-h-screen bg-slate-50">
-      <div className="page-container py-6">
+      <OfficeNavbar userName={userName} />
+
+      <div className="mx-auto max-w-7xl px-4 py-6 sm:px-6 lg:px-8">
         {/* ===================================================
             HEADER & CUSTOM COMPANY SELECTOR
         ==================================================== */}
         <div className="mb-6 flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
           <div>
-            <h1 className="text-2xl font-bold text-slate-900">
+            <h1 className="text-2xl font-bold text-slate-900 sm:text-3xl">
               Selamat datang, {userName}
             </h1>
             <p className="mt-1 text-sm text-slate-500">
-              Ringkasan dan pemantauan operasional multi-instansi.
+              Ringkasan dan pemantauan operasional multi-instansi (Tenant Overview).
             </p>
           </div>
 
@@ -225,7 +237,7 @@ export default function OfficeDashboardPage() {
                   Pilih Instansi
                 </div>
                 <div className="space-y-0.5">
-                  {AVAILABLE_COMPANIES.map((company) => {
+                  {companies.map((company) => {
                     const isSelected = company.id === selectedCompanyId;
                     return (
                       <button
@@ -305,23 +317,23 @@ export default function OfficeDashboardPage() {
           <div className="mt-3 grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
             <QuickAccessCard
               href="/office/companies"
-              title="Manajemen Company"
-              description="Daftar instansi, aktivasi langganan, dan pengaturan kuota tenant."
+              title="Manajemen Instansi"
+              description="Daftar sekolah & perpustakaan, status operasional, dan kuota tenant."
               icon={<CompanyIcon />}
             />
 
             <QuickAccessCard
               href="/office/users"
-              title="Pengguna Platform"
-              description="Kelola akun Administrator Company dan staf operasional."
+              title="Pengguna & Admin"
+              description="Kelola akun Administrator Company dan staf operasional perpustakaan."
               icon={<UsersIcon />}
             />
 
             <QuickAccessCard
-              href="/office/catalog"
-              title="Inspeksi Katalog & Transaksi"
-              description="Bantuan teknis dan verifikasi data operasional instansi."
-              icon={<SearchAuditIcon />}
+              href="/office/members"
+              title="Anggota Perpustakaan"
+              description="Manajemen data seluruh member terdaftar per instansi."
+              icon={<MemberIcon />}
             />
           </div>
         </section>

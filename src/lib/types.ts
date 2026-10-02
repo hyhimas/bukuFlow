@@ -155,6 +155,9 @@ export interface CompanySettings {
   companyId: string;
   defaultLoanDuration: number;
   maxActiveLoans: number;
+  dailyFineRate?: number;
+  allowRenewal?: boolean;
+  maxRenewals?: number;
   dateFormat: string;
   timezone: string;
   createdAt: string;

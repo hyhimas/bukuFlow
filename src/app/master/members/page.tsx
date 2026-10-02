@@ -13,6 +13,7 @@ import BackLink from "@/components/ui/BackLink";
 import LoadingState from "@/components/ui/LoadingState";
 import ConfirmationDialog from "@/components/ui/ConfirmationDialog";
 import Pagination from "@/components/ui/Pagination";
+import Badge from "@/components/ui/Badge";
 
 import type { Member, MemberStatus } from "@/lib/types";
 import { masterDataRepository } from "@/lib/master-data/repository";
@@ -407,7 +408,7 @@ export default function MasterMembersPage() {
           newEmail !== currentEmail;
 
         if (!hasChanges) {
-          toast.warning("Tidak ada perubahan yang disimpan.");
+          toast.warning("Data masih sama, tidak ada perubahan yang disimpan.");
           closeForm();
           return;
         }
@@ -744,7 +745,7 @@ export default function MasterMembersPage() {
                   <col className="w-[180px]" />
                   <col className="w-[140px]" />
                   <col className="w-[125px]" />
-                  <col className="w-[255px]" />
+                  <col className="w-[290px]" />
                 </colgroup>
 
                 <thead className="border-b border-slate-200 bg-slate-50">
@@ -799,53 +800,65 @@ export default function MasterMembersPage() {
                         {/* STATUS */}
 
                         <td className="px-4 py-3">
-                          <span
-                            className={`inline-flex whitespace-nowrap items-center gap-1.5 rounded-full px-2.5 py-1.5 text-xs font-semibold ${
-                              isActive
-                                ? "bg-emerald-50 text-emerald-700"
-                                : "bg-red-50 text-red-600"
-                            }`}
-                          >
-                            <span
-                              className={`h-1.5 w-1.5 rounded-full ${
-                                isActive ? "bg-emerald-500" : "bg-red-500"
-                              }`}
-                            />
-
-                            {getStatusLabel(member.status)}
-                          </span>
+                          <Badge variant={isActive ? "success" : "neutral"}>
+                            {isActive ? "Aktif" : "Nonaktif"}
+                          </Badge>
                         </td>
 
                         {/* ACTION */}
 
-                        <td className="px-4 py-3">
+                        <td className="px-4 py-3 text-right">
                           <div className="flex items-center justify-end gap-1.5">
                             <button
                               type="button"
                               onClick={() => void openDetail(member)}
-                              className="inline-flex h-8 min-w-[56px] items-center justify-center rounded-md border border-slate-200 bg-white px-2.5 text-xs font-semibold text-slate-700 transition hover:bg-slate-50 focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-500"
+                              className="inline-flex items-center gap-1.5 rounded-lg border border-slate-200 bg-white px-2.5 py-1.5 text-xs font-semibold text-slate-700 shadow-2xs transition hover:bg-slate-50 hover:border-slate-300 focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-500"
                             >
-                              Detail
+                              <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                                <path d="M2 12s3-7 10-7 10 7 10 7-3 7-10 7-10-7-10-7Z" />
+                                <circle cx="12" cy="12" r="3" />
+                              </svg>
+                              <span>Detail</span>
                             </button>
 
                             <button
                               type="button"
                               onClick={() => openEditForm(member)}
-                              className="inline-flex h-8 min-w-[52px] items-center justify-center rounded-md border border-slate-200 bg-white px-2.5 text-xs font-semibold text-slate-700 transition hover:bg-slate-50 focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-500"
+                              className="inline-flex items-center gap-1.5 rounded-lg border border-slate-200 bg-white px-2.5 py-1.5 text-xs font-semibold text-slate-700 shadow-2xs transition hover:bg-slate-50 hover:border-slate-300 focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-500"
                             >
-                              Ubah
+                              <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                                <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7" />
+                                <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z" />
+                              </svg>
+                              <span>Edit</span>
                             </button>
 
                             <button
                               type="button"
                               onClick={() => openStatusConfirm(member)}
-                              className={`inline-flex h-8 min-w-[88px] items-center justify-center rounded-md border px-2.5 text-xs font-semibold transition focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 ${
+                              className={`inline-flex items-center gap-1.5 rounded-lg border px-2.5 py-1.5 text-xs font-semibold shadow-2xs transition focus:outline-none focus-visible:ring-2 ${
                                 isActive
-                                  ? "border-red-200 bg-red-50 text-red-600 hover:bg-red-100"
-                                  : "border-emerald-200 bg-emerald-50 text-emerald-700 hover:bg-emerald-100"
+                                  ? "border-amber-200 bg-amber-50 text-amber-700 hover:bg-amber-100 hover:border-amber-300 focus-visible:ring-amber-500"
+                                  : "border-emerald-200 bg-emerald-50 text-emerald-700 hover:bg-emerald-100 hover:border-emerald-300 focus-visible:ring-emerald-500"
                               }`}
                             >
-                              {isActive ? "Nonaktifkan" : "Aktifkan"}
+                              {isActive ? (
+                                <>
+                                  <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                                    <circle cx="12" cy="12" r="10" />
+                                    <line x1="4.93" y1="4.93" x2="19.07" y2="19.07" />
+                                  </svg>
+                                  <span>Nonaktifkan</span>
+                                </>
+                              ) : (
+                                <>
+                                  <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                                    <path d="M22 11.08V12a10 10 0 1 1-5.93-9.14" />
+                                    <polyline points="22 4 12 14.01 9 11.01" />
+                                  </svg>
+                                  <span>Aktifkan</span>
+                                </>
+                              )}
                             </button>
                           </div>
                         </td>
@@ -908,21 +921,9 @@ export default function MasterMembersPage() {
                         </div>
                       </div>
 
-                      <span
-                        className={`inline-flex shrink-0 items-center gap-1.5 whitespace-nowrap rounded-full px-2.5 py-1.5 text-[11px] font-semibold ${
-                          isActive
-                            ? "bg-emerald-50 text-emerald-700"
-                            : "bg-red-50 text-red-600"
-                        }`}
-                      >
-                        <span
-                          className={`h-1.5 w-1.5 rounded-full ${
-                            isActive ? "bg-emerald-500" : "bg-red-500"
-                          }`}
-                        />
-
-                        {getStatusLabel(member.status)}
-                      </span>
+                      <Badge variant={isActive ? "success" : "neutral"}>
+                        {isActive ? "Aktif" : "Nonaktif"}
+                      </Badge>
                     </div>
 
                     {/* INFORMATION */}
@@ -965,33 +966,57 @@ export default function MasterMembersPage() {
 
                     {/* ACTION */}
 
-                    <div className="mt-3 grid grid-cols-3 gap-1.5">
+                    <div className="mt-3.5 pt-2.5 border-t border-slate-100 grid grid-cols-3 gap-2">
                       <button
                         type="button"
                         onClick={() => void openDetail(member)}
-                        className="h-9 rounded-md border border-slate-200 bg-white text-xs font-semibold text-slate-700 transition hover:bg-slate-50 focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-500"
+                        className="h-9 rounded-lg border border-slate-200 bg-white text-xs font-semibold text-slate-700 shadow-2xs transition hover:bg-slate-50 hover:border-slate-300 flex items-center justify-center gap-1.5 focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-500"
                       >
-                        Detail
+                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                          <path d="M2 12s3-7 10-7 10 7 10 7-3 7-10 7-10-7-10-7Z" />
+                          <circle cx="12" cy="12" r="3" />
+                        </svg>
+                        <span>Detail</span>
                       </button>
 
                       <button
                         type="button"
                         onClick={() => openEditForm(member)}
-                        className="h-9 rounded-md border border-slate-200 bg-white text-xs font-semibold text-slate-700 transition hover:bg-slate-50 focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-500"
+                        className="h-9 rounded-lg border border-slate-200 bg-white text-xs font-semibold text-slate-700 shadow-2xs transition hover:bg-slate-50 hover:border-slate-300 flex items-center justify-center gap-1.5 focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-500"
                       >
-                        Ubah
+                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                          <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7" />
+                          <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z" />
+                        </svg>
+                        <span>Edit</span>
                       </button>
 
                       <button
                         type="button"
                         onClick={() => openStatusConfirm(member)}
-                        className={`h-9 rounded-md border text-xs font-semibold ${
+                        className={`h-9 rounded-lg border text-xs font-semibold flex items-center justify-center gap-1.5 shadow-2xs transition focus:outline-none focus-visible:ring-2 ${
                           isActive
-                            ? "border-red-200 bg-red-50 text-red-600"
-                            : "border-emerald-200 bg-emerald-50 text-emerald-700"
+                            ? "border-amber-200 bg-amber-50 text-amber-700 hover:bg-amber-100 hover:border-amber-300 focus-visible:ring-amber-500"
+                            : "border-emerald-200 bg-emerald-50 text-emerald-700 hover:bg-emerald-100 hover:border-emerald-300 focus-visible:ring-emerald-500"
                         }`}
                       >
-                        {isActive ? "Nonaktifkan" : "Aktifkan"}
+                        {isActive ? (
+                          <>
+                            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                              <circle cx="12" cy="12" r="10" />
+                              <line x1="4.93" y1="4.93" x2="19.07" y2="19.07" />
+                            </svg>
+                            <span>Nonaktifkan</span>
+                          </>
+                        ) : (
+                          <>
+                            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                              <path d="M22 11.08V12a10 10 0 1 1-5.93-9.14" />
+                              <polyline points="22 4 12 14.01 9 11.01" />
+                            </svg>
+                            <span>Aktifkan</span>
+                          </>
+                        )}
                       </button>
                     </div>
                   </div>

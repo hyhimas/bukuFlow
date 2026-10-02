@@ -99,12 +99,14 @@ export default function TransactionsPage() {
   const [filterEndDate, setFilterEndDate] = useState("");
 
   const [isFilterOpen, setIsFilterOpen] = useState(false);
+  const [isFilterMounted, setIsFilterMounted] = useState(false);
 
   // =========================================================
   // EXPORT EXCEL
   // =========================================================
 
   const [isExportOpen, setIsExportOpen] = useState(false);
+  const [isExportMounted, setIsExportMounted] = useState(false);
   const [exportPeriod, setExportPeriod] = useState<ExportPeriod>("ALL");
   const [exportStartDate, setExportStartDate] = useState("");
   const [exportEndDate, setExportEndDate] = useState("");
@@ -373,7 +375,12 @@ export default function TransactionsPage() {
     setFilterStartDate(startDate);
     setFilterEndDate(endDate);
 
-    setIsFilterOpen(true);
+    setIsFilterMounted(true);
+    requestAnimationFrame(() => {
+      requestAnimationFrame(() => {
+        setIsFilterOpen(true);
+      });
+    });
   }
 
   // =========================================================
@@ -385,6 +392,9 @@ export default function TransactionsPage() {
 
   function closeFilter() {
     setIsFilterOpen(false);
+    setTimeout(() => {
+      setIsFilterMounted(false);
+    }, 200);
   }
 
   // =========================================================
@@ -400,7 +410,7 @@ export default function TransactionsPage() {
     setEndDate(filterEndDate);
 
     resetPagination();
-    setIsFilterOpen(false);
+    closeFilter();
   }
 
   // =========================================================
@@ -444,6 +454,22 @@ export default function TransactionsPage() {
   // EXPORT EXCEL
   // =========================================================
 
+  function openExport() {
+    setIsExportMounted(true);
+    requestAnimationFrame(() => {
+      requestAnimationFrame(() => {
+        setIsExportOpen(true);
+      });
+    });
+  }
+
+  function closeExport() {
+    setIsExportOpen(false);
+    setTimeout(() => {
+      setIsExportMounted(false);
+    }, 200);
+  }
+
   function handleExportExcel() {
     const exportTransactions = filterByExportDate(
       transactions,
@@ -483,11 +509,7 @@ export default function TransactionsPage() {
     );
 
     toast.success("Laporan riwayat transaksi berhasil diunduh.");
-    setIsExportOpen(false);
-  }
-
-  function closeExport() {
-    setIsExportOpen(false);
+    closeExport();
   }
 
   // =========================================================
@@ -529,7 +551,7 @@ export default function TransactionsPage() {
 
             <Button
               type="button"
-              onClick={() => setIsExportOpen(true)}
+              onClick={openExport}
               className="w-full sm:w-auto"
             >
               Export Excel
@@ -699,9 +721,9 @@ export default function TransactionsPage() {
             FILTER DRAWER
         ====================================================== */}
 
-        {isFilterOpen && (
+        {isFilterMounted && (
           <div
-            className="fixed inset-0 z-50"
+            className="fixed inset-0 z-50 overflow-hidden"
             role="dialog"
             aria-modal="true"
             aria-labelledby="filter-title"
@@ -712,17 +734,21 @@ export default function TransactionsPage() {
               type="button"
               aria-label="Tutup filter"
               onClick={closeFilter}
-              className="absolute inset-0 bg-slate-900/30 backdrop-blur-[1px]"
+              className={`fixed inset-0 bg-slate-900/40 backdrop-blur-[2px] transition-opacity duration-200 ease-out ${
+                isFilterOpen ? "opacity-100" : "opacity-0"
+              }`}
             />
 
             {/* DRAWER */}
 
             <aside
-              className="
-                absolute right-0 top-0
+              className={`
+                fixed inset-y-0 right-0
                 flex h-full w-full max-w-md
                 flex-col bg-white shadow-2xl
-              "
+                transition-transform duration-200 ease-out
+                ${isFilterOpen ? "translate-x-0" : "translate-x-full"}
+              `}
             >
               {/* =================================================
                   DRAWER HEADER
@@ -895,9 +921,9 @@ export default function TransactionsPage() {
             EXPORT EXCEL MODAL
         ====================================================== */}
 
-        {isExportOpen && (
+        {isExportMounted && (
           <div
-            className="fixed inset-0 z-50"
+            className="fixed inset-0 z-50 overflow-y-auto"
             role="dialog"
             aria-modal="true"
             aria-labelledby="export-title"
@@ -906,11 +932,19 @@ export default function TransactionsPage() {
               type="button"
               aria-label="Tutup export"
               onClick={closeExport}
-              className="absolute inset-0 bg-slate-900/30 backdrop-blur-[1px]"
+              className={`fixed inset-0 bg-slate-900/40 backdrop-blur-[2px] transition-opacity duration-200 ease-out ${
+                isExportOpen ? "opacity-100" : "opacity-0"
+              }`}
             />
 
             <div className="relative flex min-h-full items-center justify-center p-4">
-              <div className="w-full max-w-md rounded-xl bg-white shadow-2xl">
+              <div
+                className={`w-full max-w-md rounded-xl bg-white shadow-2xl transition-all duration-200 ease-out ${
+                  isExportOpen
+                    ? "opacity-100 scale-100 translate-y-0"
+                    : "opacity-0 scale-95 translate-y-2"
+                }`}
+              >
                 <div className="flex items-start justify-between border-b border-slate-200 px-5 py-4 sm:px-6">
                   <div>
                     <h2

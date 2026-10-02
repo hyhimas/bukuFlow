@@ -1991,14 +1991,14 @@ export default function NewLoanPage() {
                                   : "border-slate-200 bg-white hover:border-slate-300"
                           }`}
                         >
-                          <div className="grid gap-4 md:grid-cols-[minmax(0,1fr)_230px] md:items-center">
+                          <div className="grid gap-3.5 xl:grid-cols-[minmax(0,1fr)_220px] xl:items-center">
                             {/* INFO BUKU */}
                             <div className="min-w-0">
-                              <div className="grid grid-cols-[minmax(0,1fr)_auto] items-start gap-x-4">
+                              <div className="flex items-start justify-between gap-3">
                                 {/* Judul + detail */}
-                                <div className="min-w-0">
+                                <div className="min-w-0 flex-1">
                                   <p
-                                    className={`truncate font-semibold ${
+                                    className={`truncate text-sm sm:text-base font-semibold ${
                                       archived
                                         ? "text-slate-400"
                                         : "text-slate-900"
@@ -2008,36 +2008,42 @@ export default function NewLoanPage() {
                                     {book.title}
                                   </p>
 
-                                  <div className="mt-2 space-y-1 text-sm text-slate-500">
+                                  <div className="mt-1.5 flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-slate-500">
                                     <p>
                                       <span className="text-slate-400">
-                                        Penulis
+                                        Penulis:
                                       </span>{" "}
-                                      {book.author || "-"}
+                                      <span className="font-medium text-slate-700">
+                                        {book.author || "-"}
+                                      </span>
                                     </p>
+
+                                    <span className="text-slate-300">·</span>
 
                                     <p>
                                       <span className="text-slate-400">
-                                        ISBN
+                                        ISBN:
                                       </span>{" "}
-                                      {book.isbn || "-"}
+                                      <span className="font-medium text-slate-700">
+                                        {book.isbn || "-"}
+                                      </span>
                                     </p>
                                   </div>
 
                                   {archived && (
-                                    <p className="mt-2 text-xs font-medium text-slate-500">
+                                    <p className="mt-1.5 text-xs font-medium text-slate-500">
                                       Buku diarsipkan dan tidak dapat dipinjam.
                                     </p>
                                   )}
                                 </div>
 
                                 {/* KODE BUKU + BADGE */}
-                                <div className="flex shrink-0 flex-col items-end gap-1 pt-0.5">
-                                  <span className="font-medium text-slate-700">
+                                <div className="flex shrink-0 flex-col items-end gap-1">
+                                  <span className="font-semibold text-xs text-slate-700">
                                     {book.code}
                                   </span>
                                   <span
-                                    className={`rounded-full px-2.5 py-0.5 text-xs font-medium ${
+                                    className={`rounded-full px-2 py-0.5 text-[11px] font-semibold ${
                                       archived
                                         ? "bg-slate-200 text-slate-500"
                                         : "bg-emerald-50 text-emerald-700"
@@ -2050,26 +2056,26 @@ export default function NewLoanPage() {
                             </div>
 
                             {/* COPY INFO + ACTION */}
-                            <div className="border-t border-slate-200 pt-3 md:border-l md:border-t-0 md:pl-4 md:pt-0">
-                              <div className="grid grid-cols-2 gap-2">
-                                <div className="rounded-lg border border-slate-200 bg-slate-50 px-3 py-2.5">
-                                  <p className="text-[11px] font-medium uppercase tracking-wide text-slate-400">
+                            <div className="border-t border-slate-100 pt-3 xl:border-l xl:border-t-0 xl:pl-4 xl:pt-0">
+                              <div className="grid grid-cols-[1fr_1fr_auto] xl:grid-cols-2 gap-2 items-center">
+                                <div className="rounded-lg border border-slate-200 bg-slate-50 px-2.5 py-1.5 text-center">
+                                  <p className="text-[10px] font-semibold uppercase tracking-wide text-slate-400">
                                     Total copy
                                   </p>
-                                  <p className="mt-0.5 text-xl font-bold leading-none text-slate-900">
+                                  <p className="mt-0.5 text-base font-bold leading-none text-slate-900">
                                     {book.totalCopies}
                                   </p>
                                 </div>
 
                                 <div
-                                  className={`rounded-lg border px-3 py-2.5 ${
+                                  className={`rounded-lg border px-2.5 py-1.5 text-center ${
                                     book.availableCopies > 0
                                       ? "border-emerald-100 bg-emerald-50"
                                       : "border-red-100 bg-red-50"
                                   }`}
                                 >
                                   <p
-                                    className={`text-[11px] font-medium uppercase tracking-wide ${
+                                    className={`text-[10px] font-semibold uppercase tracking-wide ${
                                       book.availableCopies > 0
                                         ? "text-emerald-600"
                                         : "text-red-500"
@@ -2078,7 +2084,7 @@ export default function NewLoanPage() {
                                     Tersedia
                                   </p>
                                   <p
-                                    className={`mt-0.5 text-xl font-bold leading-none ${
+                                    className={`mt-0.5 text-base font-bold leading-none ${
                                       book.availableCopies > 0
                                         ? "text-emerald-700"
                                         : "text-red-600"
@@ -2093,20 +2099,20 @@ export default function NewLoanPage() {
                                   variant={selected ? "secondary" : "primary"}
                                   disabled={unavailable || selected || loading}
                                   onClick={() => void selectBook(book)}
-                                  className="col-span-2 w-full"
+                                  className="min-w-[80px] xl:col-span-2 xl:w-full h-9 text-xs font-semibold"
                                 >
                                   {loading ? (
-                                    <span className="inline-flex items-center justify-center gap-2">
+                                    <span className="inline-flex items-center justify-center gap-1.5">
                                       <span
                                         aria-hidden="true"
-                                        className="h-4 w-4 animate-spin rounded-full border-2 border-current border-r-transparent"
+                                        className="h-3 w-3 animate-spin rounded-full border-2 border-current border-r-transparent"
                                       />
-                                      Memuat copy...
+                                      Memuat...
                                     </span>
                                   ) : archived ? (
                                     "Diarsipkan"
                                   ) : unavailable ? (
-                                    "Tidak tersedia"
+                                    "Habis"
                                   ) : selected ? (
                                     "Dipilih"
                                   ) : (
@@ -2133,9 +2139,9 @@ export default function NewLoanPage() {
 
                           {selectedItem && (
                             <div className="mt-4 border-t border-blue-200 pt-4">
-                              <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+                              <div className="flex items-center justify-between gap-3">
                                 <div>
-                                  <p className="text-sm font-medium text-slate-800">
+                                  <p className="text-sm font-semibold text-slate-900">
                                     Pilih copy buku
                                   </p>
                                   <p className="text-xs text-slate-500">
@@ -2143,23 +2149,23 @@ export default function NewLoanPage() {
                                   </p>
                                 </div>
 
-                                <Button
+                                <button
                                   type="button"
-                                  variant="secondary"
                                   onClick={() => removeSelectedBook(book.id)}
+                                  className="shrink-0 inline-flex items-center gap-1 rounded-lg border border-slate-200 bg-white px-2.5 py-1.5 text-xs font-semibold text-slate-700 hover:bg-slate-50 hover:text-slate-900 transition focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-500"
                                 >
                                   Batal pilih
-                                </Button>
+                                </button>
                               </div>
 
                               {selectedItem.copies.length === 0 ? (
-                                <div className="mt-3 rounded-lg border border-slate-200 bg-white p-3">
-                                  <p className="text-sm font-medium text-slate-800">
+                                <div className="mt-3 rounded-lg border border-slate-200 bg-white p-3 text-center">
+                                  <p className="text-xs sm:text-sm font-medium text-slate-600">
                                     Tidak ada copy buku yang tersedia.
                                   </p>
                                 </div>
                               ) : (
-                                <div className="mt-3 grid gap-2 sm:grid-cols-2">
+                                <div className="mt-3 grid gap-2 grid-cols-1 xl:grid-cols-2">
                                   {selectedItem.copies.map((copy) => {
                                     const unavailableCopy =
                                       copy.status !== "AVAILABLE";
@@ -2171,48 +2177,60 @@ export default function NewLoanPage() {
                                     return (
                                       <label
                                         key={copy.id}
-                                        className={`flex items-center gap-3 rounded-lg border p-2.5 ${
+                                        className={`flex items-center justify-between gap-3 rounded-lg border p-2.5 transition ${
                                           unavailableCopy
-                                            ? "cursor-not-allowed bg-slate-100 opacity-60"
+                                            ? "cursor-not-allowed bg-slate-50 opacity-60 border-slate-200"
                                             : checked
-                                              ? "border-blue-500 bg-white"
-                                              : "border-slate-200 bg-white"
+                                              ? "border-blue-500 bg-blue-50/50 cursor-pointer ring-1 ring-blue-200"
+                                              : "border-slate-200 bg-white hover:border-slate-300 cursor-pointer"
                                         }`}
                                       >
-                                        <input
-                                          type="checkbox"
-                                          checked={checked}
-                                          disabled={unavailableCopy}
-                                          onChange={() =>
-                                            toggleCopy(book.id, copy)
-                                          }
-                                          className="h-4 w-4"
-                                        />
-                                        <div className="min-w-0">
-                                          <p className="text-sm font-medium text-slate-900">
+                                        <div className="flex items-center gap-2.5 min-w-0">
+                                          <input
+                                            type="checkbox"
+                                            checked={checked}
+                                            disabled={unavailableCopy}
+                                            onChange={() =>
+                                              toggleCopy(book.id, copy)
+                                            }
+                                            className="h-4 w-4 rounded border-slate-300 text-blue-600 focus:ring-blue-500 disabled:cursor-not-allowed"
+                                          />
+                                          <p className="truncate text-xs sm:text-sm font-semibold text-slate-800">
                                             {copy.code}
                                           </p>
-                                          <p className="text-xs text-slate-500">
-                                            {copy.status === "AVAILABLE"
-                                              ? "Tersedia"
-                                              : copy.status === "BORROWED"
-                                                ? "Dipinjam"
-                                                : copy.status === "INACTIVE"
-                                                  ? "Tidak aktif"
-                                                  : "Hilang"}
-                                          </p>
                                         </div>
+
+                                        <span
+                                          className={`shrink-0 rounded-full px-2 py-0.5 text-[11px] font-semibold ${
+                                            copy.status === "AVAILABLE"
+                                              ? "bg-emerald-50 text-emerald-700"
+                                              : copy.status === "BORROWED"
+                                                ? "bg-amber-50 text-amber-700"
+                                                : copy.status === "INACTIVE"
+                                                  ? "bg-slate-100 text-slate-500"
+                                                  : "bg-red-50 text-red-600"
+                                          }`}
+                                        >
+                                          {copy.status === "AVAILABLE"
+                                            ? "Tersedia"
+                                            : copy.status === "BORROWED"
+                                              ? "Dipinjam"
+                                              : copy.status === "INACTIVE"
+                                                ? "Tidak aktif"
+                                                : "Hilang"}
+                                        </span>
                                       </label>
                                     );
                                   })}
                                 </div>
                               )}
 
-                              <p className="mt-3 text-sm text-slate-600">
+                              <p className="mt-3 text-xs sm:text-sm text-slate-600">
                                 Copy dipilih:{" "}
-                                <span className="font-semibold">
+                                <span className="font-semibold text-blue-700">
                                   {selectedItem.selectedCopyIds.length}
-                                </span>
+                                </span>{" "}
+                                dari {selectedItem.copies.length} copy
                               </p>
                             </div>
                           )}

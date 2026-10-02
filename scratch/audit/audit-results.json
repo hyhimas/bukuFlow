@@ -1,0 +1,146 @@
+[
+  {
+    "page": "dashboard",
+    "route": "/dashboard",
+    "viewport": "desktop",
+    "dimensions": "1440x900",
+    "horizontalOverflow": false,
+    "screenshot": "D:\\bukuFlow Integration BE\\bukuFlow\\scratch\\audit\\dashboard-desktop.png"
+  },
+  {
+    "page": "loans-new",
+    "route": "/loans/new",
+    "viewport": "desktop",
+    "dimensions": "1440x900",
+    "horizontalOverflow": false,
+    "screenshot": "D:\\bukuFlow Integration BE\\bukuFlow\\scratch\\audit\\loans-new-desktop.png"
+  },
+  {
+    "page": "returns",
+    "route": "/returns",
+    "viewport": "desktop",
+    "dimensions": "1440x900",
+    "horizontalOverflow": false,
+    "screenshot": "D:\\bukuFlow Integration BE\\bukuFlow\\scratch\\audit\\returns-desktop.png"
+  },
+  {
+    "page": "transactions",
+    "route": "/transactions",
+    "viewport": "desktop",
+    "dimensions": "1440x900",
+    "horizontalOverflow": false,
+    "screenshot": "D:\\bukuFlow Integration BE\\bukuFlow\\scratch\\audit\\transactions-desktop.png"
+  },
+  {
+    "page": "master-books",
+    "route": "/master/books",
+    "viewport": "desktop",
+    "dimensions": "1440x900",
+    "horizontalOverflow": false,
+    "screenshot": "D:\\bukuFlow Integration BE\\bukuFlow\\scratch\\audit\\master-books-desktop.png"
+  },
+  {
+    "page": "master-members",
+    "route": "/master/members",
+    "viewport": "desktop",
+    "dimensions": "1440x900",
+    "horizontalOverflow": false,
+    "screenshot": "D:\\bukuFlow Integration BE\\bukuFlow\\scratch\\audit\\master-members-desktop.png"
+  },
+  {
+    "page": "dashboard",
+    "route": "/dashboard",
+    "viewport": "tablet",
+    "dimensions": "768x1024",
+    "horizontalOverflow": false,
+    "screenshot": "D:\\bukuFlow Integration BE\\bukuFlow\\scratch\\audit\\dashboard-tablet.png"
+  },
+  {
+    "page": "loans-new",
+    "route": "/loans/new",
+    "viewport": "tablet",
+    "dimensions": "768x1024",
+    "horizontalOverflow": false,
+    "screenshot": "D:\\bukuFlow Integration BE\\bukuFlow\\scratch\\audit\\loans-new-tablet.png"
+  },
+  {
+    "page": "returns",
+    "route": "/returns",
+    "viewport": "tablet",
+    "dimensions": "768x1024",
+    "horizontalOverflow": false,
+    "screenshot": "D:\\bukuFlow Integration BE\\bukuFlow\\scratch\\audit\\returns-tablet.png"
+  },
+  {
+    "page": "transactions",
+    "route": "/transactions",
+    "viewport": "tablet",
+    "dimensions": "768x1024",
+    "horizontalOverflow": false,
+    "screenshot": "D:\\bukuFlow Integration BE\\bukuFlow\\scratch\\audit\\transactions-tablet.png"
+  },
+  {
+    "page": "master-books",
+    "route": "/master/books",
+    "viewport": "tablet",
+    "dimensions": "768x1024",
+    "horizontalOverflow": false,
+    "screenshot": "D:\\bukuFlow Integration BE\\bukuFlow\\scratch\\audit\\master-books-tablet.png"
+  },
+  {
+    "page": "master-members",
+    "route": "/master/members",
+    "viewport": "tablet",
+    "dimensions": "768x1024",
+    "horizontalOverflow": false,
+    "screenshot": "D:\\bukuFlow Integration BE\\bukuFlow\\scratch\\audit\\master-members-tablet.png"
+  },
+  {
+    "page": "dashboard",
+    "route": "/dashboard",
+    "viewport": "mobile",
+    "dimensions": "390x844",
+    "horizontalOverflow": false,
+    "screenshot": "D:\\bukuFlow Integration BE\\bukuFlow\\scratch\\audit\\dashboard-mobile.png"
+  },
+  {
+    "page": "loans-new",
+    "route": "/loans/new",
+    "viewport": "mobile",
+    "dimensions": "390x844",
+    "horizontalOverflow": false,
+    "screenshot": "D:\\bukuFlow Integration BE\\bukuFlow\\scratch\\audit\\loans-new-mobile.png"
+  },
+  {
+    "page": "returns",
+    "route": "/returns",
+    "viewport": "mobile",
+    "dimensions": "390x844",
+    "horizontalOverflow": false,
+    "screenshot": "D:\\bukuFlow Integration BE\\bukuFlow\\scratch\\audit\\returns-mobile.png"
+  },
+  {
+    "page": "transactions",
+    "route": "/transactions",
+    "viewport": "mobile",
+    "dimensions": "390x844",
+    "horizontalOverflow": false,
+    "screenshot": "D:\\bukuFlow Integration BE\\bukuFlow\\scratch\\audit\\transactions-mobile.png"
+  },
+  {
+    "page": "master-books",
+    "route": "/master/books",
+    "viewport": "mobile",
+    "dimensions": "390x844",
+    "horizontalOverflow": false,
+    "screenshot": "D:\\bukuFlow Integration BE\\bukuFlow\\scratch\\audit\\master-books-mobile.png"
+  },
+  {
+    "page": "master-members",
+    "route": "/master/members",
+    "viewport": "mobile",
+    "dimensions": "390x844",
+    "horizontalOverflow": false,
+    "screenshot": "D:\\bukuFlow Integration BE\\bukuFlow\\scratch\\audit\\master-members-mobile.png"
+  }
+]

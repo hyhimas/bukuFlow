@@ -471,8 +471,7 @@ export default function MasterBooksPage() {
           newCategory !== currentCategory;
 
         if (!hasChanges) {
-          toast.warning("Tidak ada perubahan yang disimpan.");
-
+          toast.warning("Data masih sama, tidak ada perubahan yang disimpan.");
           closeForm();
           return;
         }
@@ -1150,19 +1149,27 @@ export default function MasterBooksPage() {
             </div>
           )}
 
-          {/* TABLE (Tablet & Desktop) */}
+          {/* TABLE (Desktop: >= lg) */}
 
           {books.length > 0 && (
-            <div className="relative hidden overflow-x-auto md:block">
-              <table className="w-full text-left text-sm text-slate-600">
+            <div className="relative hidden overflow-x-auto lg:block">
+              <table className="w-full text-left text-sm text-slate-600 table-fixed">
+                <colgroup>
+                  <col className="w-[80px]" />
+                  <col />
+                  <col className="w-[140px]" />
+                  <col className="w-[85px]" />
+                  <col className="w-[110px]" />
+                  <col className="w-[340px]" />
+                </colgroup>
                 <thead className="border-b border-slate-200 bg-slate-50 text-[11px] font-bold uppercase tracking-wider text-slate-500">
                   <tr>
-                    <th className="px-2.5 sm:px-3 py-3 w-[65px] sm:w-[75px]">Kode</th>
-                    <th className="px-2.5 sm:px-3 py-3">Buku</th>
-                    <th className="hidden lg:table-cell px-2.5 sm:px-3 py-3 w-[110px]">Kategori</th>
-                    <th className="px-2.5 sm:px-3 py-3 w-[65px] sm:w-[75px] text-center">Copy</th>
-                    <th className="px-2.5 sm:px-3 py-3 w-[90px] sm:w-[100px]">Status</th>
-                    <th className="px-2.5 sm:px-3 py-3 text-right w-[190px] sm:w-[210px]">Aksi</th>
+                    <th className="px-3 py-3">Kode</th>
+                    <th className="px-3 py-3">Buku</th>
+                    <th className="px-3 py-3">Kategori</th>
+                    <th className="px-3 py-3 text-center">Copy</th>
+                    <th className="px-3 py-3">Status</th>
+                    <th className="px-3 py-3 text-right">Aksi</th>
                   </tr>
                 </thead>
 
@@ -1175,11 +1182,11 @@ export default function MasterBooksPage() {
                         key={book.id}
                         className="transition hover:bg-slate-50/70"
                       >
-                        <td className="px-2.5 sm:px-3 py-3 font-semibold text-slate-900 whitespace-nowrap text-xs">
+                        <td className="px-3 py-3 font-semibold text-slate-900 whitespace-nowrap text-xs">
                           {book.code}
                         </td>
 
-                        <td className="px-2.5 sm:px-3 py-3 min-w-[120px]">
+                        <td className="px-3 py-3 min-w-0">
                           <p className="truncate font-semibold text-slate-800 text-xs sm:text-sm" title={book.title}>
                             {book.title}
                           </p>
@@ -1191,11 +1198,11 @@ export default function MasterBooksPage() {
                           </p>
                         </td>
 
-                        <td className="hidden lg:table-cell px-2.5 sm:px-3 py-3 text-slate-600 truncate max-w-[110px] text-xs">
+                        <td className="px-3 py-3 text-slate-600 truncate text-xs">
                           {book.category ?? "-"}
                         </td>
 
-                        <td className="px-2.5 sm:px-3 py-3 whitespace-nowrap text-xs text-center">
+                        <td className="px-3 py-3 whitespace-nowrap text-xs text-center">
                           <span className="font-bold text-slate-900">
                             {book.availableCopies}
                           </span>
@@ -1206,7 +1213,7 @@ export default function MasterBooksPage() {
                           </span>
                         </td>
 
-                        <td className="px-2.5 sm:px-3 py-3 whitespace-nowrap">
+                        <td className="px-3 py-3 whitespace-nowrap">
                           <span
                             className={`inline-flex whitespace-nowrap items-center gap-1 rounded-full px-2 py-0.5 text-[11px] font-semibold ${getBookStatusClass(
                               book.status,
@@ -1218,43 +1225,70 @@ export default function MasterBooksPage() {
                           </span>
                         </td>
 
-                        <td className="px-2.5 sm:px-3 py-3 text-right whitespace-nowrap">
-                          <div className="flex items-center justify-end gap-1">
+                        <td className="px-3 py-3 text-right whitespace-nowrap">
+                          <div className="flex items-center justify-end gap-1.5">
                             <button
                               type="button"
                               onClick={() => void openDetail(book)}
-                              className="inline-flex h-7 items-center justify-center rounded-md border border-slate-200 bg-white px-2 text-[11px] font-medium text-slate-700 shadow-2xs transition hover:bg-slate-50 focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-500"
+                              className="inline-flex items-center gap-1 rounded-lg border border-slate-200 bg-white px-2 py-1.5 text-xs font-semibold text-slate-700 shadow-2xs transition hover:bg-slate-50 hover:border-slate-300 focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-500"
                             >
-                              Detail
+                              <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                                <path d="M2 12s3-7 10-7 10 7 10 7-3 7-10 7-10-7-10-7Z" />
+                                <circle cx="12" cy="12" r="3" />
+                              </svg>
+                              <span>Detail</span>
                             </button>
 
                             <button
                               type="button"
                               onClick={() => void handlePrintBookCopies(book)}
                               title="Cetak Barcode & QR Code Semua Copy"
-                              className="inline-flex h-7 items-center justify-center rounded-md border border-slate-200 bg-white px-1.5 text-[11px] font-medium text-slate-700 shadow-2xs transition hover:bg-slate-50 focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-500"
+                              className="inline-flex items-center gap-1 rounded-lg border border-slate-200 bg-white px-2 py-1.5 text-xs font-semibold text-slate-700 shadow-2xs transition hover:bg-slate-50 hover:border-slate-300 focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-500"
                             >
-                              🏷️ Barcode
+                              <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                                <path d="M3 5v14M8 5v14M12 5v14M17 5v14M21 5v14" />
+                              </svg>
+                              <span>Barcode</span>
                             </button>
 
                             <button
                               type="button"
                               onClick={() => openEditForm(book)}
-                              className="inline-flex h-7 items-center justify-center rounded-md border border-slate-200 bg-white px-2 text-[11px] font-medium text-slate-700 shadow-2xs transition hover:bg-slate-50 focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-500"
+                              className="inline-flex items-center gap-1 rounded-lg border border-slate-200 bg-white px-2 py-1.5 text-xs font-semibold text-slate-700 shadow-2xs transition hover:bg-slate-50 hover:border-slate-300 focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-500"
                             >
-                              Ubah
+                              <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                                <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7" />
+                                <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z" />
+                              </svg>
+                              <span>Edit</span>
                             </button>
 
                             <button
                               type="button"
                               onClick={() => openBookStatusConfirm(book)}
-                              className={`inline-flex h-7 items-center justify-center rounded-md border px-2 text-[11px] font-medium shadow-2xs transition focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 ${
+                              className={`inline-flex items-center gap-1 rounded-lg border px-2 py-1.5 text-xs font-semibold shadow-2xs transition focus:outline-none focus-visible:ring-2 ${
                                 isInactive
-                                  ? "border-emerald-200 bg-emerald-50 text-emerald-700 hover:bg-emerald-100"
-                                  : "border-red-200 bg-red-50 text-red-600 hover:bg-red-100"
+                                  ? "border-emerald-200 bg-emerald-50 text-emerald-700 hover:bg-emerald-100 hover:border-emerald-300 focus-visible:ring-emerald-500"
+                                  : "border-amber-200 bg-amber-50 text-amber-700 hover:bg-amber-100 hover:border-amber-300 focus-visible:ring-amber-500"
                               }`}
                             >
-                              {isInactive ? "Aktifkan" : "Arsipkan"}
+                              {isInactive ? (
+                                <>
+                                  <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                                    <path d="M22 11.08V12a10 10 0 1 1-5.93-9.14" />
+                                    <polyline points="22 4 12 14.01 9 11.01" />
+                                  </svg>
+                                  <span>Aktifkan</span>
+                                </>
+                              ) : (
+                                <>
+                                  <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                                    <circle cx="12" cy="12" r="10" />
+                                    <line x1="4.93" y1="4.93" x2="19.07" y2="19.07" />
+                                  </svg>
+                                  <span>Arsipkan</span>
+                                </>
+                              )}
                             </button>
                           </div>
                         </td>
@@ -1279,123 +1313,152 @@ export default function MasterBooksPage() {
             </div>
           )}
 
-          {/* MOBILE CARDS (Mobile only) */}
+          {/* MOBILE & TABLET CARDS (< lg) */}
 
           {books.length > 0 && (
-            <div className="relative grid grid-cols-1 gap-3 bg-slate-50/60 p-3 md:hidden">
+            <div className="relative grid grid-cols-1 md:grid-cols-2 gap-3 bg-slate-50/60 p-3 lg:hidden">
               {books.map((book) => {
                 const isInactive = book.status === "INACTIVE";
 
                 return (
                   <div
                     key={book.id}
-                    className="rounded-xl border border-slate-200 bg-white p-3 shadow-sm"
+                    className="rounded-xl border border-slate-200 bg-white p-3 shadow-sm flex flex-col justify-between"
                   >
-                    <div className="flex items-start justify-between gap-3">
-                      <div className="min-w-0">
-                        <p className="text-[11px] font-medium text-slate-400">
-                          {book.code}
-                        </p>
+                    <div>
+                      <div className="flex items-start justify-between gap-3">
+                        <div className="min-w-0">
+                          <p className="text-[11px] font-medium text-slate-400 font-mono">
+                            {book.code}
+                          </p>
 
-                        <p className="mt-0.5 truncate text-sm font-semibold text-slate-900">
-                          {book.title}
-                        </p>
+                          <p className="mt-0.5 truncate text-sm font-semibold text-slate-900" title={book.title}>
+                            {book.title}
+                          </p>
+                        </div>
+
+                        <span
+                          className={`inline-flex shrink-0 items-center gap-1.5 whitespace-nowrap rounded-full px-2.5 py-1 text-[11px] font-semibold ${getBookStatusClass(
+                            book.status,
+                          )}`}
+                        >
+                          {getBookStatusLabel(book.status)}
+                        </span>
                       </div>
 
-                      <span
-                        className={`inline-flex shrink-0 items-center gap-1.5 whitespace-nowrap rounded-full px-2.5 py-1.5 text-[11px] font-semibold ${getBookStatusClass(
-                          book.status,
-                        )}`}
-                      >
-                        {getBookStatusLabel(book.status)}
-                      </span>
+                      <div className="mt-3 grid grid-cols-2 gap-2">
+                        <div className="rounded-lg border border-slate-100 bg-slate-50 px-3 py-2">
+                          <p className="text-[10px] font-semibold uppercase tracking-wide text-slate-400">
+                            Kategori
+                          </p>
+
+                          <p className="mt-0.5 truncate text-xs font-medium text-slate-700">
+                            {book.category ?? "-"}
+                          </p>
+                        </div>
+
+                        <div className="rounded-lg border border-slate-100 bg-slate-50 px-3 py-2">
+                          <p className="text-[10px] font-semibold uppercase tracking-wide text-slate-400">
+                            Copy
+                          </p>
+
+                          <p className="mt-0.5 text-xs font-medium text-slate-700">
+                            <span className="font-bold">
+                              {book.availableCopies}
+                            </span>
+                            {" / "}
+                            {book.totalCopies}
+                          </p>
+                        </div>
+                      </div>
+
+                      {book.isbn && (
+                        <div className="mt-2 rounded-lg border border-slate-100 bg-slate-50 px-3 py-2">
+                          <p className="text-[10px] font-semibold uppercase tracking-wide text-slate-400">
+                            ISBN
+                          </p>
+
+                          <p className="mt-0.5 truncate text-xs font-medium text-slate-700">
+                            {book.isbn}
+                          </p>
+                        </div>
+                      )}
+
+                      {book.author && (
+                        <div className="mt-2 rounded-lg border border-slate-100 bg-slate-50 px-3 py-2">
+                          <p className="text-[10px] font-semibold uppercase tracking-wide text-slate-400">
+                            Pengarang
+                          </p>
+
+                          <p className="mt-0.5 truncate text-xs font-medium text-slate-700">
+                            {book.author}
+                          </p>
+                        </div>
+                      )}
                     </div>
-
-                    <div className="mt-3 grid grid-cols-2 gap-2">
-                      <div className="rounded-lg border border-slate-100 bg-slate-50 px-3 py-2">
-                        <p className="text-[10px] font-semibold uppercase tracking-wide text-slate-400">
-                          Kategori
-                        </p>
-
-                        <p className="mt-0.5 truncate text-xs font-medium text-slate-700">
-                          {book.category ?? "-"}
-                        </p>
-                      </div>
-
-                      <div className="rounded-lg border border-slate-100 bg-slate-50 px-3 py-2">
-                        <p className="text-[10px] font-semibold uppercase tracking-wide text-slate-400">
-                          Copy
-                        </p>
-
-                        <p className="mt-0.5 text-xs font-medium text-slate-700">
-                          <span className="font-bold">
-                            {book.availableCopies}
-                          </span>
-                          {" / "}
-                          {book.totalCopies}
-                        </p>
-                      </div>
-                    </div>
-
-                    {book.isbn && (
-                      <div className="mt-2 rounded-lg border border-slate-100 bg-slate-50 px-3 py-2">
-                        <p className="text-[10px] font-semibold uppercase tracking-wide text-slate-400">
-                          ISBN
-                        </p>
-
-                        <p className="mt-0.5 truncate text-xs font-medium text-slate-700">
-                          {book.isbn}
-                        </p>
-                      </div>
-                    )}
-
-                    {book.author && (
-                      <div className="mt-2 rounded-lg border border-slate-100 bg-slate-50 px-3 py-2">
-                        <p className="text-[10px] font-semibold uppercase tracking-wide text-slate-400">
-                          Pengarang
-                        </p>
-
-                        <p className="mt-0.5 truncate text-xs font-medium text-slate-700">
-                          {book.author}
-                        </p>
-                      </div>
-                    )}
 
                     <div className="mt-3.5 pt-2.5 border-t border-slate-100 grid grid-cols-2 sm:grid-cols-4 gap-2">
                       <button
                         type="button"
                         onClick={() => void openDetail(book)}
-                        className="h-8 rounded-lg border border-slate-200 bg-white text-xs font-semibold text-slate-700 shadow-2xs transition hover:bg-slate-50 hover:border-slate-300 focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-500"
+                        className="h-9 rounded-lg border border-slate-200 bg-white text-xs font-semibold text-slate-700 shadow-2xs transition hover:bg-slate-50 hover:border-slate-300 flex items-center justify-center gap-1.5 focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-500"
                       >
-                        Detail
+                        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                          <path d="M2 12s3-7 10-7 10 7 10 7-3 7-10 7-10-7-10-7Z" />
+                          <circle cx="12" cy="12" r="3" />
+                        </svg>
+                        <span>Detail</span>
                       </button>
 
                       <button
                         type="button"
                         onClick={() => void handlePrintBookCopies(book)}
-                        className="h-8 rounded-lg border border-slate-200 bg-white text-xs font-semibold text-slate-700 shadow-2xs transition hover:bg-slate-50 hover:border-slate-300 focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-500"
+                        className="h-9 rounded-lg border border-slate-200 bg-white text-xs font-semibold text-slate-700 shadow-2xs transition hover:bg-slate-50 hover:border-slate-300 flex items-center justify-center gap-1.5 focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-500"
                       >
-                        🖨️ Barcode
+                        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                          <path d="M3 5v14M8 5v14M12 5v14M17 5v14M21 5v14" />
+                        </svg>
+                        <span>Barcode</span>
                       </button>
 
                       <button
                         type="button"
                         onClick={() => openEditForm(book)}
-                        className="h-8 rounded-lg border border-slate-200 bg-white text-xs font-semibold text-slate-700 shadow-2xs transition hover:bg-slate-50 hover:border-slate-300 focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-500"
+                        className="h-9 rounded-lg border border-slate-200 bg-white text-xs font-semibold text-slate-700 shadow-2xs transition hover:bg-slate-50 hover:border-slate-300 flex items-center justify-center gap-1.5 focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-500"
                       >
-                        Ubah
+                        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                          <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7" />
+                          <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z" />
+                        </svg>
+                        <span>Edit</span>
                       </button>
 
                       <button
                         type="button"
                         onClick={() => openBookStatusConfirm(book)}
-                        className={`h-8 rounded-lg border text-xs font-semibold shadow-2xs transition ${
+                        className={`h-9 rounded-lg border text-xs font-semibold shadow-2xs flex items-center justify-center gap-1.5 transition focus:outline-none focus-visible:ring-2 ${
                           isInactive
-                            ? "border-emerald-200 bg-emerald-50 text-emerald-700 hover:bg-emerald-100"
-                            : "border-red-200 bg-red-50 text-red-600 hover:bg-red-100"
+                            ? "border-emerald-200 bg-emerald-50 text-emerald-700 hover:bg-emerald-100 hover:border-emerald-300 focus-visible:ring-emerald-500"
+                            : "border-amber-200 bg-amber-50 text-amber-700 hover:bg-amber-100 hover:border-amber-300 focus-visible:ring-amber-500"
                         }`}
                       >
-                        {isInactive ? "Aktifkan" : "Arsipkan"}
+                        {isInactive ? (
+                          <>
+                            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                              <path d="M22 11.08V12a10 10 0 1 1-5.93-9.14" />
+                              <polyline points="22 4 12 14.01 9 11.01" />
+                            </svg>
+                            <span>Aktifkan</span>
+                          </>
+                        ) : (
+                          <>
+                            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                              <circle cx="12" cy="12" r="10" />
+                              <line x1="4.93" y1="4.93" x2="19.07" y2="19.07" />
+                            </svg>
+                            <span>Arsipkan</span>
+                          </>
+                        )}
                       </button>
                     </div>
                   </div>

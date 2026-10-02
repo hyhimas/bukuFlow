@@ -3,6 +3,7 @@
 import { useEffect, useRef, useState, useCallback } from "react";
 import { Html5Qrcode, Html5QrcodeSupportedFormats } from "html5-qrcode";
 import Button from "@/components/ui/Button";
+import Dropdown from "@/components/ui/Dropdown";
 
 interface BookCameraScannerModalProps {
   isOpen: boolean;
@@ -433,24 +434,23 @@ export default function BookCameraScannerModal({
           <div className="flex items-center justify-between gap-2.5 border-b border-slate-100 bg-slate-50/80 px-5 py-2.5 text-xs">
             <div className="flex items-center gap-2 flex-1 min-w-0">
               {cameras.length > 1 && (
-                <>
+                <div className="flex items-center gap-1.5 min-w-[200px] max-w-[260px]">
                   <span className="text-slate-500 font-medium shrink-0">Kamera:</span>
-                  <select
+                  <Dropdown
                     value={selectedCameraId}
-                    onChange={(e) => {
+                    size="sm"
+                    className="flex-1 min-w-0"
+                    onChange={(val) => {
                       void stopScanner().then(() => {
-                        setSelectedCameraId(e.target.value);
+                        setSelectedCameraId(val);
                       });
                     }}
-                    className="w-full max-w-[200px] truncate rounded-lg border border-slate-200 bg-white px-2.5 py-1 text-xs text-slate-700 shadow-2xs focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
-                  >
-                    {cameras.map((c, i) => (
-                      <option key={c.id} value={c.id}>
-                        {c.label || `Kamera ${i + 1}`}
-                      </option>
-                    ))}
-                  </select>
-                </>
+                    options={cameras.map((c, i) => ({
+                      value: c.id,
+                      label: c.label || `Kamera ${i + 1}`,
+                    }))}
+                  />
+                </div>
               )}
             </div>
 

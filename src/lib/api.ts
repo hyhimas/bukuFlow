@@ -6,6 +6,7 @@ import type {
   BookStatus,
   BookCopyStatus,
   Company,
+  CompanySettings,
   Loan,
   Member,
   MemberStatus,
@@ -707,7 +708,7 @@ export async function createBookApi(data: CreateBookInputData): Promise<Book> {
       raw?.inserted_id ||
       raw?.insertedId;
 
-    return {
+    const createdBook: Book = {
       id: bookId || `book-${Date.now()}`,
       companyId: raw?.company_id || raw?.companyId || "company-001",
       code: raw?.code || bookCode,
@@ -728,6 +729,42 @@ export async function createBookApi(data: CreateBookInputData): Promise<Book> {
       createdAt: raw?.created_at || new Date().toISOString(),
       updatedAt: raw?.updated_at || new Date().toISOString(),
     };
+
+    // Auto-create initial book copies if totalCopies > 0
+    if (createdBook.id && totalCopies > 0) {
+      try {
+        // Cek apakah backend sudah membuat copy otomatis (misal copy ke-1)
+        const existingCopies = await getBookCopiesApi(createdBook.id, createdBook.companyId).catch(() => []);
+        const copiesNeeded = totalCopies - existingCopies.length;
+
+        if (copiesNeeded > 0) {
+          for (let i = 0; i < copiesNeeded; i++) {
+            const copyIndex = existingCopies.length + i + 1;
+            const copyCode = `${createdBook.code}-${String(copyIndex).padStart(3, "0")}`;
+            await api
+              .post(`/catalog/books/${createdBook.id}/copies`, {
+                copy_code: copyCode,
+                location: "-",
+                status: "AVAILABLE",
+              })
+              .catch(async () => {
+                // Fallback dengan alternative endpoint jika diperlukan
+                return api
+                  .post(`/office/catalog/books/${createdBook.id}/copies`, {
+                    copy_code: copyCode,
+                    location: "-",
+                    status: "AVAILABLE",
+                  })
+                  .catch(() => null);
+              });
+          }
+        }
+      } catch (copyErr) {
+        console.warn("Failed to auto-create initial copies on backend:", copyErr);
+      }
+    }
+
+    return createdBook;
   } catch (error: any) {
     if (
       error.response?.status >= 500 ||
@@ -1029,11 +1066,6 @@ export async function getBookCopiesApi(
       if (arrayVal) items = arrayVal as any[];
     }
 
-    if (items.length === 0) {
-      const { getBookCopies } = await import("./mock-api");
-      return await getBookCopies(bookId);
-    }
-
     return items.map((item: any) => ({
       id: item._id || item.id || `copy-${bookId}-${Math.random().toString(36).slice(2)}`,
       companyId: item.company_id || item.companyId || compId,
@@ -1067,7 +1099,18 @@ export async function createBookCopyApi(
   const compId = companyId || auth?.user?.companyId || "company-001";
 
   const existingCopies = await getBookCopiesApi(bookId, compId).catch(() => []);
-  const nextNumber = existingCopies.length + 1;
+  
+  let maxNumber = 0;
+  for (const c of existingCopies) {
+    const parts = c.code.split("-");
+    const lastPart = parts[parts.length - 1];
+    const num = parseInt(lastPart, 10);
+    if (!isNaN(num) && num > maxNumber) {
+      maxNumber = num;
+    }
+  }
+  const nextNumber = Math.max(existingCopies.length + 1, maxNumber + 1);
+
   const book = await getBookApi(bookId).catch(() => null);
   const bookCode = book?.code || `BK-${bookId.slice(-4).toUpperCase()}`;
   const defaultCode = `${bookCode}-${String(nextNumber).padStart(3, "0")}`;
@@ -2471,6 +2514,676 @@ export async function updateOfficeMemberApi(
     };
 
     mockMembers[index] = updated;
+    persistMockState();
+    return updated;
+  }
+}
+
+// =========================================================
+// COMPANIES API (SUPER ADMIN MULTI-TENANT)
+// =========================================================
+
+export interface CreateCompanyPayload {
+  code: string;
+  name: string;
+  address?: string;
+  timezone?: string;
+  status?: "ACTIVE" | "INACTIVE" | "SUSPENDED";
+}
+
+export interface UpdateCompanyPayload {
+  name?: string;
+  code?: string;
+  address?: string;
+  timezone?: string;
+  status?: "ACTIVE" | "INACTIVE" | "SUSPENDED";
+}
+
+export async function getCompaniesApi(): Promise<Company[]> {
+  try {
+    const response = await api.get("/bukuflow/companies").catch(() =>
+      api.get("/bukuflow/office/companies")
+    );
+    const raw = response.data;
+    const items = Array.isArray(raw?.data) ? raw.data : Array.isArray(raw) ? raw : [];
+    if (items.length > 0) {
+      return items.map((c: any) => ({
+        id: String(c.id || c.company_id || `company-${Math.random().toString(36).slice(2, 6)}`),
+        code: String(c.code || "SMAN1-JKT"),
+        name: String(c.name || "Perpustakaan"),
+        logo: c.logo || "",
+        address: c.address || "",
+        status: (c.status || "ACTIVE") as any,
+        timezone: c.timezone || "Asia/Jakarta",
+        createdAt: c.created_at || c.createdAt || new Date().toISOString(),
+        updatedAt: c.updated_at || c.updatedAt || new Date().toISOString(),
+      }));
+    }
+    throw new Error("No companies in response");
+  } catch {
+    // Fallback Mock Store
+    const { mockCompanies, ensureMockStoreHydrated } = await import("./mock-store");
+    ensureMockStoreHydrated();
+    return [...mockCompanies];
+  }
+}
+
+export async function getCompanyDetailApi(id: string): Promise<Company> {
+  try {
+    const response = await api.get(`/bukuflow/companies/${id}`).catch(() =>
+      api.get(`/bukuflow/office/companies/${id}`)
+    );
+    const item = response.data?.data || response.data;
+    return {
+      id: String(item.id || id),
+      code: String(item.code || "CODE"),
+      name: String(item.name || "Perpustakaan"),
+      logo: item.logo || "",
+      address: item.address || "",
+      status: (item.status || "ACTIVE") as any,
+      timezone: item.timezone || "Asia/Jakarta",
+      createdAt: item.created_at || item.createdAt || new Date().toISOString(),
+      updatedAt: item.updated_at || item.updatedAt || new Date().toISOString(),
+    };
+  } catch {
+    const { mockCompanies, ensureMockStoreHydrated } = await import("./mock-store");
+    ensureMockStoreHydrated();
+    const found = mockCompanies.find((c: Company) => c.id === id);
+    if (!found) throw new Error("Instansi / Perusahaan tidak ditemukan.");
+    return found;
+  }
+}
+
+export async function createCompanyApi(payload: CreateCompanyPayload): Promise<Company> {
+  const body = {
+    code: payload.code.trim().toUpperCase(),
+    name: payload.name.trim(),
+    address: payload.address?.trim() || "",
+    timezone: payload.timezone || "Asia/Jakarta",
+    status: payload.status || "ACTIVE",
+  };
+
+  try {
+    const response = await api.post("/bukuflow/companies", body).catch(() =>
+      api.post("/bukuflow/office/companies", body)
+    );
+    const item = response.data?.data || response.data;
+    return {
+      id: String(item.id || item.company_id || `comp-${Date.now()}`),
+      code: String(item.code || body.code),
+      name: String(item.name || body.name),
+      address: String(item.address || body.address),
+      status: (item.status || body.status) as any,
+      timezone: item.timezone || body.timezone,
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString(),
+    };
+  } catch {
+    // Fallback Mock create & persist
+    const { mockCompanies, ensureMockStoreHydrated, persistMockState } = await import("./mock-store");
+    ensureMockStoreHydrated();
+    const newComp: Company = {
+      id: `company-${Date.now().toString().slice(-4)}`,
+      code: body.code,
+      name: body.name,
+      address: body.address,
+      status: body.status as any,
+      timezone: body.timezone,
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString(),
+    };
+    mockCompanies.push(newComp);
+    persistMockState();
+    return newComp;
+  }
+}
+
+export async function updateCompanyApi(
+  id: string,
+  payload: UpdateCompanyPayload
+): Promise<Company> {
+  try {
+    const response = await api.patch(`/bukuflow/companies/${id}`, payload).catch(() =>
+      api.patch(`/bukuflow/office/companies/${id}`, payload)
+    );
+    const item = response.data?.data || response.data;
+    return {
+      id: String(item.id || id),
+      code: String(item.code || payload.code || "CODE"),
+      name: String(item.name || payload.name || "Perpustakaan"),
+      address: String(item.address || payload.address || ""),
+      status: (item.status || payload.status || "ACTIVE") as any,
+      timezone: item.timezone || payload.timezone || "Asia/Jakarta",
+      createdAt: item.created_at || new Date().toISOString(),
+      updatedAt: new Date().toISOString(),
+    };
+  } catch {
+    const { mockCompanies, ensureMockStoreHydrated, persistMockState } = await import("./mock-store");
+    ensureMockStoreHydrated();
+    const idx = mockCompanies.findIndex((c: Company) => c.id === id);
+    if (idx === -1) throw new Error("Instansi / Perusahaan tidak ditemukan.");
+    const existing = mockCompanies[idx];
+    const updated: Company = {
+      ...existing,
+      name: payload.name ?? existing.name,
+      code: payload.code ? payload.code.toUpperCase() : existing.code,
+      address: payload.address ?? existing.address,
+      timezone: payload.timezone ?? existing.timezone,
+      status: (payload.status as any) ?? existing.status,
+      updatedAt: new Date().toISOString(),
+    };
+    mockCompanies[idx] = updated;
+    persistMockState();
+    return updated;
+  }
+}
+
+export async function deleteCompanyApi(id: string): Promise<boolean> {
+  try {
+    await api.delete(`/bukuflow/companies/${id}`).catch(() =>
+      api.delete(`/bukuflow/office/companies/${id}`)
+    );
+    return true;
+  } catch {
+    const { mockCompanies, ensureMockStoreHydrated, persistMockState } = await import("./mock-store");
+    ensureMockStoreHydrated();
+    const idx = mockCompanies.findIndex((c: Company) => c.id === id);
+    if (idx !== -1) {
+      mockCompanies.splice(idx, 1);
+      persistMockState();
+    }
+    return true;
+  }
+}
+
+// =========================================================
+// =========================================================
+// COMPANY USERS API (SWAGGER: /bukuflow/user)
+// =========================================================
+
+export interface CreateCompanyUserPayload {
+  name: string;
+  email: string;
+  password?: string;
+  role: "COMPANY_ADMIN" | "STAFF";
+}
+
+export interface UpdateCompanyUserPayload {
+  name?: string;
+  email?: string;
+  password?: string;
+  is_active?: boolean;
+  role?: "COMPANY_ADMIN" | "STAFF";
+}
+
+export interface ListCompanyUsersParams {
+  page?: number;
+  size?: number;
+  search?: string;
+  role?: string;
+  status?: string;
+  companyId?: string;
+}
+
+export interface ListCompanyUsersResponse {
+  items: any[];
+  total: number;
+  page: number;
+  size: number;
+  totalPages: number;
+}
+
+export async function getCompanyUsersApi(
+  params: ListCompanyUsersParams = {}
+): Promise<ListCompanyUsersResponse> {
+  const page = params.page || 1;
+  const size = params.size || 10;
+  const targetCompanyId = params.companyId || (typeof window !== "undefined" ? getAuthData()?.user.companyId : "company-001") || "company-001";
+
+  try {
+    const response = await api.get("/user", {
+      params: {
+        page,
+        size,
+        search: params.search || undefined,
+        role: params.role && params.role !== "ALL" ? params.role : undefined,
+        company_id: targetCompanyId,
+        is_active:
+          params.status === "ACTIVE"
+            ? true
+            : params.status === "INACTIVE"
+            ? false
+            : undefined,
+      },
+    }).catch(() =>
+      api.get("/bukuflow/user", {
+        params: {
+          page,
+          size,
+          search: params.search || undefined,
+          role: params.role && params.role !== "ALL" ? params.role : undefined,
+          company_id: targetCompanyId,
+          is_active:
+            params.status === "ACTIVE"
+              ? true
+              : params.status === "INACTIVE"
+              ? false
+              : undefined,
+        },
+      })
+    );
+
+    const raw = response.data;
+    const rawItems = Array.isArray(raw?.items)
+      ? raw.items
+      : Array.isArray(raw?.data)
+      ? raw.data
+      : Array.isArray(raw)
+      ? raw
+      : [];
+
+    let mappedItems = rawItems
+      // FILTER: Only include users within the same company and NEVER include SUPER_ADMIN
+      .filter((u: any) => u.role !== "SUPER_ADMIN")
+      .filter((u: any) => {
+        const uCompId = u.company_id || u.companyId;
+        return !uCompId || uCompId === targetCompanyId;
+      })
+      .map((u: any) => {
+        const isActive =
+          u.is_active !== undefined
+            ? Boolean(u.is_active)
+            : u.status === "ACTIVE" || u.status === undefined || u.status === true;
+
+        return {
+          id: String(u.id || u._id || u.user_id),
+          companyId: String(u.company_id || u.companyId || targetCompanyId),
+          name: String(u.name || "-"),
+          email: u.email ? String(u.email) : "",
+          username: String(u.username || (u.email ? u.email.split("@")[0] : u.name || "-")),
+          role: u.role || "STAFF",
+          status: isActive ? "ACTIVE" : "INACTIVE",
+          is_active: isActive,
+          createdAt: u.created_at || u.createdAt || new Date().toISOString(),
+        };
+      });
+
+    const total = Number(raw?.total || mappedItems.length);
+    const totalPages = Number(
+      raw?.total_pages || raw?.totalPages || Math.ceil(total / size) || 1
+    );
+
+    // If server returned unpaginated list, paginate on client
+    const paginatedItems =
+      mappedItems.length > size
+        ? mappedItems.slice((page - 1) * size, page * size)
+        : mappedItems;
+
+    return {
+      items: paginatedItems,
+      total: total,
+      page,
+      size,
+      totalPages: Math.max(1, Math.ceil(total / size)),
+    };
+  } catch (error: any) {
+    const token = getAccessToken();
+    const isMock = !token || token.startsWith("mock-");
+
+    if (!isMock && error.response?.status >= 500) {
+      throw new Error(formatApiError(error, "Gagal memuat daftar pengguna dari server."));
+    }
+    if (!isMock && error.response?.status >= 400 && error.response?.status !== 404) {
+      throw new Error(formatApiError(error, "Gagal memuat daftar pengguna."));
+    }
+
+    // Fallback Mock Store (strictly filtered by companyId and excluding SUPER_ADMIN)
+    const { mockUsers, ensureMockStoreHydrated } = await import("./mock-store");
+    ensureMockStoreHydrated();
+
+    let list = mockUsers
+      .filter((u: any) => u.role !== "SUPER_ADMIN" && (!u.companyId || u.companyId === targetCompanyId))
+      .map((u: any) => ({
+        id: String(u.id),
+        companyId: String(u.companyId || targetCompanyId),
+        name: String(u.name || "-"),
+        email: u.email ? String(u.email) : "",
+        username: String(u.username || (u.email ? u.email.split("@")[0] : u.name || "-")),
+        role: u.role || "STAFF",
+        status: u.status || "ACTIVE",
+        is_active: u.status === "ACTIVE",
+        createdAt: u.createdAt || new Date().toISOString(),
+      }));
+
+    if (params.search?.trim()) {
+      const q = params.search.toLowerCase().trim();
+      list = list.filter(
+        (u) =>
+          u.name.toLowerCase().includes(q) ||
+          u.username.toLowerCase().includes(q) ||
+          u.email.toLowerCase().includes(q)
+      );
+    }
+
+    if (params.role && params.role !== "ALL") {
+      list = list.filter((u) => u.role === params.role);
+    }
+
+    if (params.status && params.status !== "ALL") {
+      list = list.filter((u) => u.status === params.status);
+    }
+
+    const total = list.length;
+    const totalPages = Math.max(1, Math.ceil(total / size));
+    const start = (page - 1) * size;
+    const paginated = list.slice(start, start + size);
+
+    return {
+      items: paginated,
+      total,
+      page,
+      size,
+      totalPages,
+    };
+  }
+}
+
+export async function createCompanyUserApi(
+  payload: CreateCompanyUserPayload
+): Promise<any> {
+  const body = {
+    name: payload.name.trim(),
+    email: payload.email.trim(),
+    password: payload.password || "admin123",
+    role: payload.role,
+  };
+
+  try {
+    const response = await api.post("/user", body).catch(() =>
+      api.post("/bukuflow/user", body)
+    );
+
+    const item = response.data?.data || response.data?.user || response.data;
+    const isActive =
+      item?.is_active !== undefined
+        ? Boolean(item.is_active)
+        : item?.status === "ACTIVE" || item?.status === undefined;
+
+    return {
+      id: String(item?.id || item?._id || item?.user_id || `usr-${Date.now()}`),
+      companyId: String(item?.company_id || item?.companyId || "company-001"),
+      name: String(item?.name || body.name),
+      email: String(item?.email || body.email),
+      username: String(item?.username || body.email.split("@")[0]),
+      role: item?.role || body.role,
+      status: isActive ? "ACTIVE" : "INACTIVE",
+      is_active: isActive,
+      createdAt: new Date().toISOString(),
+    };
+  } catch (error: any) {
+    const token = getAccessToken();
+    const isMock = !token || token.startsWith("mock-");
+
+    if (!isMock && error.response?.status >= 400) {
+      throw new Error(formatApiError(error, "Gagal membuat pengguna baru."));
+    }
+    if (error.response?.status >= 500) {
+      throw new Error(formatApiError(error, "Server Backend bermasalah saat membuat pengguna."));
+    }
+
+    // Fallback Mock create & persist
+    const { mockUsers, ensureMockStoreHydrated, persistMockState } = await import("./mock-store");
+    ensureMockStoreHydrated();
+    const newUser: any = {
+      id: `user-${Date.now().toString().slice(-4)}`,
+      companyId: "company-001",
+      name: body.name,
+      email: body.email,
+      username: body.email.split("@")[0],
+      role: body.role,
+      status: "ACTIVE",
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString(),
+    };
+    mockUsers.unshift(newUser);
+    persistMockState();
+    return newUser;
+  }
+}
+
+export async function updateCompanyUserApi(
+  userId: string,
+  payload: UpdateCompanyUserPayload
+): Promise<any> {
+  const body: Record<string, any> = {};
+  if (payload.name !== undefined) body.name = payload.name.trim();
+  if (payload.is_active !== undefined) body.is_active = payload.is_active;
+  if (payload.role !== undefined) body.role = payload.role;
+  if (payload.email !== undefined) body.email = payload.email.trim();
+  if (payload.password !== undefined && payload.password.trim() !== "") body.password = payload.password.trim();
+
+  try {
+    const response = await api.patch(`/user/${userId}`, body).catch(() =>
+      api.patch(`/bukuflow/user/${userId}`, body)
+    );
+
+    const item = response.data?.data || response.data?.user || response.data;
+    const isActive =
+      item?.is_active !== undefined
+        ? Boolean(item.is_active)
+        : payload.is_active !== undefined
+        ? payload.is_active
+        : true;
+
+    return {
+      id: String(item?.id || item?._id || item?.user_id || userId),
+      name: String(item?.name || payload.name || "-"),
+      email: String(item?.email || payload.email || ""),
+      username: String(item?.username || (item?.email || payload.email || "").split("@")[0] || ""),
+      role: item?.role || payload.role || "STAFF",
+      status: isActive ? "ACTIVE" : "INACTIVE",
+      is_active: isActive,
+      updatedAt: new Date().toISOString(),
+    };
+  } catch (error: any) {
+    const token = getAccessToken();
+    const isMock = !token || token.startsWith("mock-");
+
+    if (!isMock && error.response?.status >= 400) {
+      throw new Error(formatApiError(error, "Gagal memperbarui pengguna."));
+    }
+    if (error.response?.status >= 500) {
+      throw new Error(formatApiError(error, "Server Backend bermasalah saat memperbarui pengguna."));
+    }
+
+    // Fallback Mock update
+    const { mockUsers, ensureMockStoreHydrated, persistMockState } = await import("./mock-store");
+    ensureMockStoreHydrated();
+    const idx = mockUsers.findIndex((u: any) => u.id === userId);
+    if (idx !== -1) {
+      const nextStatus = payload.is_active !== undefined ? (payload.is_active ? "ACTIVE" : "INACTIVE") : mockUsers[idx].status;
+      mockUsers[idx] = {
+        ...mockUsers[idx],
+        name: payload.name !== undefined ? payload.name : mockUsers[idx].name,
+        email: payload.email !== undefined ? payload.email : mockUsers[idx].email,
+        username: payload.email ? payload.email.split("@")[0] : mockUsers[idx].username,
+        role: payload.role !== undefined ? payload.role : mockUsers[idx].role,
+        status: nextStatus as any,
+        updatedAt: new Date().toISOString(),
+      };
+      persistMockState();
+      return mockUsers[idx];
+    }
+    throw new Error("User tidak ditemukan.");
+  }
+}
+
+export async function deleteCompanyUserApi(userId: string): Promise<boolean> {
+  try {
+    await api.delete(`/user/${userId}`).catch(() =>
+      api.delete(`/bukuflow/user/${userId}`)
+    );
+    return true;
+  } catch {
+    const { mockUsers, ensureMockStoreHydrated, persistMockState } = await import("./mock-store");
+    ensureMockStoreHydrated();
+    const idx = mockUsers.findIndex((u: any) => u.id === userId);
+    if (idx !== -1) {
+      mockUsers.splice(idx, 1);
+      persistMockState();
+    }
+    return true;
+  }
+}
+
+export interface OfficeUserPayload {
+  name: string;
+  username?: string;
+  email?: string;
+  password?: string;
+  role: "COMPANY_ADMIN" | "STAFF" | "SUPER_ADMIN";
+  status?: "ACTIVE" | "INACTIVE";
+  companyId?: string;
+}
+
+export async function getOfficeUsersApi(companyId?: string): Promise<any[]> {
+  const res = await getCompanyUsersApi({ size: 100 });
+  if (companyId) {
+    return res.items.filter((u) => u.companyId === companyId);
+  }
+  return res.items;
+}
+
+export async function createOfficeUserApi(
+  companyId: string,
+  payload: OfficeUserPayload
+): Promise<any> {
+  return createCompanyUserApi({
+    name: payload.name,
+    email: payload.email || `${payload.username || "user"}@bukuflow.id`,
+    password: payload.password,
+    role: payload.role === "COMPANY_ADMIN" ? "COMPANY_ADMIN" : "STAFF",
+  });
+}
+
+export async function updateOfficeUserApi(
+  userId: string,
+  payload: Partial<OfficeUserPayload>,
+  companyId?: string
+): Promise<any> {
+  return updateCompanyUserApi(userId, {
+    name: payload.name,
+    role: payload.role === "COMPANY_ADMIN" ? "COMPANY_ADMIN" : payload.role === "STAFF" ? "STAFF" : undefined,
+    is_active: payload.status !== undefined ? payload.status === "ACTIVE" : undefined,
+  });
+}
+
+export async function deleteOfficeUserApi(
+  userId: string,
+  companyId?: string
+): Promise<boolean> {
+  return deleteCompanyUserApi(userId);
+}
+
+// =========================================================
+// COMPANY SETTINGS & POLICIES API
+// =========================================================
+
+export async function getCompanySettingsApi(companyId?: string): Promise<CompanySettings> {
+  const targetCompanyId = companyId || "company-001";
+  try {
+    const response = await api.get(`/bukuflow/company/settings`, {
+      params: { company_id: targetCompanyId },
+    }).catch(() => api.get(`/bukuflow/companies/${targetCompanyId}/settings`));
+
+    const item = response.data?.data || response.data;
+    if (item && (item.defaultLoanDuration || item.default_loan_duration || item.maxActiveLoans)) {
+      return {
+        id: String(item.id || `settings-${targetCompanyId}`),
+        companyId: String(item.company_id || item.companyId || targetCompanyId),
+        defaultLoanDuration: Number(item.default_loan_duration || item.defaultLoanDuration || 7),
+        maxActiveLoans: Number(item.max_active_loans || item.maxActiveLoans || 3),
+        dailyFineRate: Number(item.daily_fine_rate || item.dailyFineRate || 1000),
+        allowRenewal: item.allow_renewal !== undefined ? Boolean(item.allow_renewal) : (item.allowRenewal !== undefined ? Boolean(item.allowRenewal) : true),
+        maxRenewals: Number(item.max_renewals || item.maxRenewals || 1),
+        dateFormat: String(item.date_format || item.dateFormat || "DD/MM/YYYY"),
+        timezone: String(item.timezone || "Asia/Jakarta"),
+        createdAt: String(item.created_at || item.createdAt || new Date().toISOString()),
+        updatedAt: String(item.updated_at || item.updatedAt || new Date().toISOString()),
+      };
+    }
+    throw new Error("No settings in response");
+  } catch {
+    const { mockCompanySettingsStore, ensureMockStoreHydrated } = await import("./mock-store");
+    ensureMockStoreHydrated();
+    const existing = mockCompanySettingsStore[targetCompanyId];
+    if (existing) return existing;
+
+    const fallback: CompanySettings = {
+      id: `settings-${targetCompanyId}`,
+      companyId: targetCompanyId,
+      defaultLoanDuration: 7,
+      maxActiveLoans: 3,
+      dailyFineRate: 1000,
+      allowRenewal: true,
+      maxRenewals: 1,
+      dateFormat: "DD/MM/YYYY",
+      timezone: "Asia/Jakarta",
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString(),
+    };
+    mockCompanySettingsStore[targetCompanyId] = fallback;
+    return fallback;
+  }
+}
+
+export async function updateCompanySettingsApi(
+  companyId: string,
+  payload: Partial<CompanySettings>
+): Promise<CompanySettings> {
+  const targetCompanyId = companyId || "company-001";
+  try {
+    const response = await api.patch(`/bukuflow/company/settings`, payload, {
+      params: { company_id: targetCompanyId },
+    }).catch(() => api.patch(`/bukuflow/companies/${targetCompanyId}/settings`, payload));
+
+    const item = response.data?.data || response.data;
+    return {
+      id: String(item.id || `settings-${targetCompanyId}`),
+      companyId: String(item.company_id || targetCompanyId),
+      defaultLoanDuration: Number(item.default_loan_duration || payload.defaultLoanDuration || 7),
+      maxActiveLoans: Number(item.max_active_loans || payload.maxActiveLoans || 3),
+      dailyFineRate: Number(item.daily_fine_rate || payload.dailyFineRate || 1000),
+      allowRenewal: payload.allowRenewal !== undefined ? payload.allowRenewal : true,
+      maxRenewals: Number(payload.maxRenewals || 1),
+      dateFormat: String(payload.dateFormat || "DD/MM/YYYY"),
+      timezone: String(payload.timezone || "Asia/Jakarta"),
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString(),
+    };
+  } catch {
+    const { mockCompanySettingsStore, ensureMockStoreHydrated, persistMockState } = await import("./mock-store");
+    ensureMockStoreHydrated();
+    const current = mockCompanySettingsStore[targetCompanyId] || {
+      id: `settings-${targetCompanyId}`,
+      companyId: targetCompanyId,
+      defaultLoanDuration: 7,
+      maxActiveLoans: 3,
+      dailyFineRate: 1000,
+      allowRenewal: true,
+      maxRenewals: 1,
+      dateFormat: "DD/MM/YYYY",
+      timezone: "Asia/Jakarta",
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString(),
+    };
+
+    const updated: CompanySettings = {
+      ...current,
+      ...payload,
+      updatedAt: new Date().toISOString(),
+    };
+    mockCompanySettingsStore[targetCompanyId] = updated;
     persistMockState();
     return updated;
   }

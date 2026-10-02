@@ -259,6 +259,33 @@ export default function Sidebar({
                   </div>
                 </div>
               )}
+
+              {/* Pengaturan Instansi */}
+              {role === "COMPANY_ADMIN" && (
+                <div className="mt-7">
+                  <p className="px-3 pb-2 text-xs font-semibold uppercase tracking-wider text-slate-400">
+                    Pengaturan
+                  </p>
+
+                  <div className="space-y-1">
+                    <NavItem
+                      href="/settings/company"
+                      label="Konfigurasi Instansi"
+                      active={isActive("/settings/company")}
+                      onClick={onClose}
+                      disabled={!open}
+                    />
+
+                    <NavItem
+                      href="/settings/users"
+                      label="Kelola Pengguna"
+                      active={isActive("/settings/users")}
+                      onClick={onClose}
+                      disabled={!open}
+                    />
+                  </div>
+                </div>
+              )}
             </>
           )}
         </nav>
@@ -377,7 +404,7 @@ function NavIcon({ label }: { label: string }) {
   if (label === "Riwayat Transaksi") return <HistoryIcon />;
   if (label === "Member" || label === "Inspeksi Anggota") return <MemberIcon />;
   if (label === "Buku" || label === "Inspeksi Katalog") return <BookIcon />;
-  if (label === "Company" || label === "Manajemen Company") return <CompanyIcon />;
+  if (label === "Company" || label === "Manajemen Company" || label === "Konfigurasi Instansi") return <CompanyIcon />;
 
   return <UsersIcon />;
 }

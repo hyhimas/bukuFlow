@@ -19,6 +19,7 @@ import Pagination from "@/components/ui/Pagination";
 import type { ReturnLoanData, Loan } from "@/lib/types";
 import { getActiveReturnsApi, returnLoanItemsApi } from "@/lib/api";
 import { useToast } from "@/context/ToastContext";
+import BookCameraScannerModal from "@/components/scanner/BookCameraScannerModal";
 
 const PAGE_SIZE = 10;
 
@@ -47,6 +48,219 @@ export default function ReturnsPage() {
   const [successLoan, setSuccessLoan] = useState<Loan | null>(null);
   const [returnedCopies, setReturnedCopies] = useState<string[]>([]);
   const [showConfirmation, setShowConfirmation] = useState(false);
+
+  // =====================================================
+  // SCANNER & BARCODE STATE
+  // =====================================================
+  const [scannerModalOpen, setScannerModalOpen] = useState(false);
+  const [scanLoading, setScanLoading] = useState(false);
+
+  // =====================================================
+  // SCANNER & BARCODE LOOKUP HANDLER
+  // =====================================================
+  async function handleScanCode(scannedRaw: string) {
+    const rawCode = scannedRaw.trim();
+    if (!rawCode || scanLoading) return;
+    const code = rawCode.toUpperCase();
+    const cleanCode = code.replace(/[^A-Z0-9]/g, "");
+
+    setScanLoading(true);
+    try {
+      // 1. IF CURRENTLY HAS A SELECTED LOAN:
+      if (selectedLoan) {
+        // Check if scanned code matches a copy or book in current selected loan
+        const matchedItem = selectedLoan.items.find((it) => {
+          const cCode = it.bookCopy.code.toUpperCase();
+          const cId = it.bookCopy.id.toUpperCase();
+          const bCode = it.book.code.toUpperCase();
+          const bIsbn = (it.book.isbn || "").toUpperCase();
+          const lItemId = it.loanItem.id.toUpperCase();
+
+          return (
+            cCode === code ||
+            cId === code ||
+            cCode.replace(/[^A-Z0-9]/g, "") === cleanCode ||
+            lItemId === code ||
+            bCode === code ||
+            (bIsbn && bIsbn === code)
+          );
+        });
+
+        if (matchedItem) {
+          if (matchedItem.loanItem.status !== "BORROWED") {
+            toast.warning(
+              `Buku "${matchedItem.book.title}" (${matchedItem.bookCopy.code}) sudah dikembalikan sebelumnya.`
+            );
+            return;
+          }
+
+          if (selectedItemIds.includes(matchedItem.loanItem.id)) {
+            toast.info(`Copy ${matchedItem.bookCopy.code} sudah terpilih.`);
+            return;
+          }
+
+          // Select this copy item
+          setSelectedItemIds((prev) => [...prev, matchedItem.loanItem.id]);
+          toast.success(
+            `Copy ${matchedItem.bookCopy.code} (${matchedItem.book.title}) berhasil dipilih!`
+          );
+          return;
+        }
+      }
+
+      // 2. SEARCH ACROSS ALL ACTIVE LOANS
+      // A. Match Loan Number (e.g. TRX-...)
+      const matchedLoanByNumber = loans.find(
+        (it) =>
+          it.loan.loanNumber.toUpperCase() === code ||
+          it.loan.loanNumber.toUpperCase().replace(/[^A-Z0-9]/g, "") === cleanCode ||
+          it.loan.id.toUpperCase() === code
+      );
+
+      if (matchedLoanByNumber) {
+        selectLoan(matchedLoanByNumber);
+        // Auto-check all borrowed copies in this loan
+        const borrowedIds = matchedLoanByNumber.items
+          .filter((it) => it.loanItem.status === "BORROWED")
+          .map((it) => it.loanItem.id);
+        setSelectedItemIds(borrowedIds);
+        toast.success(
+          `Transaksi ${matchedLoanByNumber.loan.loanNumber} (${matchedLoanByNumber.member.name}) ditemukan!`
+        );
+        return;
+      }
+
+      // B. Match Book Copy code across all active loans
+      let foundLoan: ReturnLoanData | null = null;
+      let foundLoanItem: (typeof loans)[0]["items"][0] | null = null;
+
+      for (const loanData of loans) {
+        const item = loanData.items.find((it) => {
+          const cCode = it.bookCopy.code.toUpperCase();
+          const cId = it.bookCopy.id.toUpperCase();
+          const bCode = it.book.code.toUpperCase();
+          const bIsbn = (it.book.isbn || "").toUpperCase();
+          const lItemId = it.loanItem.id.toUpperCase();
+
+          return (
+            cCode === code ||
+            cId === code ||
+            cCode.replace(/[^A-Z0-9]/g, "") === cleanCode ||
+            lItemId === code ||
+            bCode === code ||
+            (bIsbn && bIsbn === code)
+          );
+        });
+
+        if (item) {
+          foundLoan = loanData;
+          foundLoanItem = item;
+          break;
+        }
+      }
+
+      if (foundLoan && foundLoanItem) {
+        selectLoan(foundLoan);
+        if (foundLoanItem.loanItem.status === "BORROWED") {
+          setSelectedItemIds([foundLoanItem.loanItem.id]);
+          toast.success(
+            `Ditemukan transaksi ${foundLoan.loan.loanNumber}! Copy ${foundLoanItem.bookCopy.code} dipilih.`
+          );
+        } else {
+          setSelectedItemIds([]);
+          toast.warning(
+            `Transaksi ${foundLoan.loan.loanNumber} ditemukan, namun copy ${foundLoanItem.bookCopy.code} sudah dikembalikan.`
+          );
+        }
+        return;
+      }
+
+      // C. Match Member Number / Name / Identity Number
+      const matchedLoanByMember = loans.find(
+        (it) =>
+          it.member.memberNumber.toUpperCase() === code ||
+          it.member.memberNumber.toUpperCase().replace(/[^A-Z0-9]/g, "") === cleanCode ||
+          it.member.id.toUpperCase() === code ||
+          (it.member.identityNumber && it.member.identityNumber.toUpperCase() === code) ||
+          it.member.name.toUpperCase() === code
+      );
+
+      if (matchedLoanByMember) {
+        selectLoan(matchedLoanByMember);
+        const borrowedIds = matchedLoanByMember.items
+          .filter((it) => it.loanItem.status === "BORROWED")
+          .map((it) => it.loanItem.id);
+        setSelectedItemIds(borrowedIds);
+        toast.success(
+          `Transaksi anggota ${matchedLoanByMember.member.name} (${matchedLoanByMember.loan.loanNumber}) ditemukan!`
+        );
+        return;
+      }
+
+      // If not found in active loans:
+      toast.error(`Tidak ditemukan transaksi aktif untuk barcode/kode "${rawCode}".`);
+    } catch (err: any) {
+      toast.error(err instanceof Error ? err.message : "Gagal memproses scan barcode.");
+    } finally {
+      setScanLoading(false);
+    }
+  }
+
+  // =====================================================
+  // GLOBAL HARDWARE USB BARCODE SCANNER LISTENER
+  // =====================================================
+  useEffect(() => {
+    if (successLoan || scannerModalOpen) {
+      return;
+    }
+
+    let buffer = "";
+    let lastKeyTime = 0;
+
+    const handleGlobalKeyDown = (e: KeyboardEvent) => {
+      if (e.key === "Escape" || e.key === "Tab" || e.key.startsWith("F")) {
+        return;
+      }
+
+      const activeEl = document.activeElement as HTMLElement | null;
+      const isInputFocused =
+        activeEl &&
+        (activeEl.tagName === "INPUT" ||
+          activeEl.tagName === "TEXTAREA" ||
+          activeEl.tagName === "SELECT");
+
+      const now = Date.now();
+      const elapsed = now - lastKeyTime;
+      lastKeyTime = now;
+
+      if (e.key === "Enter") {
+        const clean = buffer.trim();
+        if (clean.length >= 2) {
+          e.preventDefault();
+          buffer = "";
+          void handleScanCode(clean);
+        }
+        return;
+      }
+
+      // If user typing slowly in input, reset buffer
+      if (elapsed > 100) {
+        buffer = "";
+      }
+
+      if (e.key.length === 1 && !e.ctrlKey && !e.altKey && !e.metaKey) {
+        if (isInputFocused && elapsed > 60) {
+          return;
+        }
+        buffer += e.key;
+      }
+    };
+
+    window.addEventListener("keydown", handleGlobalKeyDown);
+    return () => {
+      window.removeEventListener("keydown", handleGlobalKeyDown);
+    };
+  }, [loans, selectedLoan, selectedItemIds, successLoan, scannerModalOpen, scanLoading]);
 
   function formatDate(value?: string) {
     if (!value) return "-";
@@ -348,15 +562,46 @@ export default function ReturnsPage() {
         <div className="mt-5 grid gap-5 md:grid-cols-[minmax(0,1.2fr)_minmax(320px,0.9fr)] lg:grid-cols-[minmax(0,1.55fr)_minmax(360px,0.85fr)] md:items-start">
           <div className="min-w-0">
             <Card className="p-4 sm:p-5">
-              <div>
-                <h3 className="text-lg font-semibold text-slate-900">
-                  1. Cari Transaksi
-                </h3>
+              <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                <div>
+                  <h3 className="text-lg font-semibold text-slate-900">
+                    1. Cari Transaksi
+                  </h3>
 
-                <p className="mt-1 text-sm text-slate-500">
-                  Cari berdasarkan nomor transaksi, nama anggota, judul buku,
-                  atau kode copy.
-                </p>
+                  <p className="mt-1 text-sm text-slate-500">
+                    Cari berdasarkan nomor transaksi, nama anggota, judul buku,
+                    atau kode copy.
+                  </p>
+                </div>
+
+                {isStaff && (
+                  <Button
+                    type="button"
+                    variant="secondary"
+                    onClick={() => setScannerModalOpen(true)}
+                    className="flex shrink-0 items-center justify-center gap-2 text-sm font-semibold border-blue-200 bg-blue-50/50 text-blue-700 hover:bg-blue-100 hover:text-blue-800"
+                  >
+                    <svg
+                      className="h-4 w-4"
+                      fill="none"
+                      viewBox="0 0 24 24"
+                      stroke="currentColor"
+                      strokeWidth={2}
+                    >
+                      <path
+                        strokeLinecap="round"
+                        strokeLinejoin="round"
+                        d="M3 9a2 2 0 012-2h.93a2 2 0 001.664-.89l.812-1.22A2 2 0 0110.07 4h3.86a2 2 0 011.664.89l.812 1.22A2 2 0 0018.07 7H19a2 2 0 012 2v9a2 2 0 01-2 2H5a2 2 0 01-2-2V9z"
+                      />
+                      <path
+                        strokeLinecap="round"
+                        strokeLinejoin="round"
+                        d="M15 13a3 3 0 11-6 0 3 3 0 016 0z"
+                      />
+                    </svg>
+                    <span>Scan Kamera</span>
+                  </Button>
+                )}
               </div>
 
               <div className="mt-4">
@@ -371,6 +616,8 @@ export default function ReturnsPage() {
                   placeholder="Contoh: TRX-001, Budi, Laskar Pelangi..."
                 />
               </div>
+
+              
 
               {error && (
                 <FeedbackPanel tone="error" className="mt-4">
@@ -821,6 +1068,16 @@ export default function ReturnsPage() {
           setShowConfirmation(false);
           void handleReturn();
         }}
+      />
+
+      <BookCameraScannerModal
+        isOpen={scannerModalOpen}
+        onClose={() => setScannerModalOpen(false)}
+        onScan={async (code) => {
+          await handleScanCode(code);
+        }}
+        title="Scan Barcode / QR Pengembalian"
+        subtitle="Arahkan kamera ke barcode/QR buku copy, nomor transaksi, atau kartu anggota."
       />
     </main>
   );
