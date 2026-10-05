@@ -234,7 +234,7 @@ export default function ProfilePage() {
                     ? "Super Admin"
                     : role === "COMPANY_ADMIN"
                     ? "Admin Perpustakaan"
-                    : "Staff Sirkulasi"}
+                    : "Staff Perpustakaan"}
                 </Badge>
               </div>
 

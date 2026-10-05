@@ -71,7 +71,7 @@ export default function Pagination({
   return (
     <nav
       aria-label="Navigasi Halaman"
-      className={`flex flex-col gap-3 border-t border-slate-200 bg-white px-4 py-3 sm:flex-row sm:items-center sm:justify-between sm:px-5 sm:py-3.5 ${className}`}
+      className={`flex flex-col gap-2.5 border-t border-slate-200 bg-white px-3.5 py-2.5 sm:flex-row sm:items-center sm:justify-between sm:px-5 sm:py-3.5 ${className}`}
     >
       {/* =========================================================
           INFO TEKS (RESPONSIF MOBILE / TABLET / DESKTOP)
@@ -99,14 +99,14 @@ export default function Pagination({
       {/* =========================================================
           KONTROL TOMBOL NAVIGASI
       ========================================================= */}
-      <div className="flex items-center justify-between gap-1.5 sm:justify-end sm:gap-1">
+      <div className="flex items-center justify-center sm:justify-end gap-1.5 sm:gap-1 w-full sm:w-auto">
         {/* TOMBOL SEBELUMNYA */}
         <button
           type="button"
           disabled={safeCurrentPage <= 1 || disabled}
           onClick={() => onPageChange(Math.max(1, safeCurrentPage - 1))}
           aria-label="Halaman sebelumnya"
-          className="flex h-9 items-center justify-center gap-1 rounded-lg border border-slate-200 bg-white px-3 text-xs font-medium text-slate-700 shadow-sm transition hover:bg-slate-50 hover:text-slate-900 focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 disabled:cursor-not-allowed disabled:opacity-40 sm:h-8 sm:px-2.5"
+          className="flex h-8 items-center justify-center gap-1 rounded-lg border border-slate-200 bg-white px-2.5 text-xs font-medium text-slate-700 shadow-2xs transition hover:bg-slate-50 hover:text-slate-900 focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 disabled:cursor-not-allowed disabled:opacity-40"
         >
           <svg
             viewBox="0 0 20 20"
@@ -130,7 +130,7 @@ export default function Pagination({
               return (
                 <span
                   key={`ellipsis-${idx}`}
-                  className="flex h-9 w-6 select-none items-center justify-center text-xs font-bold text-slate-400 sm:h-8 sm:w-7"
+                  className="flex h-8 w-6 select-none items-center justify-center text-xs font-bold text-slate-400 sm:w-7"
                   aria-hidden="true"
                 >
                   …
@@ -147,7 +147,7 @@ export default function Pagination({
                 disabled={disabled}
                 onClick={() => onPageChange(item)}
                 aria-current={isCurrent ? "page" : undefined}
-                className={`flex h-9 min-w-9 items-center justify-center rounded-lg px-2 text-xs font-semibold transition focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 sm:h-8 sm:min-w-8 ${
+                className={`flex h-8 min-w-8 items-center justify-center rounded-lg px-2 text-xs font-semibold transition focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 ${
                   isCurrent
                     ? "bg-blue-600 text-white shadow-sm ring-1 ring-blue-600"
                     : "border border-slate-200 bg-white text-slate-700 hover:border-slate-300 hover:bg-slate-50"
@@ -165,7 +165,7 @@ export default function Pagination({
           disabled={safeCurrentPage >= totalPages || disabled}
           onClick={() => onPageChange(Math.min(totalPages, safeCurrentPage + 1))}
           aria-label="Halaman berikutnya"
-          className="flex h-9 items-center justify-center gap-1 rounded-lg border border-slate-200 bg-white px-3 text-xs font-medium text-slate-700 shadow-sm transition hover:bg-slate-50 hover:text-slate-900 focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 disabled:cursor-not-allowed disabled:opacity-40 sm:h-8 sm:px-2.5"
+          className="flex h-8 items-center justify-center gap-1 rounded-lg border border-slate-200 bg-white px-2.5 text-xs font-medium text-slate-700 shadow-2xs transition hover:bg-slate-50 hover:text-slate-900 focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 disabled:cursor-not-allowed disabled:opacity-40"
         >
           <span className="hidden sm:inline">Berikutnya</span>
           <svg

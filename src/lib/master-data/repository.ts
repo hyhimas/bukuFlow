@@ -1,13 +1,4 @@
-import {
-  createBook,
-  getBookCopies,
-  getBookById,
-  getBookCopy,
-  updateBook,
-  changeBookStatus,
-  createBookCopy,
-  changeBookCopyStatus,
-} from "@/lib/mock-api";
+// Master Data Repository connecting directly to Backend API
 
 import {
   getMembersApi,
@@ -234,13 +225,9 @@ export const masterDataRepository = {
   },
 
   async getBookCopy(
-    id: string,
+    _id: string,
   ): Promise<BookCopy | null> {
-    try {
-      return await getBookCopy(id);
-    } catch {
-      return null;
-    }
+    return null;
   },
 
   async createBookCopy(

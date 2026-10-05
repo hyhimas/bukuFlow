@@ -375,11 +375,11 @@ export default function OfficeUsersPage() {
             <>
               {/* DESKTOP TABLE (>= lg) */}
               <div className="hidden lg:block overflow-x-auto">
-                <table className="w-full text-left text-sm text-slate-600 table-fixed">
+                <table className="w-full min-w-[950px] text-left text-sm text-slate-600 table-fixed">
                   <colgroup>
                     <col className="w-[240px]" />
                     <col className="w-[200px]" />
-                    <col />
+                    <col className="min-w-[200px]" />
                     <col className="w-[160px]" />
                     <col className="w-[120px]" />
                     <col className="w-[200px]" />

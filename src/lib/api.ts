@@ -526,20 +526,15 @@ export async function updateMemberApi(
   }
 }
 
-export async function changeMemberStatusApi(
-  memberId: string,
-  status: MemberStatus
-): Promise<Member> {
-  return updateMemberApi(memberId, { status });
-}
-
 export async function deleteMemberApi(memberId: string): Promise<{ id: string; status?: string }> {
   try {
     const response = await api
       .delete(`/member/${memberId}`)
       .catch((err) => {
         if (err.response?.status >= 500) throw err;
-        return api.delete(`/office/member/${memberId}`);
+        return api
+          .delete(`/office/member/${memberId}`)
+          .catch(() => api.delete(`/bukuflow/office/member/${memberId}`));
       });
 
     return response.data;
@@ -557,10 +552,66 @@ export async function deleteMemberApi(memberId: string): Promise<{ id: string; s
   }
 }
 
+export async function changeMemberStatusApi(
+  memberId: string,
+  status: MemberStatus
+): Promise<Member> {
+  if (status === "INACTIVE") {
+    try {
+      await deleteMemberApi(memberId);
+      try {
+        const member = await getMemberApi(memberId);
+        return {
+          id: member.id,
+          companyId: member.companyId,
+          memberNumber: member.memberNumber,
+          name: member.name,
+          memberType: member.memberType,
+          identityNumber: member.identityNumber,
+          phone: member.phone,
+          email: member.email,
+          status: "INACTIVE",
+          createdAt: member.createdAt,
+          updatedAt: new Date().toISOString(),
+        };
+      } catch {
+        return {
+          id: memberId,
+          companyId: "company-001",
+          memberNumber: "-",
+          name: "-",
+          memberType: "UMUM",
+          identityNumber: "-",
+          phone: "-",
+          email: "",
+          status: "INACTIVE",
+          createdAt: new Date().toISOString(),
+          updatedAt: new Date().toISOString(),
+        };
+      }
+    } catch (error: any) {
+      if (
+        error.response?.status >= 500 ||
+        error.code === "ECONNABORTED" ||
+        error.message?.includes("Server Error")
+      ) {
+        throw new Error(
+          formatApiError(error, "Gagal menonaktifkan anggota karena gangguan server.")
+        );
+      }
+      const { changeMemberStatus } = await import("./mock-api");
+      return await changeMemberStatus(memberId, status);
+    }
+  }
+
+  return updateMemberApi(memberId, { status });
+}
+
 function parseBookStatus(
   status: any,
   totalCopies: number,
-  availableCopies: number
+  availableCopies: number,
+  borrowedCopies?: number
 ): Book["status"] {
   if (typeof status === "string") {
     const s = status.toUpperCase().trim();
@@ -577,10 +628,14 @@ function parseBookStatus(
     return "INACTIVE";
   }
 
-  // Jika buku aktif dan seluruh copy sedang dipinjam
-  if (totalCopies > 0 && availableCopies === 0) {
+  if (availableCopies > 0) {
+    return "AVAILABLE";
+  }
+
+  if (borrowedCopies !== undefined && borrowedCopies > 0) {
     return "BORROWED";
   }
+
   return "AVAILABLE";
 }
 
@@ -1010,6 +1065,24 @@ export async function updateBookApi(
   }
 }
 
+export async function deleteBookApi(bookId: string): Promise<{ id: string; status?: string }> {
+  try {
+    const response = await api.delete(`/catalog/books/${bookId}`);
+    return response.data;
+  } catch (error: any) {
+    if (
+      error.response?.status >= 500 ||
+      error.code === "ECONNABORTED" ||
+      error.message?.includes("Server Error")
+    ) {
+      throw new Error(
+        formatApiError(error, "Gagal menghapus buku karena gangguan server.")
+      );
+    }
+    throw error;
+  }
+}
+
 export async function changeBookStatusApi(
   bookId: string,
   status: BookStatus
@@ -1031,25 +1104,8 @@ export async function changeBookStatusApi(
     }
   }
 
+  // Gunakan PATCH /catalog/books/{bookId} agar copies buku tetap utuh dan tidak terhapus oleh Backend
   return updateBookApi(bookId, { status });
-}
-
-export async function deleteBookApi(bookId: string): Promise<{ id: string; status?: string }> {
-  try {
-    const response = await api.delete(`/catalog/books/${bookId}`);
-    return response.data;
-  } catch (error: any) {
-    if (
-      error.response?.status >= 500 ||
-      error.code === "ECONNABORTED" ||
-      error.message?.includes("Server Error")
-    ) {
-      throw new Error(
-        formatApiError(error, "Gagal menghapus buku karena gangguan server.")
-      );
-    }
-    throw error;
-  }
 }
 
 export async function getBookCopiesApi(
@@ -1077,7 +1133,7 @@ export async function getBookCopiesApi(
       if (arrayVal) items = arrayVal as any[];
     }
 
-    return items.map((item: any) => ({
+    const mapped: BookCopy[] = items.map((item: any) => ({
       id: item._id || item.id || `copy-${bookId}-${Math.random().toString(36).slice(2)}`,
       companyId: item.company_id || item.companyId || compId,
       bookId: item.book_id || item.bookId || bookId,
@@ -1086,6 +1142,34 @@ export async function getBookCopiesApi(
       createdAt: item.created_at || new Date().toISOString(),
       updatedAt: item.updated_at || new Date().toISOString(),
     }));
+
+    // Deduplikasi copy buku berdasarkan code:
+    // Mencegah munculnya duplikat baris copy jika di database terdapat record lama (INACTIVE)
+    // dan record baru yang diaktifkan kembali (AVAILABLE/LOST/BORROWED).
+    const copyMap = new Map<string, BookCopy>();
+    for (const copy of mapped) {
+      const existing = copyMap.get(copy.code);
+      if (!existing) {
+        copyMap.set(copy.code, copy);
+      } else {
+        // Jika copy tersimpan INACTIVE dan copy ini bukan INACTIVE, ganti dengan yang aktif
+        if (existing.status === "INACTIVE" && copy.status !== "INACTIVE") {
+          copyMap.set(copy.code, copy);
+        } else if (existing.status !== "INACTIVE" && copy.status === "INACTIVE") {
+          // Tetap pertahankan copy yang aktif
+          continue;
+        } else {
+          // Jika sama statusnya, ambil yang paling baru
+          const existingTime = new Date(existing.updatedAt || existing.createdAt).getTime();
+          const newTime = new Date(copy.updatedAt || copy.createdAt).getTime();
+          if (newTime >= existingTime) {
+            copyMap.set(copy.code, copy);
+          }
+        }
+      }
+    }
+
+    return Array.from(copyMap.values());
   } catch (error: any) {
     if (
       error.response?.status >= 500 ||
@@ -1221,57 +1305,6 @@ export async function createBookCopyApi(
   return created[0];
 }
 
-export async function changeBookCopyStatusApi(
-  bookId: string,
-  copyId: string,
-  status: BookCopyStatus
-): Promise<BookCopy> {
-  // Aturan Bisnis PRD: Copy yang sedang BORROWED tidak boleh diubah statusnya ke arsip/nonaktif
-  try {
-    const copies = await getBookCopiesApi(bookId);
-    const targetCopy = copies.find((c) => c.id === copyId);
-    if (targetCopy && targetCopy.status === "BORROWED") {
-      throw new Error("Copy yang sedang dipinjam tidak dapat diubah statusnya.");
-    }
-  } catch (e: any) {
-    if (e.message?.includes("sedang dipinjam")) {
-      throw e;
-    }
-  }
-
-  try {
-    const response = await api.patch(
-      `/catalog/books/${bookId}/copies/${copyId}`,
-      {
-        status,
-      }
-    );
-
-    const item = response.data;
-    return {
-      id: item._id || item.id || copyId,
-      companyId: item.company_id || item.companyId || "company-001",
-      bookId: item.book_id || item.bookId || bookId,
-      code: item.copy_code || item.code || "-",
-      status: (item.status as BookCopyStatus) || status,
-      createdAt: item.created_at || new Date().toISOString(),
-      updatedAt: item.updated_at || new Date().toISOString(),
-    };
-  } catch (error: any) {
-    if (
-      error.response?.status >= 500 ||
-      error.code === "ECONNABORTED" ||
-      error.message?.includes("Server Error")
-    ) {
-      throw new Error(
-        formatApiError(error, "Gagal mengubah status copy buku karena gangguan server.")
-      );
-    }
-    const { changeBookCopyStatus } = await import("./mock-api");
-    return await changeBookCopyStatus(copyId, status);
-  }
-}
-
 export async function deleteBookCopyApi(
   bookId: string,
   copyId: string
@@ -1290,6 +1323,182 @@ export async function deleteBookCopyApi(
       );
     }
     throw error;
+  }
+}
+
+export async function changeBookCopyStatusApi(
+  bookId: string,
+  copyId: string,
+  status: BookCopyStatus
+): Promise<BookCopy> {
+  // Aturan Bisnis PRD: Copy yang sedang BORROWED tidak boleh diubah statusnya ke arsip/nonaktif
+  let targetCopy: BookCopy | undefined;
+  try {
+    const copies = await getBookCopiesApi(bookId);
+    targetCopy = copies.find((c) => c.id === copyId);
+    if (targetCopy && targetCopy.status === "BORROWED") {
+      throw new Error("Copy yang sedang dipinjam tidak dapat diubah statusnya.");
+    }
+  } catch (e: any) {
+    if (e.message?.includes("sedang dipinjam")) {
+      throw e;
+    }
+  }
+
+  // 1. KASUS INACTIVE (Tidak Aktif / Tidak Tersedia):
+  // Backend FastAPI melarang PATCH dengan status INACTIVE (melempar 400: 'Status BORROWED dan INACTIVE bukan update catalog').
+  // Di Backend, soft-delete / menonaktifkan copy dilakukan melalui endpoint DELETE /catalog/books/{bookId}/copies/{copyId}.
+  if (status === "INACTIVE") {
+    try {
+      await deleteBookCopyApi(bookId, copyId);
+      return {
+        id: copyId,
+        companyId: targetCopy?.companyId || "company-001",
+        bookId,
+        code: targetCopy?.code || "-",
+        status: "INACTIVE",
+        createdAt: targetCopy?.createdAt || new Date().toISOString(),
+        updatedAt: new Date().toISOString(),
+      };
+    } catch (error: any) {
+      if (
+        error.response?.status >= 500 ||
+        error.code === "ECONNABORTED" ||
+        error.message?.includes("Server Error")
+      ) {
+        throw new Error(
+          formatApiError(error, "Gagal menonaktifkan copy buku karena gangguan server.")
+        );
+      }
+      const { changeBookCopyStatus } = await import("./mock-api");
+      return await changeBookCopyStatus(copyId, status);
+    }
+  }
+
+  // 2. KASUS MENGAKTIFKAN KEMBALI COPY YANG INACTIVE (Menjadi Tersedia atau Hilang):
+  // Karena copy sebelumnya di-soft-delete (status INACTIVE) dan backend memfilter status != INACTIVE pada PATCH,
+  // memanggil PATCH akan menghasilkan 404. Maka kita langsung mendaftarkannya kembali via POST /copies
+  // sehingga bersih dan tidak memicu error 404 merah di DevTools!
+  if (targetCopy?.status === "INACTIVE" && targetCopy?.code) {
+    try {
+      const payload = [
+        {
+          copy_code: targetCopy.code,
+          location: "-",
+          status: status,
+        },
+      ];
+      let postRes: any;
+      try {
+        postRes = await api.post(`/catalog/books/${bookId}/copies`, payload);
+      } catch (arrErr: any) {
+        if (arrErr.response?.status === 422) {
+          postRes = await api.post(`/catalog/books/${bookId}/copies`, payload[0]);
+        } else {
+          throw arrErr;
+        }
+      }
+      const raw =
+        postRes.data?.items ||
+        postRes.data?.copies ||
+        postRes.data?.data ||
+        postRes.data;
+      const item = Array.isArray(raw) ? raw[0] : (raw?.item || raw);
+      return {
+        id: item?._id || item?.id || copyId,
+        companyId: item?.company_id || item?.companyId || targetCopy.companyId || "company-001",
+        bookId,
+        code: item?.copy_code || item?.code || targetCopy.code,
+        status: (item?.status as BookCopyStatus) || status,
+        createdAt: item?.created_at || new Date().toISOString(),
+        updatedAt: item?.updated_at || new Date().toISOString(),
+      };
+    } catch (postErr: any) {
+      if (
+        postErr.response?.status >= 500 ||
+        postErr.code === "ECONNABORTED" ||
+        postErr.message?.includes("Server Error")
+      ) {
+        throw new Error(
+          formatApiError(postErr, "Gagal mengaktifkan copy buku karena gangguan server.")
+        );
+      }
+      const { changeBookCopyStatus } = await import("./mock-api");
+      return await changeBookCopyStatus(copyId, status);
+    }
+  }
+
+  // 3. KASUS COPY AKTIF (Ubah antara AVAILABLE <-> LOST):
+  try {
+    const response = await api.patch(
+      `/catalog/books/${bookId}/copies/${copyId}`,
+      {
+        status,
+      }
+    );
+
+    const item = response.data;
+    return {
+      id: item._id || item.id || copyId,
+      companyId: item.company_id || item.companyId || "company-001",
+      bookId: item.book_id || item.bookId || bookId,
+      code: item.copy_code || item.code || targetCopy?.code || "-",
+      status: (item.status as BookCopyStatus) || status,
+      createdAt: item.created_at || new Date().toISOString(),
+      updatedAt: item.updated_at || new Date().toISOString(),
+    };
+  } catch (error: any) {
+    // Fallback jika backend merespons 404 (karena copy ternyata soft-deleted)
+    if ((error.response?.status === 404 || error.response?.status === 400) && targetCopy?.code) {
+      try {
+        const payload = [
+          {
+            copy_code: targetCopy.code,
+            location: "-",
+            status: status,
+          },
+        ];
+        let postRes: any;
+        try {
+          postRes = await api.post(`/catalog/books/${bookId}/copies`, payload);
+        } catch (arrErr: any) {
+          if (arrErr.response?.status === 422) {
+            postRes = await api.post(`/catalog/books/${bookId}/copies`, payload[0]);
+          } else {
+            throw arrErr;
+          }
+        }
+        const raw =
+          postRes.data?.items ||
+          postRes.data?.copies ||
+          postRes.data?.data ||
+          postRes.data;
+        const item = Array.isArray(raw) ? raw[0] : (raw?.item || raw);
+        return {
+          id: item?._id || item?.id || copyId,
+          companyId: item?.company_id || item?.companyId || targetCopy.companyId || "company-001",
+          bookId,
+          code: item?.copy_code || item?.code || targetCopy.code,
+          status: (item?.status as BookCopyStatus) || status,
+          createdAt: item?.created_at || new Date().toISOString(),
+          updatedAt: item?.updated_at || new Date().toISOString(),
+        };
+      } catch (postErr) {
+        // Lanjut ke fallback di bawah jika gagal
+      }
+    }
+
+    if (
+      error.response?.status >= 500 ||
+      error.code === "ECONNABORTED" ||
+      error.message?.includes("Server Error")
+    ) {
+      throw new Error(
+        formatApiError(error, "Gagal mengubah status copy buku karena gangguan server.")
+      );
+    }
+    const { changeBookCopyStatus } = await import("./mock-api");
+    return await changeBookCopyStatus(copyId, status);
   }
 }
 

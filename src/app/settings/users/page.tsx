@@ -528,13 +528,13 @@ export default function UsersSettingsPage() {
             ========================================================== */}
             <Card className="hidden lg:block overflow-hidden">
               <div className="overflow-x-auto">
-                <table className="w-full table-fixed text-left text-sm text-slate-600">
+                <table className="w-full min-w-[850px] table-fixed text-left text-sm text-slate-600">
                   <colgroup>
-                    <col className="w-[24%]" />
-                    <col className="w-[24%]" />
-                    <col className="w-[20%]" />
-                    <col className="w-[12%]" />
-                    <col className="w-[20%]" />
+                    <col className="w-[220px]" />
+                    <col className="w-[200px]" />
+                    <col className="w-[160px]" />
+                    <col className="w-[110px]" />
+                    <col className="w-[160px]" />
                   </colgroup>
                   <thead className="border-b border-slate-200 bg-slate-50/80 text-xs font-semibold uppercase tracking-wider text-slate-500">
                     <tr>

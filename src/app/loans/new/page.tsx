@@ -25,7 +25,6 @@ import type { Book, BookCopy, Loan, Member } from "@/lib/types";
 import LoadingState from "@/components/ui/LoadingState";
 import Pagination from "@/components/ui/Pagination";
 import { useToast } from "@/context/ToastContext";
-import BookCameraScannerModal from "@/components/scanner/BookCameraScannerModal";
 
 type MemberFormErrors = {
   name: string;
@@ -177,7 +176,6 @@ export default function NewLoanPage() {
   // SCANNER & BARCODE STATE
   // =====================================================
 
-  const [scannerModalOpen, setScannerModalOpen] = useState(false);
   const [scanLoading, setScanLoading] = useState(false);
   const [highlightedBookId, setHighlightedBookId] = useState<string | null>(
     null,
@@ -1637,18 +1635,11 @@ export default function NewLoanPage() {
                       2. Pilih Buku
                     </h3>
                     <p className="mt-0.5 text-xs sm:text-sm text-slate-500">
-                      Cari buku atau arahkan scanner USB / kamera.
+                      Cari buku atau arahkan scanner USB.
                     </p>
                   </div>
 
-                  <button
-                    type="button"
-                    onClick={() => setScannerModalOpen(true)}
-                    className="inline-flex shrink-0 items-center gap-1.5 rounded-lg border border-blue-200 bg-blue-50/80 px-3 py-1.5 text-xs font-semibold text-blue-700 transition hover:bg-blue-100 hover:border-blue-300 focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-500"
-                  >
-                    <span aria-hidden="true" className="text-sm">📷</span>
-                    <span>Scan Kamera</span>
-                  </button>
+                  
                 </div>
 
                 {/* SEARCH BOOK */}
@@ -2629,19 +2620,8 @@ export default function NewLoanPage() {
           </div>
         )}
 
-        {/* =====================================================
-            CAMERA SCANNER MODAL
-        ===================================================== */}
 
-        <BookCameraScannerModal
-          isOpen={scannerModalOpen}
-          onClose={() => setScannerModalOpen(false)}
-          onScan={async (code) => {
-            await handleScanCode(code);
-          }}
-          title="Scan Barcode / QR Code Buku"
-          subtitle="Arahkan kamera ke barcode stiker buku untuk memilih secara instan"
-        />
+        
       </div>
     </main>
   );

@@ -257,30 +257,31 @@ export default function BookBarcodePrintModal({
         {/* Header (No Print) */}
         <div className="border-b border-slate-200 bg-white print:hidden">
           {/* Top title & close bar */}
-          <div className="flex items-center justify-between px-5 py-3.5 sm:py-4">
-            <div className="flex items-center gap-3 min-w-0">
-              <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-blue-50 text-blue-600">
+          <div className="flex items-start justify-between gap-2.5 px-4 py-3 sm:px-5 sm:py-4">
+            <div className="flex items-start sm:items-center gap-2.5 sm:gap-3 min-w-0 flex-1">
+              <div className="flex h-8 w-8 sm:h-10 sm:w-10 shrink-0 items-center justify-center rounded-lg sm:rounded-xl bg-blue-50 text-blue-600 mt-0.5 sm:mt-0">
                 <svg
-                  width="20"
-                  height="20"
+                  width="18"
+                  height="18"
                   viewBox="0 0 24 24"
                   fill="none"
                   stroke="currentColor"
                   strokeWidth="2"
                   strokeLinecap="round"
                   strokeLinejoin="round"
+                  className="sm:h-5 sm:w-5"
                 >
                   <path d="M3 5v14M8 5v14M12 5v14M17 5v14M21 5v14" />
                 </svg>
               </div>
-              <div className="min-w-0">
+              <div className="min-w-0 flex-1">
                 <h3
                   id="barcode-print-modal-title"
-                  className="truncate text-base sm:text-lg font-bold text-slate-900"
+                  className="text-sm sm:text-base md:text-lg font-bold text-slate-900 leading-snug break-words"
                 >
                   {title}
                 </h3>
-                <p className="truncate text-xs text-slate-500">
+                <p className="text-[11px] sm:text-xs text-slate-500 mt-0.5 leading-relaxed break-words">
                   Total {items.length} label siap dicetak pada kertas stiker / HVS A4
                 </p>
               </div>
@@ -289,7 +290,7 @@ export default function BookBarcodePrintModal({
             <button
               type="button"
               onClick={onClose}
-              className="rounded-lg p-1.5 text-slate-400 transition hover:bg-slate-100 hover:text-slate-600 focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 shrink-0"
+              className="rounded-lg p-1.5 text-slate-400 transition hover:bg-slate-100 hover:text-slate-600 focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 shrink-0 mt-0.5 sm:mt-0"
               title="Tutup Modal"
             >
               <span aria-hidden="true" className="text-xl leading-none">

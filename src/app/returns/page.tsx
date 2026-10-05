@@ -19,7 +19,6 @@ import Pagination from "@/components/ui/Pagination";
 import type { ReturnLoanData, Loan } from "@/lib/types";
 import { getActiveReturnsApi, returnLoanItemsApi } from "@/lib/api";
 import { useToast } from "@/context/ToastContext";
-import BookCameraScannerModal from "@/components/scanner/BookCameraScannerModal";
 
 const PAGE_SIZE = 10;
 
@@ -52,7 +51,6 @@ export default function ReturnsPage() {
   // =====================================================
   // SCANNER & BARCODE STATE
   // =====================================================
-  const [scannerModalOpen, setScannerModalOpen] = useState(false);
   const [scanLoading, setScanLoading] = useState(false);
 
   // =====================================================
@@ -210,7 +208,7 @@ export default function ReturnsPage() {
   // GLOBAL HARDWARE USB BARCODE SCANNER LISTENER
   // =====================================================
   useEffect(() => {
-    if (successLoan || scannerModalOpen) {
+    if (successLoan ) {
       return;
     }
 
@@ -260,7 +258,7 @@ export default function ReturnsPage() {
     return () => {
       window.removeEventListener("keydown", handleGlobalKeyDown);
     };
-  }, [loans, selectedLoan, selectedItemIds, successLoan, scannerModalOpen, scanLoading]);
+  }, [loans, selectedLoan, selectedItemIds, successLoan, scanLoading]);
 
   function formatDate(value?: string) {
     if (!value) return "-";
@@ -588,34 +586,6 @@ export default function ReturnsPage() {
                   </p>
                 </div>
 
-                {isStaff && (
-                  <Button
-                    type="button"
-                    variant="secondary"
-                    onClick={() => setScannerModalOpen(true)}
-                    className="flex shrink-0 items-center justify-center gap-2 text-sm font-semibold border-blue-200 bg-blue-50/50 text-blue-700 hover:bg-blue-100 hover:text-blue-800"
-                  >
-                    <svg
-                      className="h-4 w-4"
-                      fill="none"
-                      viewBox="0 0 24 24"
-                      stroke="currentColor"
-                      strokeWidth={2}
-                    >
-                      <path
-                        strokeLinecap="round"
-                        strokeLinejoin="round"
-                        d="M3 9a2 2 0 012-2h.93a2 2 0 001.664-.89l.812-1.22A2 2 0 0110.07 4h3.86a2 2 0 011.664.89l.812 1.22A2 2 0 0018.07 7H19a2 2 0 012 2v9a2 2 0 01-2 2H5a2 2 0 01-2-2V9z"
-                      />
-                      <path
-                        strokeLinecap="round"
-                        strokeLinejoin="round"
-                        d="M15 13a3 3 0 11-6 0 3 3 0 016 0z"
-                      />
-                    </svg>
-                    <span>Scan Kamera</span>
-                  </Button>
-                )}
               </div>
 
               <div className="mt-4">
@@ -1088,15 +1058,7 @@ export default function ReturnsPage() {
         }}
       />
 
-      <BookCameraScannerModal
-        isOpen={scannerModalOpen}
-        onClose={() => setScannerModalOpen(false)}
-        onScan={async (code) => {
-          await handleScanCode(code);
-        }}
-        title="Scan Barcode / QR Pengembalian"
-        subtitle="Arahkan kamera ke barcode/QR buku copy, nomor transaksi, atau kartu anggota."
-      />
+      
     </main>
   );
 }

@@ -18,6 +18,7 @@ import {
   searchOfficeMembersApi,
   createOfficeMemberApi,
   updateOfficeMemberApi,
+  deleteMemberApi,
   getOfficeMemberDetailApi,
   getCompaniesApi,
 } from "@/lib/api";
@@ -343,9 +344,13 @@ export default function OfficeMembersPage() {
 
     setStatusLoading(true);
     try {
-      await updateOfficeMemberApi(selectedCompanyId, confirmMember.id, {
-        status: confirmStatus,
-      });
+      if (confirmStatus === "INACTIVE") {
+        await deleteMemberApi(confirmMember.id);
+      } else {
+        await updateOfficeMemberApi(selectedCompanyId, confirmMember.id, {
+          status: confirmStatus,
+        });
+      }
 
       toast.success(
         confirmStatus === "ACTIVE"
@@ -592,15 +597,15 @@ export default function OfficeMembersPage() {
 
           {/* DESKTOP TABLE */}
           {members.length > 0 && (
-            <div className="relative hidden overflow-hidden lg:block">
-              <table className="w-full table-fixed text-sm">
+            <div className="relative hidden overflow-x-auto lg:block">
+              <table className="w-full min-w-[950px] table-fixed text-sm">
                 <colgroup>
-                  <col className="w-[125px]" />
-                  <col />
+                  <col className="w-[160px]" />
+                  <col className="min-w-[200px]" />
                   <col className="w-[180px]" />
-                  <col className="w-[140px]" />
-                  <col className="w-[125px]" />
-                  <col className="w-[255px]" />
+                  <col className="w-[150px]" />
+                  <col className="w-[120px]" />
+                  <col className="w-[280px]" />
                 </colgroup>
 
                 <thead className="border-b border-slate-200 bg-slate-50">
@@ -623,7 +628,10 @@ export default function OfficeMembersPage() {
                         key={member.id}
                         className="transition hover:bg-slate-50/70"
                       >
-                        <td className="px-4 py-3 font-semibold text-slate-900">
+                        <td
+                          className="truncate px-4 py-3 text-xs font-semibold text-slate-900"
+                          title={member.memberNumber}
+                        >
                           {member.memberNumber}
                         </td>
 

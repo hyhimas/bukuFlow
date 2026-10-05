@@ -737,15 +737,15 @@ export default function MasterMembersPage() {
           ================================================= */}
 
           {members.length > 0 && (
-            <div className="relative hidden overflow-hidden lg:block">
+            <div className="relative hidden overflow-x-auto lg:block">
               <table className="w-full table-fixed text-sm">
                 <colgroup>
-                  <col className="w-[125px]" />
-                  <col />
-                  <col className="w-[180px]" />
-                  <col className="w-[140px]" />
-                  <col className="w-[125px]" />
-                  <col className="w-[290px]" />
+                  <col className="w-[130px]" />
+                  <col className="w-auto" />
+                  <col className="w-[170px]" />
+                  <col className="w-[150px]" />
+                  <col className="w-[110px]" />
+                  <col className="w-[270px]" />
                 </colgroup>
 
                 <thead className="border-b border-slate-200 bg-slate-50">
@@ -773,7 +773,7 @@ export default function MasterMembersPage() {
                         key={member.id}
                         className="transition hover:bg-slate-50/70"
                       >
-                        <td className="px-4 py-3 font-semibold text-slate-900">
+                        <td className="px-4 py-3 font-semibold text-slate-900 truncate text-xs" title={member.memberNumber}>
                           {member.memberNumber}
                         </td>
 
@@ -789,17 +789,17 @@ export default function MasterMembersPage() {
                           )}
                         </td>
 
-                        <td className="px-4 py-3 text-slate-600">
+                        <td className="px-4 py-3 text-slate-600 whitespace-nowrap">
                           {member.identityNumber}
                         </td>
 
-                        <td className="px-4 py-3 text-slate-600">
+                        <td className="px-4 py-3 text-slate-600 whitespace-nowrap">
                           {member.phone}
                         </td>
 
                         {/* STATUS */}
 
-                        <td className="px-4 py-3">
+                        <td className="px-4 py-3 whitespace-nowrap">
                           <Badge variant={isActive ? "success" : "neutral"}>
                             {isActive ? "Aktif" : "Nonaktif"}
                           </Badge>
@@ -807,8 +807,8 @@ export default function MasterMembersPage() {
 
                         {/* ACTION */}
 
-                        <td className="px-4 py-3 text-right">
-                          <div className="flex items-center justify-end gap-1.5">
+                        <td className="px-4 py-3 text-right whitespace-nowrap">
+                          <div className="flex items-center justify-end gap-1.5 shrink-0">
                             <button
                               type="button"
                               onClick={() => void openDetail(member)}

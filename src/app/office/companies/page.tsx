@@ -370,14 +370,14 @@ export default function OfficeCompaniesPage() {
             <>
               {/* DESKTOP TABLE VIEW (>= lg) */}
               <div className="hidden lg:block overflow-x-auto">
-                <table className="w-full text-left text-sm text-slate-600 table-fixed">
+                <table className="w-full min-w-[950px] text-left text-sm text-slate-600 table-fixed">
                   <colgroup>
                     <col className="w-[260px]" />
-                    <col className="w-[120px]" />
-                    <col />
+                    <col className="w-[140px]" />
+                    <col className="min-w-[200px]" />
                     <col className="w-[140px]" />
                     <col className="w-[130px]" />
-                    <col className="w-[190px]" />
+                    <col className="w-[200px]" />
                   </colgroup>
                   <thead className="border-b border-slate-200 bg-slate-50/80 text-[11px] font-bold uppercase tracking-wider text-slate-500">
                     <tr>

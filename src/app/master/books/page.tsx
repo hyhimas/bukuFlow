@@ -95,6 +95,8 @@ export default function MasterBooksPage() {
   const [detailBook, setDetailBook] = useState<Book | null>(null);
 
   const [detailCopies, setDetailCopies] = useState<BookCopy[]>([]);
+  const [copyPage, setCopyPage] = useState<number>(1);
+  const COPY_PAGE_SIZE = 5;
 
   const [detailLoading, setDetailLoading] = useState(false);
 
@@ -527,6 +529,7 @@ export default function MasterBooksPage() {
   async function openDetail(book: Book) {
     setDetailBook(book);
     setDetailCopies([]);
+    setCopyPage(1);
     setDetailError("");
     setDetailLoading(true);
 
@@ -546,12 +549,13 @@ export default function MasterBooksPage() {
       if (copies.length > 0) {
         const total = copies.length;
         const available = copies.filter((c) => c.status === "AVAILABLE").length;
+        const borrowed = copies.filter((c) => c.status === "BORROWED").length;
         const status =
           activeBook.status === "INACTIVE"
             ? "INACTIVE"
-            : available > 0
-            ? "AVAILABLE"
-            : "BORROWED";
+            : available === 0 && borrowed > 0
+            ? "BORROWED"
+            : "AVAILABLE";
 
         setDetailBook({
           ...activeBook,
@@ -596,12 +600,13 @@ export default function MasterBooksPage() {
         if (copies.length > 0) {
           const total = copies.length;
           const available = copies.filter((c) => c.status === "AVAILABLE").length;
+          const borrowed = copies.filter((c) => c.status === "BORROWED").length;
           const status =
             baseBook.status === "INACTIVE"
               ? "INACTIVE"
-              : available > 0
-              ? "AVAILABLE"
-              : "BORROWED";
+              : available === 0 && borrowed > 0
+              ? "BORROWED"
+              : "AVAILABLE";
 
           setDetailBook({
             ...baseBook,
@@ -670,6 +675,11 @@ export default function MasterBooksPage() {
   // =====================================================
 
   function handleCopyStatusChange(copy: BookCopy, nextStatus: BookCopyStatus) {
+    if (detailBook?.status === "INACTIVE") {
+      toast.warning("Buku sedang diarsipkan. Aktifkan buku terlebih dahulu untuk mengubah status copy.");
+      return;
+    }
+
     if (copy.status === "BORROWED") {
       return;
     }
@@ -714,6 +724,15 @@ export default function MasterBooksPage() {
 
   async function handleChangeCopyStatus() {
     if (!confirmCopy || !confirmCopyStatus) {
+      return;
+    }
+
+    if (detailBook?.status === "INACTIVE") {
+      toast.warning(
+        "Buku sedang diarsipkan. Aktifkan buku terlebih dahulu untuk mengubah status copy.",
+      );
+      setConfirmCopy(null);
+      setConfirmCopyStatus(null);
       return;
     }
 
@@ -1174,19 +1193,19 @@ export default function MasterBooksPage() {
             <div className="relative hidden overflow-x-auto lg:block">
               <table className="w-full text-left text-sm text-slate-600 table-fixed">
                 <colgroup>
-                  <col className="w-[80px]" />
-                  <col />
                   <col className="w-[140px]" />
-                  <col className="w-[85px]" />
+                  <col className="w-auto" />
                   <col className="w-[110px]" />
-                  <col className="w-[340px]" />
+                  <col className="w-[70px]" />
+                  <col className="w-[110px]" />
+                  <col className="w-[310px]" />
                 </colgroup>
                 <thead className="border-b border-slate-200 bg-slate-50 text-[11px] font-bold uppercase tracking-wider text-slate-500">
                   <tr>
-                    <th className="px-3 py-3">Kode</th>
-                    <th className="px-3 py-3">Buku</th>
+                    <th className="px-3.5 py-3">Kode</th>
+                    <th className="px-3.5 py-3">Buku</th>
                     <th className="px-3 py-3">Kategori</th>
-                    <th className="px-3 py-3 text-center">Copy</th>
+                    <th className="px-2 py-3 text-center">Copy</th>
                     <th className="px-3 py-3">Status</th>
                     <th className="px-3 py-3 text-right">Aksi</th>
                   </tr>
@@ -1201,31 +1220,31 @@ export default function MasterBooksPage() {
                         key={book.id}
                         className="transition hover:bg-slate-50/70"
                       >
-                        <td className="px-3 py-3 font-semibold text-slate-900 whitespace-nowrap text-xs">
+                        <td className="px-3.5 py-3 font-semibold text-slate-900 truncate text-xs" title={book.code}>
                           {book.code}
                         </td>
 
-                        <td className="px-3 py-3 min-w-0">
+                        <td className="px-3.5 py-3 min-w-0">
                           <p className="truncate font-semibold text-slate-800 text-xs sm:text-sm" title={book.title}>
                             {book.title}
                           </p>
 
-                          <p className="mt-0.5 truncate text-[11px] text-slate-400">
-                            {book.author && book.author !== "-"
-                              ? book.isbn && book.isbn !== "-"
+                          {(book.author && book.author !== "-") || (book.isbn && book.isbn !== "-") ? (
+                            <p className="mt-0.5 truncate text-[11px] text-slate-400">
+                              {book.author && book.author !== "-" && book.isbn && book.isbn !== "-"
                                 ? `${book.author} · ISBN ${book.isbn}`
-                                : book.author
-                              : book.isbn && book.isbn !== "-"
-                              ? `ISBN ${book.isbn}`
-                              : "-"}
-                          </p>
+                                : book.author && book.author !== "-"
+                                ? book.author
+                                : `ISBN ${book.isbn}`}
+                            </p>
+                          ) : null}
                         </td>
 
                         <td className="px-3 py-3 text-slate-600 truncate text-xs">
                           {book.category ?? "-"}
                         </td>
 
-                        <td className="px-3 py-3 whitespace-nowrap text-xs text-center">
+                        <td className="px-2 py-3 whitespace-nowrap text-xs text-center">
                           <span className="font-bold text-slate-900">
                             {book.availableCopies}
                           </span>
@@ -1249,13 +1268,13 @@ export default function MasterBooksPage() {
                         </td>
 
                         <td className="px-3 py-3 text-right whitespace-nowrap">
-                          <div className="flex items-center justify-end gap-1.5">
+                          <div className="flex items-center justify-end gap-1">
                             <button
                               type="button"
                               onClick={() => void openDetail(book)}
-                              className="inline-flex items-center gap-1 rounded-lg border border-slate-200 bg-white px-2 py-1.5 text-xs font-semibold text-slate-700 shadow-2xs transition hover:bg-slate-50 hover:border-slate-300 focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-500"
+                              className="inline-flex items-center gap-1 rounded-lg border border-slate-200 bg-white px-2 py-1 text-xs font-semibold text-slate-700 shadow-2xs transition hover:bg-slate-50 hover:border-slate-300 focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-500"
                             >
-                              <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
                                 <path d="M2 12s3-7 10-7 10 7 10 7-3 7-10 7-10-7-10-7Z" />
                                 <circle cx="12" cy="12" r="3" />
                               </svg>
@@ -1266,9 +1285,9 @@ export default function MasterBooksPage() {
                               type="button"
                               onClick={() => void handlePrintBookCopies(book)}
                               title="Cetak Barcode & QR Code Semua Copy"
-                              className="inline-flex items-center gap-1 rounded-lg border border-slate-200 bg-white px-2 py-1.5 text-xs font-semibold text-slate-700 shadow-2xs transition hover:bg-slate-50 hover:border-slate-300 focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-500"
+                              className="inline-flex items-center gap-1 rounded-lg border border-slate-200 bg-white px-2 py-1 text-xs font-semibold text-slate-700 shadow-2xs transition hover:bg-slate-50 hover:border-slate-300 focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-500"
                             >
-                              <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
                                 <path d="M3 5v14M8 5v14M12 5v14M17 5v14M21 5v14" />
                               </svg>
                               <span>Barcode</span>
@@ -1277,9 +1296,9 @@ export default function MasterBooksPage() {
                             <button
                               type="button"
                               onClick={() => openEditForm(book)}
-                              className="inline-flex items-center gap-1 rounded-lg border border-slate-200 bg-white px-2 py-1.5 text-xs font-semibold text-slate-700 shadow-2xs transition hover:bg-slate-50 hover:border-slate-300 focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-500"
+                              className="inline-flex items-center gap-1 rounded-lg border border-slate-200 bg-white px-2 py-1 text-xs font-semibold text-slate-700 shadow-2xs transition hover:bg-slate-50 hover:border-slate-300 focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-500"
                             >
-                              <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
                                 <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7" />
                                 <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z" />
                               </svg>
@@ -1289,7 +1308,7 @@ export default function MasterBooksPage() {
                             <button
                               type="button"
                               onClick={() => openBookStatusConfirm(book)}
-                              className={`inline-flex items-center gap-1 rounded-lg border px-2 py-1.5 text-xs font-semibold shadow-2xs transition focus:outline-none focus-visible:ring-2 ${
+                              className={`inline-flex items-center gap-1 rounded-lg border px-2 py-1 text-xs font-semibold shadow-2xs transition focus:outline-none focus-visible:ring-2 ${
                                 isInactive
                                   ? "border-emerald-200 bg-emerald-50 text-emerald-700 hover:bg-emerald-100 hover:border-emerald-300 focus-visible:ring-emerald-500"
                                   : "border-amber-200 bg-amber-50 text-amber-700 hover:bg-amber-100 hover:border-amber-300 focus-visible:ring-amber-500"
@@ -1297,7 +1316,7 @@ export default function MasterBooksPage() {
                             >
                               {isInactive ? (
                                 <>
-                                  <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                                  <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
                                     <path d="M22 11.08V12a10 10 0 1 1-5.93-9.14" />
                                     <polyline points="22 4 12 14.01 9 11.01" />
                                   </svg>
@@ -1306,8 +1325,8 @@ export default function MasterBooksPage() {
                               ) : (
                                 <>
                                   <svg
-                                    width="13"
-                                    height="13"
+                                    width="12"
+                                    height="12"
                                     viewBox="0 0 24 24"
                                     fill="none"
                                     stroke="currentColor"
@@ -1746,23 +1765,23 @@ export default function MasterBooksPage() {
           >
             {/* HEADER */}
 
-            <div className="border-b border-slate-200 px-5 py-5 sm:px-6">
-              <div className="flex items-start justify-between gap-4">
+            <div className="border-b border-slate-200 px-4 py-4 sm:px-6 sm:py-5">
+              <div className="flex items-start justify-between gap-3">
                 <div className="min-w-0">
-                  <p className="text-xs font-medium text-slate-400">
+                  <p className="text-[11px] font-medium text-slate-400 font-mono">
                     {detailBook.code}
                   </p>
 
                   <h2
                     id="book-detail-title"
-                    className="mt-0.5 truncate text-xl font-bold text-slate-900"
+                    className="mt-0.5 text-base sm:text-xl font-bold text-slate-900 leading-snug break-words"
                   >
                     {detailBook.title}
                   </h2>
 
                   <div className="mt-2 flex flex-wrap items-center gap-2">
                     <span
-                      className={`inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-xs font-semibold ${getBookStatusClass(
+                      className={`inline-flex items-center gap-1.5 rounded-full px-2.5 py-0.5 text-xs font-semibold ${getBookStatusClass(
                         detailBook.status,
                       )}`}
                     >
@@ -1781,64 +1800,75 @@ export default function MasterBooksPage() {
                   type="button"
                   aria-label="Tutup detail buku"
                   onClick={() => setDetailBook(null)}
-                  className="shrink-0 rounded-lg p-2 text-slate-400 transition hover:bg-slate-100 hover:text-slate-700 focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-500"
+                  className="shrink-0 rounded-lg p-1.5 text-slate-400 transition hover:bg-slate-100 hover:text-slate-700 focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-500"
                 >
-                  ×
+                  <svg
+                    className="h-5 w-5"
+                    viewBox="0 0 24 24"
+                    fill="none"
+                    stroke="currentColor"
+                    strokeWidth="2"
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                  >
+                    <line x1="18" y1="6" x2="6" y2="18" />
+                    <line x1="6" y1="6" x2="18" y2="18" />
+                  </svg>
                 </button>
               </div>
             </div>
 
             {/* BODY */}
 
-            <div className="min-h-0 flex-1 overflow-y-auto bg-slate-50/60 p-4 sm:p-5">
+            <div className="min-h-0 flex-1 overflow-y-auto bg-slate-50/60 p-3.5 sm:p-5">
               {detailError && (
                 <div
                   role="alert"
-                  className="mb-3 rounded-lg border border-red-200 bg-red-50 px-3 py-2.5 text-sm text-red-700"
+                  className="mb-3 rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-xs sm:text-sm text-red-700"
                 >
                   {detailError}
                 </div>
               )}
 
-              {/* INFORMATION */}
+              {/* INFORMATION: 2 kolom di mobile dan desktop agar hemat ruang */}
 
-              <div className="grid gap-3 sm:grid-cols-2">
-                <div className="rounded-xl border border-slate-200 bg-white px-4 py-3">
-                  <p className="text-[11px] font-semibold uppercase tracking-wide text-slate-400">
+              <div className="grid grid-cols-2 gap-2 sm:gap-3">
+                <div className="rounded-xl border border-slate-200/80 bg-white p-2.5 sm:px-4 sm:py-3 shadow-2xs">
+                  <p className="text-[10px] sm:text-[11px] font-semibold uppercase tracking-wider text-slate-400">
                     Kode Buku
                   </p>
 
-                  <p className="mt-1 text-sm font-semibold text-slate-800">
+                  <p className="mt-0.5 sm:mt-1 truncate text-xs sm:text-sm font-semibold text-slate-800">
                     {detailBook.code}
                   </p>
                 </div>
 
-                <div className="rounded-xl border border-slate-200 bg-white px-4 py-3">
-                  <p className="text-[11px] font-semibold uppercase tracking-wide text-slate-400">
+                <div className="rounded-xl border border-slate-200/80 bg-white p-2.5 sm:px-4 sm:py-3 shadow-2xs">
+                  <p className="text-[10px] sm:text-[11px] font-semibold uppercase tracking-wider text-slate-400">
                     ISBN
                   </p>
 
-                  <p className="mt-1 text-sm font-semibold text-slate-800">
+                  <p className="mt-0.5 sm:mt-1 truncate text-xs sm:text-sm font-semibold text-slate-800">
                     {detailBook.isbn ?? "-"}
                   </p>
                 </div>
 
-                <div className="rounded-xl border border-slate-200 bg-white px-4 py-3">
-                  <p className="text-[11px] font-semibold uppercase tracking-wide text-slate-400">
+                <div className="rounded-xl border border-slate-200/80 bg-white p-2.5 sm:px-4 sm:py-3 shadow-2xs">
+                  <p className="text-[10px] sm:text-[11px] font-semibold uppercase tracking-wider text-slate-400">
                     Pengarang
                   </p>
 
-                  <p className="mt-1 text-sm font-semibold text-slate-800">
+                  <p className="mt-0.5 sm:mt-1 truncate text-xs sm:text-sm font-semibold text-slate-800">
                     {detailBook.author ?? "-"}
                   </p>
                 </div>
 
-                <div className="rounded-xl border border-slate-200 bg-white px-4 py-3">
-                  <p className="text-[11px] font-semibold uppercase tracking-wide text-slate-400">
+                <div className="rounded-xl border border-slate-200/80 bg-white p-2.5 sm:px-4 sm:py-3 shadow-2xs">
+                  <p className="text-[10px] sm:text-[11px] font-semibold uppercase tracking-wider text-slate-400">
                     Kategori
                   </p>
 
-                  <p className="mt-1 text-sm font-semibold text-slate-800">
+                  <p className="mt-0.5 sm:mt-1 truncate text-xs sm:text-sm font-semibold text-slate-800">
                     {detailBook.category ?? "-"}
                   </p>
                 </div>
@@ -1846,8 +1876,8 @@ export default function MasterBooksPage() {
 
               {/* COPY */}
 
-              <div className="relative mt-5 rounded-xl border border-slate-200 bg-white">
-                <div className="flex flex-col gap-2.5 border-b border-slate-200 px-4 py-3 sm:flex-row sm:items-center sm:justify-between">
+              <div className="relative mt-3.5 sm:mt-5 rounded-xl border border-slate-200 bg-white shadow-2xs">
+                <div className="flex flex-col gap-2.5 border-b border-slate-100 px-3.5 py-3 sm:px-4 sm:flex-row sm:items-center sm:justify-between">
                   <div>
                     <h3 className="text-sm font-semibold text-slate-900">
                       Daftar Copy
@@ -1858,13 +1888,13 @@ export default function MasterBooksPage() {
                     </p>
                   </div>
 
-                  <div className="flex flex-wrap items-center gap-2">
+                  <div className="flex items-center gap-2 w-full sm:w-auto">
                     <Button
                       type="button"
                       variant="secondary"
                       onClick={() => void handlePrintBookCopies(detailBook, detailCopies)}
                       disabled={detailCopies.length === 0}
-                      className="flex-1 sm:flex-initial text-xs h-8 px-3 flex items-center justify-center gap-1.5"
+                      className="flex-1 sm:flex-initial text-xs h-8 px-2.5 sm:px-3 flex items-center justify-center gap-1.5"
                     >
                       <svg
                         width="13"
@@ -1880,7 +1910,7 @@ export default function MasterBooksPage() {
                         <path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2" />
                         <rect width="12" height="8" x="6" y="14" />
                       </svg>
-                      <span>Cetak Semua Copy</span>
+                      <span className="truncate">Cetak Semua</span>
                     </Button>
 
                     {canManageMasterData(getSession()?.user.role ?? "MEMBER") && (
@@ -1891,13 +1921,39 @@ export default function MasterBooksPage() {
                           setAddCopyModalOpen(true);
                         }}
                         disabled={detailBook.status === "INACTIVE"}
-                        className="flex-1 sm:flex-initial text-xs h-8 px-3"
+                        className="flex-1 sm:flex-initial text-xs h-8 px-3 font-semibold"
                       >
                         + Tambah Copy
                       </Button>
                     )}
                   </div>
                 </div>
+
+                {detailBook.status === "INACTIVE" && (
+                  <div className="mx-3.5 my-3 flex items-start gap-2.5 rounded-lg border border-amber-200 bg-amber-50 p-2.5 text-xs text-amber-800">
+                    <svg
+                      className="mt-0.5 h-4 w-4 shrink-0 text-amber-600"
+                      fill="none"
+                      viewBox="0 0 24 24"
+                      stroke="currentColor"
+                    >
+                      <path
+                        strokeLinecap="round"
+                        strokeLinejoin="round"
+                        strokeWidth={2}
+                        d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"
+                      />
+                    </svg>
+                    <div>
+                      <p className="font-semibold text-amber-900">
+                        Buku Sedang Diarsipkan
+                      </p>
+                      <p className="mt-0.5 text-amber-700">
+                        Status copy dan penambahan copy fisik dikunci (mode hanya-baca). Aktifkan buku terlebih dahulu untuk mengubah atau menambah copy.
+                      </p>
+                    </div>
+                  </div>
+                )}
 
                 {detailLoading ? (
                   <div className="px-4 py-8 text-center text-sm text-slate-500">
@@ -1907,92 +1963,119 @@ export default function MasterBooksPage() {
                   <div className="px-4 py-8 text-center text-sm text-slate-500">
                     Belum ada copy buku.
                   </div>
-                ) : (
-                  <div className="divide-y divide-slate-100">
-                    {detailCopies.map((copy) => {
-                      const isBorrowed = copy.status === "BORROWED";
+                ) : (() => {
+                  const totalCopyPages = Math.ceil(detailCopies.length / COPY_PAGE_SIZE);
+                  const safeCurrentCopyPage = Math.min(Math.max(1, copyPage), totalCopyPages);
+                  const paginatedCopies = detailCopies.slice(
+                    (safeCurrentCopyPage - 1) * COPY_PAGE_SIZE,
+                    safeCurrentCopyPage * COPY_PAGE_SIZE,
+                  );
 
-                      return (
-                        <div
-                          key={copy.id}
-                          className="flex items-center justify-between gap-3 px-4 py-3"
-                        >
-                          <div className="min-w-0">
-                            <p className="font-mono text-sm font-semibold text-slate-800">
-                              {copy.code}
-                            </p>
-                            <p className="mt-0.5 text-xs text-slate-400">
-                              Copy Fisik
-                            </p>
-                          </div>
+                  return (
+                    <>
+                      <div className="divide-y divide-slate-100">
+                        {paginatedCopies.map((copy) => {
+                          const isBorrowed = copy.status === "BORROWED";
 
-                          <div className="flex items-center gap-2 shrink-0">
-                            <button
-                              type="button"
-                              onClick={() => handlePrintSingleCopy(detailBook, copy)}
-                              title="Cetak Barcode Copy Ini"
-                              className="inline-flex h-8 items-center justify-center gap-1.5 rounded-lg border border-slate-200 bg-white px-2.5 text-xs font-semibold text-slate-700 shadow-2xs transition hover:bg-slate-50 hover:border-slate-300 focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-500"
+                          return (
+                            <div
+                              key={copy.id}
+                              className="flex items-center justify-between gap-2.5 px-3.5 py-2.5 sm:px-4 sm:py-3"
                             >
-                              <svg
-                                width="12"
-                                height="12"
-                                viewBox="0 0 24 24"
-                                fill="none"
-                                stroke="currentColor"
-                                strokeWidth="2"
-                                strokeLinecap="round"
-                                strokeLinejoin="round"
-                              >
-                                <polyline points="6 9 6 2 18 2 18 9" />
-                                <path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2" />
-                                <rect width="12" height="8" x="6" y="14" />
-                              </svg>
-                              <span>Cetak</span>
-                            </button>
+                              <div className="min-w-0">
+                                <p className="font-mono text-xs sm:text-sm font-semibold text-slate-800 truncate">
+                                  {copy.code}
+                                </p>
+                                <p className="text-[11px] sm:text-xs text-slate-400">
+                                  Copy Fisik
+                                </p>
+                              </div>
 
-                            {copy.status === "BORROWED" ? (
-                              <span
-                                className={`rounded-full px-3 py-1 text-xs font-semibold ${getCopyStatusClass(
-                                  copy.status,
-                                )}`}
-                              >
-                                {getCopyStatusLabel(copy.status)}
-                              </span>
-                            ) : canManageMasterData(
-                                getSession()?.user.role ?? "MEMBER",
-                              ) ? (
-                              <Dropdown
-                                value={copy.status}
-                                onChange={(value) =>
-                                  handleCopyStatusChange(
-                                    copy,
-                                    value as BookCopyStatus,
-                                  )
-                                }
-                                ariaLabel={`Status ${copy.code}`}
-                                disabled={copyStatusLoading}
-                                variant="badge"
-                                options={[
-                                  { value: "AVAILABLE", label: "Tersedia" },
-                                  { value: "INACTIVE", label: "Tidak Aktif" },
-                                  { value: "LOST", label: "Hilang" },
-                                ]}
-                              />
-                            ) : (
-                              <span
-                                className={`rounded-full px-3 py-1 text-xs font-semibold ${getCopyStatusClass(
-                                  copy.status,
-                                )}`}
-                              >
-                                {getCopyStatusLabel(copy.status)}
-                              </span>
-                            )}
-                          </div>
-                        </div>
-                      );
-                    })}
-                  </div>
-                )}
+                              <div className="flex items-center gap-1.5 sm:gap-2 shrink-0">
+                                <button
+                                  type="button"
+                                  onClick={() => handlePrintSingleCopy(detailBook, copy)}
+                                  title="Cetak Barcode Copy Ini"
+                                  className="inline-flex h-7 sm:h-8 items-center justify-center gap-1 rounded-lg border border-slate-200 bg-white px-2 sm:px-2.5 text-[11px] sm:text-xs font-semibold text-slate-700 shadow-2xs transition hover:bg-slate-50 hover:border-slate-300 focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-500"
+                                >
+                                  <svg
+                                    width="11"
+                                    height="11"
+                                    viewBox="0 0 24 24"
+                                    fill="none"
+                                    stroke="currentColor"
+                                    strokeWidth="2"
+                                    strokeLinecap="round"
+                                    strokeLinejoin="round"
+                                  >
+                                    <polyline points="6 9 6 2 18 2 18 9" />
+                                    <path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2" />
+                                    <rect width="12" height="8" x="6" y="14" />
+                                  </svg>
+                                  <span>Cetak</span>
+                                </button>
+
+                                {copy.status === "BORROWED" || detailBook.status === "INACTIVE" ? (
+                                  <span
+                                    className={`rounded-full px-3 py-1 text-xs font-semibold ${getCopyStatusClass(
+                                      copy.status,
+                                    )}`}
+                                    title={
+                                      detailBook.status === "INACTIVE"
+                                        ? "Buku sedang diarsipkan. Aktifkan buku untuk mengubah status copy."
+                                        : undefined
+                                    }
+                                  >
+                                    {getCopyStatusLabel(copy.status)}
+                                  </span>
+                                ) : canManageMasterData(
+                                    getSession()?.user.role ?? "MEMBER",
+                                  ) ? (
+                                  <Dropdown
+                                    value={copy.status}
+                                    onChange={(value) =>
+                                      handleCopyStatusChange(
+                                        copy,
+                                        value as BookCopyStatus,
+                                      )
+                                    }
+                                    ariaLabel={`Status ${copy.code}`}
+                                    disabled={copyStatusLoading}
+                                    variant="badge"
+                                    options={[
+                                      { value: "AVAILABLE", label: "Tersedia" },
+                                      { value: "INACTIVE", label: "Tidak Aktif" },
+                                      { value: "LOST", label: "Hilang" },
+                                    ]}
+                                  />
+                                ) : (
+                                  <span
+                                    className={`rounded-full px-3 py-1 text-xs font-semibold ${getCopyStatusClass(
+                                      copy.status,
+                                    )}`}
+                                  >
+                                    {getCopyStatusLabel(copy.status)}
+                                  </span>
+                                )}
+                              </div>
+                            </div>
+                          );
+                        })}
+                      </div>
+
+                      {detailCopies.length > COPY_PAGE_SIZE && (
+                        <Pagination
+                          currentPage={safeCurrentCopyPage}
+                          totalPages={totalCopyPages}
+                          onPageChange={(nextPage) => setCopyPage(nextPage)}
+                          totalItems={detailCopies.length}
+                          pageSize={COPY_PAGE_SIZE}
+                          className="rounded-b-xl border-t border-slate-100 bg-slate-50/50"
+                        />
+                      )}
+                    </>
+                  );
+                })()}
               </div>
             </div>
 
@@ -2003,74 +2086,13 @@ export default function MasterBooksPage() {
                 type="button"
                 variant="secondary"
                 onClick={() => setDetailBook(null)}
-                className="w-full sm:w-auto text-xs"
+                className="w-full sm:w-auto text-xs sm:ml-auto"
               >
                 Tutup
               </Button>
 
-              {canManageMasterData(getSession()?.user.role ?? "MEMBER") && (
-                <div className="flex items-center gap-2 w-full sm:w-auto">
-                  <Button
-                    type="button"
-                    variant="secondary"
-                    onClick={() => {
-                      setDetailBook(null);
-                      openEditForm(detailBook);
-                    }}
-                    className="flex-1 sm:flex-initial text-xs"
-                  >
-                    Ubah Buku
-                  </Button>
-
-                  <Button
-                    type="button"
-                    variant={detailBook.status === "INACTIVE" ? "primary" : "secondary"}
-                    onClick={() => openBookStatusConfirm(detailBook)}
-                    className={`flex-1 sm:flex-initial text-xs flex items-center justify-center gap-1.5 ${
-                      detailBook.status !== "INACTIVE"
-                        ? "text-amber-700 border-amber-200 hover:bg-amber-50"
-                        : ""
-                    }`}
-                  >
-                    {detailBook.status === "INACTIVE" ? (
-                      <>
-                        <svg
-                          width="13"
-                          height="13"
-                          viewBox="0 0 24 24"
-                          fill="none"
-                          stroke="currentColor"
-                          strokeWidth="2"
-                          strokeLinecap="round"
-                          strokeLinejoin="round"
-                        >
-                          <path d="M22 11.08V12a10 10 0 1 1-5.93-9.14" />
-                          <polyline points="22 4 12 14.01 9 11.01" />
-                        </svg>
-                        <span>Aktifkan Buku</span>
-                      </>
-                    ) : (
-                      <>
-                        <svg
-                          width="13"
-                          height="13"
-                          viewBox="0 0 24 24"
-                          fill="none"
-                          stroke="currentColor"
-                          strokeWidth="2"
-                          strokeLinecap="round"
-                          strokeLinejoin="round"
-                        >
-                          <rect width="20" height="5" x="2" y="3" rx="1" />
-                          <path d="M4 8v11a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8" />
-                          <path d="M10 12h4" />
-                        </svg>
-                        <span>Arsipkan Buku</span>
-                      </>
-                    )}
-                  </Button>
-                </div>
-              )}
+              
+                
             </div>
           </div>
         </div>

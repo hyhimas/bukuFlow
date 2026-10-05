@@ -1096,16 +1096,16 @@ export default function TransactionsPage() {
             ================================================== */}
             <Card className="relative mt-5 hidden overflow-hidden xl:block">
               <div className="overflow-x-auto">
-                <table className="w-full min-w-[720px] table-fixed border-collapse text-left text-sm">
+                <table className="w-full min-w-[1050px] table-fixed border-collapse text-left text-sm">
                   <colgroup>
-                    <col className="w-[15%]" />
-                    <col className="w-[13%]" />
-                    <col className="w-[20%]" />
-                    <col className="w-[12%]" />
-                    <col className="w-[10%]" />
-                    <col className="w-[10%]" />
-                    <col className="w-[10%]" />
-                    <col className="w-[10%]" />
+                    <col className="w-[150px]" />
+                    <col className="w-[140px]" />
+                    <col className="min-w-[200px]" />
+                    <col className="w-[120px]" />
+                    <col className="w-[115px]" />
+                    <col className="w-[115px]" />
+                    <col className="w-[115px]" />
+                    <col className="w-[125px]" />
                   </colgroup>
 
                   {/* TABLE HEADER */}
