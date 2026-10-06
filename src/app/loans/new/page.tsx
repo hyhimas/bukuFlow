@@ -2244,7 +2244,7 @@ export default function NewLoanPage() {
             )}
           </div>
 
-          <div className="min-w-0 md:sticky md:top-6 md:self-start space-y-5">
+          <div className="min-w-0 md:sticky md:top-20 md:self-start space-y-5">
             <Card className="p-4 sm:p-5">
               <h3 className="text-base font-semibold text-slate-900">
                 Informasi Peminjaman

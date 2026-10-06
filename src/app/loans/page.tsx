@@ -515,7 +515,7 @@ export default function LoansPage() {
 
               {/* DETAIL */}
 
-              <section className="min-w-0 md:sticky md:top-6 md:self-start">
+              <section className="min-w-0 md:sticky md:top-20 md:self-start">
                 {selectedLoan ? (
                   <LoanDetail
                     transaction={selectedLoan}

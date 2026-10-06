@@ -127,7 +127,11 @@ export default function LoginPage() {
       {/* LOGIN CARD CONTAINER */}
       <div className="w-full max-w-[420px]">
         {/* BRAND HEADER */}
-        <div className="mb-6 flex flex-col items-center text-center">
+        
+
+        {/* MAIN FORM CARD (SOLID CLEAN) */}
+        <div className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm sm:p-8">
+          <div className="mb-6 flex flex-col items-center text-center">
           <img
             src="/logo.png"
             alt="BukuFlow Logo"
@@ -137,16 +141,11 @@ export default function LoginPage() {
             Sistem Manajemen Perpustakaan
           </p>
         </div>
-
-        {/* MAIN FORM CARD (SOLID CLEAN) */}
-        <div className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm sm:p-8">
           <div className="mb-6">
-            <h1 className="text-xl font-bold tracking-tight text-slate-900 sm:text-2xl">
+            <h1 className="text-xl font-bold tracking-tight text-slate-900 sm:text-2xl text-center">
               Masuk ke Akun
             </h1>
-            <p className="mt-1 text-xs text-slate-500 sm:text-sm">
-              Kelola katalog buku, anggota, dan sirkulasi peminjaman.
-            </p>
+            
           </div>
 
           <form onSubmit={handleSubmit} className="space-y-4">
