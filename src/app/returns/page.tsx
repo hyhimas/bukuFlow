@@ -20,8 +20,6 @@ import type { ReturnLoanData, Loan } from "@/lib/types";
 import { getActiveReturnsApi, returnLoanItemsApi } from "@/lib/api";
 import { useToast } from "@/context/ToastContext";
 
-const PAGE_SIZE = 10;
-
 export default function ReturnsPage() {
   const router = useRouter();
   const { toast } = useToast();
@@ -35,6 +33,7 @@ export default function ReturnsPage() {
   const [query, setQuery] = useState("");
   const [selectedLoan, setSelectedLoan] = useState<ReturnLoanData | null>(null);
   const [page, setPage] = useState(1);
+  const [pageSize, setPageSize] = useState(10);
 
   const [selectedItemIds, setSelectedItemIds] = useState<string[]>([]);
 
@@ -318,13 +317,13 @@ export default function ReturnsPage() {
     void loadLoans();
   }, []);
 
-  const totalPages = Math.max(1, Math.ceil(filteredLoans.length / PAGE_SIZE));
+  const totalPages = Math.max(1, Math.ceil(filteredLoans.length / pageSize));
 
   const currentPage = Math.min(page, totalPages);
 
   const paginatedLoans = filteredLoans.slice(
-    (currentPage - 1) * PAGE_SIZE,
-    currentPage * PAGE_SIZE,
+    (currentPage - 1) * pageSize,
+    currentPage * pageSize,
   );
 
   // =====================================================
@@ -764,15 +763,17 @@ export default function ReturnsPage() {
               )}
 
               {/* PAGINATION (MOBILE, TABLET & DESKTOP) */}
-
-              <Pagination
-                currentPage={currentPage}
-                totalPages={totalPages}
-                onPageChange={(nextPage) => setPage(nextPage)}
-                totalItems={filteredLoans.length}
-                pageSize={PAGE_SIZE}
-                className="mt-4 -mx-4 -mb-4 sm:-mx-5 sm:-mb-5 rounded-b-xl border-t"
-              />
+              {filteredLoans.length > 0 && (
+                <Pagination
+                  currentPage={currentPage}
+                  totalPages={totalPages}
+                  onPageChange={(nextPage) => setPage(nextPage)}
+                  totalItems={filteredLoans.length}
+                  pageSize={pageSize}
+                  onPageSizeChange={(newSize) => setPageSize(newSize)}
+                  className="mt-4 -mx-4 -mb-4 sm:-mx-5 sm:-mb-5 rounded-b-xl border-t"
+                />
+              )}
             </Card>
           </div>
 

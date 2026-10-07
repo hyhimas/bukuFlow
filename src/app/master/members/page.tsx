@@ -33,8 +33,6 @@ const EMPTY_MEMBER_ERRORS: MemberFormErrors = {
   email: "",
 };
 
-const PAGE_SIZE = 10;
-
 export default function MasterMembersPage() {
   const router = useRouter();
   const { toast } = useToast();
@@ -54,6 +52,7 @@ export default function MasterMembersPage() {
   const [statusFilter, setStatusFilter] = useState<MemberStatus | "">("");
 
   const [page, setPage] = useState(1);
+  const [pageSize, setPageSize] = useState(10);
   const [total, setTotal] = useState(0);
   const [totalPages, setTotalPages] = useState(1);
 
@@ -137,7 +136,7 @@ export default function MasterMembersPage() {
           search: search.trim(),
           status: statusFilter || undefined,
           page,
-          pageSize: PAGE_SIZE,
+          pageSize,
         });
 
         if (cancelled) {
@@ -173,7 +172,7 @@ export default function MasterMembersPage() {
       cancelled = true;
       window.clearTimeout(timer);
     };
-  }, [search, statusFilter, page]);
+  }, [search, statusFilter, page, pageSize]);
 
   // =====================================================
   // FORM ESCAPE + FOCUS TRAP
@@ -438,7 +437,7 @@ export default function MasterMembersPage() {
         search,
         status: statusFilter || undefined,
         page,
-        pageSize: PAGE_SIZE,
+        pageSize,
       });
 
       setMembers(result.data);
@@ -534,7 +533,7 @@ export default function MasterMembersPage() {
         search,
         status: statusFilter || undefined,
         page,
-        pageSize: PAGE_SIZE,
+        pageSize,
       });
 
       setMembers(result.data);
@@ -709,7 +708,7 @@ export default function MasterMembersPage() {
             MEMBER TABLE / LIST
         ================================================= */}
 
-        <Card className="overflow-hidden">
+        <Card>
           {/* CARD HEADER */}
 
           {/* =================================================
@@ -737,7 +736,7 @@ export default function MasterMembersPage() {
           ================================================= */}
 
           {members.length > 0 && (
-            <div className="relative hidden overflow-x-auto lg:block">
+            <div className="relative hidden overflow-x-auto rounded-t-xl lg:block">
               <table className="w-full table-fixed text-sm">
                 <colgroup>
                   <col className="w-[130px]" />
@@ -1046,7 +1045,8 @@ export default function MasterMembersPage() {
             totalPages={totalPages}
             onPageChange={(nextPage) => setPage(nextPage)}
             totalItems={total}
-            pageSize={PAGE_SIZE}
+            pageSize={pageSize}
+            onPageSizeChange={(newSize) => setPageSize(newSize)}
           />
         </Card>
       </div>

@@ -25,8 +25,6 @@ import {
 import type { Company, Member, MemberStatus } from "@/lib/types";
 import { useToast } from "@/context/ToastContext";
 
-const PAGE_SIZE = 10;
-
 type MemberFormErrors = {
   name: string;
   phone: string;
@@ -67,6 +65,7 @@ export default function OfficeMembersPage() {
   const [statusFilter, setStatusFilter] = useState<MemberStatus | "">("");
 
   const [page, setPage] = useState(1);
+  const [pageSize, setPageSize] = useState(10);
   const [total, setTotal] = useState(0);
   const [totalPages, setTotalPages] = useState(1);
 
@@ -176,7 +175,7 @@ export default function OfficeMembersPage() {
           } else {
             const res = await getOfficeMembersApi(selectedCompanyId, {
               page,
-              size: PAGE_SIZE,
+              size: pageSize,
             });
             if (cancelled) return;
 
@@ -208,7 +207,7 @@ export default function OfficeMembersPage() {
       cancelled = true;
       clearTimeout(timer);
     };
-  }, [selectedCompanyId, page, search, statusFilter, checkingAuth, toast]);
+  }, [selectedCompanyId, page, pageSize, search, statusFilter, checkingAuth, toast]);
 
   // Reset page when search or company changes
   useEffect(() => {
@@ -290,7 +289,7 @@ export default function OfficeMembersPage() {
       // Refresh list
       const res = await getOfficeMembersApi(selectedCompanyId, {
         page: 1,
-        size: PAGE_SIZE,
+        size: pageSize,
       });
       setMembers(res.items);
       setTotal(res.total);
@@ -364,7 +363,7 @@ export default function OfficeMembersPage() {
       // Refresh list
       const res = await getOfficeMembersApi(selectedCompanyId, {
         page,
-        size: PAGE_SIZE,
+        size: pageSize,
       });
       const filtered = statusFilter
         ? res.items.filter((m) => m.status === statusFilter)
@@ -577,7 +576,7 @@ export default function OfficeMembersPage() {
         {/* =================================================
             MEMBER TABLE / LIST CARD
         ================================================= */}
-        <Card className="overflow-hidden">
+        <Card>
           {/* EMPTY STATE */}
           {!loading && members.length === 0 && (
             <div className="px-4 py-12 text-center">
@@ -597,7 +596,7 @@ export default function OfficeMembersPage() {
 
           {/* DESKTOP TABLE */}
           {members.length > 0 && (
-            <div className="relative hidden overflow-x-auto lg:block">
+            <div className="relative hidden overflow-x-auto rounded-t-xl lg:block">
               <table className="w-full min-w-[950px] table-fixed text-sm">
                 <colgroup>
                   <col className="w-[160px]" />
@@ -868,7 +867,8 @@ export default function OfficeMembersPage() {
             totalPages={totalPages}
             onPageChange={(nextPage) => setPage(nextPage)}
             totalItems={total}
-            pageSize={PAGE_SIZE}
+            pageSize={pageSize}
+            onPageSizeChange={(newSize) => setPageSize(newSize)}
           />
         </Card>
       </div>

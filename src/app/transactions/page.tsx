@@ -29,8 +29,6 @@ import { useToast } from "@/context/ToastContext";
 
 type TransactionStatus = "ACTIVE" | "OVERDUE" | "COMPLETED";
 
-const PAGE_SIZE = 10;
-
 const STATUS_OPTIONS: {
   value: TransactionStatus | "";
   label: string;
@@ -62,6 +60,7 @@ export default function TransactionsPage() {
   // =========================================================
 
   const [transactions, setTransactions] = useState<TransactionData[]>([]);
+  const [pageSize, setPageSize] = useState(10);
 
   const [tableLoading, setTableLoading] = useState(false);
   const [loading, setLoading] = useState(true);
@@ -261,14 +260,14 @@ export default function TransactionsPage() {
 
   const totalPages = Math.max(
     1,
-    Math.ceil(filteredTransactions.length / PAGE_SIZE),
+    Math.ceil(filteredTransactions.length / pageSize),
   );
 
   const currentPage = Math.min(page, totalPages);
 
   const paginatedTransactions = filteredTransactions.slice(
-    (currentPage - 1) * PAGE_SIZE,
-    currentPage * PAGE_SIZE,
+    (currentPage - 1) * pageSize,
+    currentPage * pageSize,
   );
 
   // =========================================================
@@ -1094,8 +1093,8 @@ export default function TransactionsPage() {
             {/* =================================================
                 TABLE VIEW (DESKTOP: xl+ only)
             ================================================== */}
-            <Card className="relative mt-5 hidden overflow-hidden xl:block">
-              <div className="overflow-x-auto">
+            <Card className="relative mt-5 hidden xl:block">
+              <div className="overflow-x-auto rounded-t-xl">
                 <table className="w-full min-w-[1050px] table-fixed border-collapse text-left text-sm">
                   <colgroup>
                     <col className="w-[150px]" />
@@ -1276,7 +1275,8 @@ export default function TransactionsPage() {
                 totalPages={totalPages}
                 onPageChange={(nextPage) => setPage(nextPage)}
                 totalItems={filteredTransactions.length}
-                pageSize={PAGE_SIZE}
+                pageSize={pageSize}
+                onPageSizeChange={(newSize) => setPageSize(newSize)}
               />
             </Card>
 
@@ -1407,7 +1407,8 @@ export default function TransactionsPage() {
                     totalPages={totalPages}
                     onPageChange={(nextPage) => setPage(nextPage)}
                     totalItems={filteredTransactions.length}
-                    pageSize={PAGE_SIZE}
+                    pageSize={pageSize}
+                    onPageSizeChange={(newSize) => setPageSize(newSize)}
                     className="border-t-0"
                   />
                 </div>

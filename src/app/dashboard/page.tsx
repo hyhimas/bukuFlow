@@ -479,65 +479,34 @@ export default function DashboardPage() {
           </h2>
 
           {isCompanyAdmin ? (
-            <div className="mt-3 space-y-4">
-              {/* Tablet: 2 - 1, Desktop: 3 */}
-              <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
-                <QuickAccessCard
-                  href="/loans"
-                  title="Peminjaman"
-                  description="Pantau transaksi peminjaman yang sedang berjalan."
-                  icon={<LoanIcon />}
-                />
+            <div className="mt-3 grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+              <QuickAccessCard
+                href="/master/books"
+                title="Master Buku"
+                description="Kelola data buku dan salinan buku."
+                icon={<BookDetailIcon />}
+              />
 
-                <QuickAccessCard
-                  href="/returns"
-                  title="Pengembalian"
-                  description="Pantau proses dan status pengembalian buku."
-                  icon={<ReturnIcon />}
-                />
+              <QuickAccessCard
+                href="/master/members"
+                title="Master Member"
+                description="Kelola data anggota perpustakaan."
+                icon={<MemberIcon />}
+              />
 
-                <QuickAccessCard
-                  href="/transactions"
-                  title="Riwayat Transaksi"
-                  description="Lihat seluruh riwayat transaksi perpustakaan."
-                  icon={<HistoryIcon />}
-                  className="md:col-span-2 xl:col-span-1"
-                />
-              </div>
+              <QuickAccessCard
+                href="/settings/company"
+                title="Konfigurasi Instansi"
+                description="Kelola identitas dan aturan instansi."
+                icon={<CompanyIcon />}
+              />
 
-              {/* Tablet & desktop: 2 */}
-              <div className="grid gap-4 md:grid-cols-2">
-                <QuickAccessCard
-                  href="/master/books"
-                  title="Master Buku"
-                  description="Kelola data buku dan salinan buku."
-                  icon={<BookDetailIcon />}
-                />
-
-                <QuickAccessCard
-                  href="/master/members"
-                  title="Master Member"
-                  description="Kelola data anggota perpustakaan."
-                  icon={<MemberIcon />}
-                />
-              </div>
-
-              {/* Pengaturan Instansi: 2 */}
-              <div className="grid gap-4 md:grid-cols-2">
-                <QuickAccessCard
-                  href="/settings/company"
-                  title="Konfigurasi Instansi & Kebijakan"
-                  description="Atur identitas perpustakaan, durasi pinjam, batas kuota, dan tarif denda."
-                  icon={<CompanyIcon />}
-                />
-
-                <QuickAccessCard
-                  href="/settings/users"
-                  title="Kelola Staf & Pengguna"
-                  description="Kelola akun dan hak akses Admin Perpustakaan serta Staf."
-                  icon={<UsersIcon />}
-                />
-              </div>
+              <QuickAccessCard
+                href="/settings/users"
+                title="Kelola Pengguna"
+                description="Kelola akun staf dan administrator."
+                icon={<UsersIcon />}
+              />
             </div>
           ) : (
             <div className="mt-3 grid gap-4 md:grid-cols-2 xl:grid-cols-6">
@@ -565,6 +534,7 @@ export default function DashboardPage() {
                 title="Riwayat Transaksi"
                 description="Lihat riwayat transaksi."
                 icon={<HistoryIcon />}
+
                 className="md:col-span-2"
               />
             </div>

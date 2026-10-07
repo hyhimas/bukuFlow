@@ -50,7 +50,7 @@ export default function UsersSettingsPage() {
 
   // Pagination State (10 items/page)
   const [page, setPage] = useState(1);
-  const [pageSize] = useState(10);
+  const [pageSize, setPageSize] = useState(10);
   const [totalItems, setTotalItems] = useState(0);
   const [totalPages, setTotalPages] = useState(1);
 
@@ -517,6 +517,7 @@ export default function UsersSettingsPage() {
                     totalItems={totalItems}
                     pageSize={pageSize}
                     onPageChange={(newPage) => setPage(newPage)}
+                    onPageSizeChange={(newSize) => setPageSize(newSize)}
                     className="!border-t-0"
                   />
                 </div>
@@ -671,6 +672,7 @@ export default function UsersSettingsPage() {
                 totalItems={totalItems}
                 pageSize={pageSize}
                 onPageChange={(newPage) => setPage(newPage)}
+                onPageSizeChange={(newSize) => setPageSize(newSize)}
               />
             </Card>
           </div>

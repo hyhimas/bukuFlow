@@ -18,8 +18,6 @@ import Input from "@/components/ui/Input";
 import LoadingState from "@/components/ui/LoadingState";
 import Pagination from "@/components/ui/Pagination";
 
-const PAGE_SIZE = 10;
-
 export default function LoansPage() {
   const router = useRouter();
 
@@ -31,6 +29,7 @@ export default function LoansPage() {
   const [search, setSearch] = useState("");
   const [loading, setLoading] = useState(true);
   const [page, setPage] = useState(1);
+  const [pageSize, setPageSize] = useState(10);
   const [error, setError] = useState("");
 
   /*
@@ -119,14 +118,14 @@ export default function LoansPage() {
 
   const totalPages = Math.max(
     1,
-    Math.ceil(filteredTransactions.length / PAGE_SIZE),
+    Math.ceil(filteredTransactions.length / pageSize),
   );
 
   const currentPage = Math.min(page, totalPages);
 
   const paginatedTransactions = filteredTransactions.slice(
-    (currentPage - 1) * PAGE_SIZE,
-    currentPage * PAGE_SIZE,
+    (currentPage - 1) * pageSize,
+    currentPage * pageSize,
   );
 
   /*
@@ -508,7 +507,8 @@ export default function LoansPage() {
                     totalPages={totalPages}
                     onPageChange={(nextPage) => setPage(nextPage)}
                     totalItems={filteredTransactions.length}
-                    pageSize={PAGE_SIZE}
+                    pageSize={pageSize}
+                    onPageSizeChange={(newSize) => setPageSize(newSize)}
                   />
                 </Card>
               </section>

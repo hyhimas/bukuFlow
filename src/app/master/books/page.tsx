@@ -41,8 +41,6 @@ const EMPTY_BOOK_ERRORS: BookFormErrors = {
   totalCopies: "",
 };
 
-const PAGE_SIZE = 10;
-
 export default function MasterBooksPage() {
   const router = useRouter();
   const { toast } = useToast();
@@ -62,6 +60,7 @@ export default function MasterBooksPage() {
   const [statusFilter, setStatusFilter] = useState<BookStatus | "">("");
 
   const [page, setPage] = useState(1);
+  const [pageSize, setPageSize] = useState(10);
   const [total, setTotal] = useState(0);
   const [totalPages, setTotalPages] = useState(1);
 
@@ -184,7 +183,7 @@ export default function MasterBooksPage() {
           search: search.trim(),
           status: statusFilter || undefined,
           page,
-          pageSize: PAGE_SIZE,
+          pageSize,
         });
 
         if (cancelled) {
@@ -220,7 +219,7 @@ export default function MasterBooksPage() {
       cancelled = true;
       window.clearTimeout(timer);
     };
-  }, [search, statusFilter, page]);
+  }, [search, statusFilter, page, pageSize]);
 
   // =====================================================
   // FORM KEYBOARD
@@ -507,7 +506,7 @@ export default function MasterBooksPage() {
         search,
         status: statusFilter || undefined,
         page,
-        pageSize: PAGE_SIZE,
+        pageSize,
       });
 
       setBooks(result.data);
@@ -625,7 +624,7 @@ export default function MasterBooksPage() {
         search,
         status: statusFilter || undefined,
         page,
-        pageSize: PAGE_SIZE,
+        pageSize,
       });
 
       setBooks(result.data);
@@ -818,7 +817,7 @@ export default function MasterBooksPage() {
         search,
         status: statusFilter || undefined,
         page,
-        pageSize: PAGE_SIZE,
+        pageSize,
       });
 
       setBooks(refreshed.data);
@@ -1168,7 +1167,7 @@ export default function MasterBooksPage() {
 
         {/* BOOK LIST */}
 
-        <Card className="overflow-hidden">
+        <Card>
           {/* EMPTY */}
 
           {!loading && books.length === 0 && (
@@ -1190,7 +1189,7 @@ export default function MasterBooksPage() {
           {/* TABLE (Desktop: >= lg) */}
 
           {books.length > 0 && (
-            <div className="relative hidden overflow-x-auto lg:block">
+            <div className="relative hidden overflow-x-auto rounded-t-xl lg:block">
               <table className="w-full text-left text-sm text-slate-600 table-fixed">
                 <colgroup>
                   <col className="w-[140px]" />
@@ -1548,7 +1547,8 @@ export default function MasterBooksPage() {
             totalPages={totalPages}
             onPageChange={(nextPage) => setPage(nextPage)}
             totalItems={total}
-            pageSize={PAGE_SIZE}
+            pageSize={pageSize}
+            onPageSizeChange={(newSize) => setPageSize(newSize)}
           />
         </Card>
       </div>

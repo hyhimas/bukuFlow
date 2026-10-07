@@ -77,6 +77,7 @@ export default function NewLoanPage() {
   const [memberQuery, setMemberQuery] = useState("");
   const [members, setMembers] = useState<Member[]>([]);
   const [memberPage, setMemberPage] = useState(1);
+  const [memberPageSize, setMemberPageSize] = useState(10);
   const [selectedMember, setSelectedMember] = useState<Member | null>(null);
 
   const [memberLoading, setMemberLoading] = useState(false);
@@ -121,6 +122,7 @@ export default function NewLoanPage() {
   const [bookQuery, setBookQuery] = useState("");
   const [books, setBooks] = useState<Book[]>([]);
   const [bookPage, setBookPage] = useState(1);
+  const [bookPageSize, setBookPageSize] = useState(10);
 
   const [bookLoading, setBookLoading] = useState(false);
   const [bookError, setBookError] = useState("");
@@ -1218,22 +1220,22 @@ export default function NewLoanPage() {
 
   const memberTotalPages = Math.max(
     1,
-    Math.ceil(members.length / MEMBER_PAGE_SIZE),
+    Math.ceil(members.length / memberPageSize),
   );
   const currentMemberPage = Math.min(memberPage, memberTotalPages);
   const paginatedMembers = members.slice(
-    (currentMemberPage - 1) * MEMBER_PAGE_SIZE,
-    currentMemberPage * MEMBER_PAGE_SIZE,
+    (currentMemberPage - 1) * memberPageSize,
+    currentMemberPage * memberPageSize,
   );
 
   const bookTotalPages = Math.max(
     1,
-    Math.ceil(books.length / BOOK_PAGE_SIZE),
+    Math.ceil(books.length / bookPageSize),
   );
   const currentBookPage = Math.min(bookPage, bookTotalPages);
   const paginatedBooks = books.slice(
-    (currentBookPage - 1) * BOOK_PAGE_SIZE,
-    currentBookPage * BOOK_PAGE_SIZE,
+    (currentBookPage - 1) * bookPageSize,
+    currentBookPage * bookPageSize,
   );
 
   if (pageLoading) {
@@ -1420,7 +1422,8 @@ export default function NewLoanPage() {
                         totalPages={memberTotalPages}
                         onPageChange={(nextPage) => setMemberPage(nextPage)}
                         totalItems={members.length}
-                        pageSize={MEMBER_PAGE_SIZE}
+                        pageSize={memberPageSize}
+                        onPageSizeChange={(newSize) => setMemberPageSize(newSize)}
                         className="mt-4 -mx-4 -mb-4 sm:-mx-5 sm:-mb-5 rounded-b-xl border-t"
                       />
                     </div>
@@ -2281,7 +2284,8 @@ export default function NewLoanPage() {
                       totalPages={bookTotalPages}
                       onPageChange={(nextPage) => setBookPage(nextPage)}
                       totalItems={books.length}
-                      pageSize={BOOK_PAGE_SIZE}
+                      pageSize={bookPageSize}
+                      onPageSizeChange={(newSize) => setBookPageSize(newSize)}
                       className="mt-4 -mx-4 -mb-4 sm:-mx-5 sm:-mb-5 rounded-b-xl border-t"
                     />
                   </div>
