@@ -49,12 +49,12 @@ export default function AppShell({ children }: AppShellProps) {
     const session = getAuthData();
     if (!session) {
       setAuthSession(null);
+      setIsReady(true);
       router.replace("/login");
       return;
     }
 
     setAuthSession(session);
-    setShowExpiredModal(false);
     setIsReady(true);
 
     // Multi-tab listener
@@ -62,9 +62,13 @@ export default function AppShell({ children }: AppShellProps) {
       if (isLoginPage) return;
       const current = getAuthData();
       if (!current) {
-        setAuthSession(null);
-        setShowExpiredModal(false);
-        router.replace("/login");
+        setShowExpiredModal((isModalOpen) => {
+          if (!isModalOpen) {
+            setAuthSession(null);
+            router.replace("/login");
+          }
+          return isModalOpen;
+        });
       } else {
         setAuthSession(current);
         setShowExpiredModal(false);
@@ -85,13 +89,8 @@ export default function AppShell({ children }: AppShellProps) {
     setRemainingSeconds(initialDiff);
 
     if (initialDiff <= 0) {
-      setAuthSession(null);
-      clearAuthData();
-      setShowExpiredModal(false);
-      router.replace("/login");
+      setShowExpiredModal(true);
       return;
-    } else {
-      setShowExpiredModal(false);
     }
 
     const interval = setInterval(() => {
@@ -101,8 +100,6 @@ export default function AppShell({ children }: AppShellProps) {
       // Munculkan modal ketika sesi habis (00:00)
       if (diff <= 0) {
         clearInterval(interval);
-        setAuthSession(null);
-        clearAuthData();
         setShowExpiredModal(true);
       }
     }, 1000);
@@ -165,7 +162,7 @@ export default function AppShell({ children }: AppShellProps) {
     setShowExpiredModal(false);
     setAuthSession(null);
     clearAuthData();
-    router.replace("/login");
+    router.replace("/login?reason=expired");
   }
 
   // Handle Keyboard Escape saat Expired Modal Muncul

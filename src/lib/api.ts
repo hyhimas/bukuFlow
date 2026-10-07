@@ -1929,57 +1929,164 @@ function mapRawToTransactionData(raw: any): TransactionData {
         updatedAt: loan.updatedAt,
       };
 
-  const rawCopyIds = extractCopyIdsFromRaw(raw);
+  const rawItemList =
+    (Array.isArray(raw.items) && raw.items.length > 0 && raw.items) ||
+    (Array.isArray(raw.loan_items) && raw.loan_items.length > 0 && raw.loan_items) ||
+    (Array.isArray(raw.loan?.items) && raw.loan.items.length > 0 && raw.loan.items) ||
+    (Array.isArray(raw.loan?.loan_items) && raw.loan.loan_items.length > 0 && raw.loan.loan_items) ||
+    (Array.isArray(raw.details) && raw.details.length > 0 && raw.details) ||
+    null;
+
   let items: TransactionData["items"] = [];
 
-  if (rawCopyIds.length > 0) {
-    items = rawCopyIds.map((cId: string, idx: number) => ({
-      loanItem: {
-        id: `loan-item-${loan.id}-${idx}`,
-        companyId: loan.companyId,
-        loanId: loan.id,
-        bookId: raw.book_id || raw.bookId || `book-${loan.id}`,
-        bookCopyId: cId,
-        returnedAt: loan.returnedAt,
-        status:
-          loan.status === "COMPLETED"
-            ? ("RETURNED" as const)
-            : ("BORROWED" as const),
-        createdAt: loan.createdAt,
-        updatedAt: loan.updatedAt,
-      },
-      book: {
-        id: raw.book_id || raw.bookId || `book-${loan.id}`,
-        companyId: loan.companyId,
-        code: raw.book_code || raw.bookCode || "BK-001",
-        title: raw.book_title || raw.bookTitle || "Buku",
-        status: "AVAILABLE" as const,
-        totalCopies: 1,
-        availableCopies: 1,
-        createdAt: loan.createdAt,
-        updatedAt: loan.updatedAt,
-      },
-      bookCopy: {
-        id: cId,
-        companyId: loan.companyId,
-        bookId: raw.book_id || raw.bookId || `book-${loan.id}`,
-        code: raw.copy_code || raw.copyCode || "CP-001",
-        status: "BORROWED" as const,
-        createdAt: loan.createdAt,
-        updatedAt: loan.updatedAt,
-      },
-    }));
-  } else {
-    const copyId =
-      raw.book_copy_id || raw.bookCopyId || raw.copy_id || `copy-${loan.id}`;
-    items = [
-      {
+  if (rawItemList && rawItemList.length > 0) {
+    items = rawItemList.map((rawItem: any, idx: number) => {
+      const isObject = rawItem && typeof rawItem === "object";
+      const itemCopyId = isObject
+        ? rawItem.book_copy_id ||
+          rawItem.bookCopyId ||
+          rawItem.copy_id ||
+          rawItem.copyId ||
+          rawItem.book_copy?._id ||
+          rawItem.book_copy?.id ||
+          rawItem.bookCopy?._id ||
+          rawItem.bookCopy?.id ||
+          rawItem.copy?._id ||
+          rawItem.copy?.id ||
+          rawItem._id ||
+          rawItem.id ||
+          `copy-${loan.id}-${idx}`
+        : String(rawItem);
+
+      const itemBookId = isObject
+        ? rawItem.book_id ||
+          rawItem.bookId ||
+          rawItem.book?._id ||
+          rawItem.book?.id ||
+          raw.book_id ||
+          raw.bookId ||
+          `book-${loan.id}`
+        : raw.book_id || raw.bookId || `book-${loan.id}`;
+
+      const itemBookTitle = isObject
+        ? rawItem.book_title ||
+          rawItem.bookTitle ||
+          rawItem.book?.title ||
+          rawItem.title ||
+          raw.book_title ||
+          raw.bookTitle ||
+          "Buku"
+        : raw.book_title || raw.bookTitle || "Buku";
+
+      const itemBookCode = isObject
+        ? rawItem.book_code ||
+          rawItem.bookCode ||
+          rawItem.book?.code ||
+          rawItem.code ||
+          raw.book_code ||
+          raw.bookCode ||
+          "BK-001"
+        : raw.book_code || raw.bookCode || "BK-001";
+
+      const itemCopyCode = isObject
+        ? rawItem.copy_code ||
+          rawItem.copyCode ||
+          rawItem.book_copy?.code ||
+          rawItem.copy?.code ||
+          raw.copy_code ||
+          raw.copyCode ||
+          "CP-001"
+        : raw.copy_code || raw.copyCode || "CP-001";
+
+      const rawReturnedAt = isObject
+        ? rawItem.returned_at ||
+          rawItem.returnedAt ||
+          rawItem.return_date ||
+          rawItem.returnDate
+        : null;
+
+      const isItemReturned =
+        (isObject &&
+          (rawItem.status === "RETURNED" ||
+            rawItem.status === "COMPLETED" ||
+            rawItem.status === "RETURN" ||
+            rawItem.is_returned === true ||
+            rawItem.isReturned === true ||
+            Boolean(rawReturnedAt))) ||
+        loan.status === "COMPLETED" ||
+        Boolean(loan.returnedAt);
+
+      const itemStatus: "RETURNED" | "BORROWED" = isItemReturned
+        ? "RETURNED"
+        : "BORROWED";
+
+      const itemReturnedAt = isItemReturned
+        ? rawReturnedAt ||
+          loan.returnedAt ||
+          rawItem?.updated_at ||
+          rawItem?.updatedAt ||
+          loan.updatedAt ||
+          new Date().toISOString()
+        : undefined;
+
+      const itemId = isObject
+        ? rawItem._id ||
+          rawItem.id ||
+          rawItem.loan_item_id ||
+          rawItem.loanItemId ||
+          `loan-item-${loan.id}-${idx}`
+        : `loan-item-${loan.id}-${idx}`;
+
+      return {
         loanItem: {
-          id: `loan-item-${loan.id}-0`,
+          id: itemId,
+          companyId: loan.companyId,
+          loanId: loan.id,
+          bookId: itemBookId,
+          bookCopyId: itemCopyId,
+          returnedAt: itemReturnedAt,
+          status: itemStatus,
+          createdAt: isObject
+            ? rawItem.created_at || rawItem.createdAt || loan.createdAt
+            : loan.createdAt,
+          updatedAt: isObject
+            ? rawItem.updated_at || rawItem.updatedAt || loan.updatedAt
+            : loan.updatedAt,
+        },
+        book: {
+          id: itemBookId,
+          companyId: loan.companyId,
+          code: itemBookCode,
+          title: itemBookTitle,
+          status: "AVAILABLE" as const,
+          totalCopies: 1,
+          availableCopies: 1,
+          createdAt: loan.createdAt,
+          updatedAt: loan.updatedAt,
+        },
+        bookCopy: {
+          id: itemCopyId,
+          companyId: loan.companyId,
+          bookId: itemBookId,
+          code: itemCopyCode,
+          status: isItemReturned
+            ? ("AVAILABLE" as const)
+            : ("BORROWED" as const),
+          createdAt: loan.createdAt,
+          updatedAt: loan.updatedAt,
+        },
+      };
+    });
+  } else {
+    const rawCopyIds = extractCopyIdsFromRaw(raw);
+    if (rawCopyIds.length > 0) {
+      items = rawCopyIds.map((cId: string, idx: number) => ({
+        loanItem: {
+          id: `loan-item-${loan.id}-${idx}`,
           companyId: loan.companyId,
           loanId: loan.id,
           bookId: raw.book_id || raw.bookId || `book-${loan.id}`,
-          bookCopyId: copyId,
+          bookCopyId: cId,
           returnedAt: loan.returnedAt,
           status:
             loan.status === "COMPLETED"
@@ -2000,16 +2107,63 @@ function mapRawToTransactionData(raw: any): TransactionData {
           updatedAt: loan.updatedAt,
         },
         bookCopy: {
-          id: copyId,
+          id: cId,
           companyId: loan.companyId,
           bookId: raw.book_id || raw.bookId || `book-${loan.id}`,
           code: raw.copy_code || raw.copyCode || "CP-001",
-          status: "BORROWED" as const,
+          status:
+            loan.status === "COMPLETED"
+              ? ("AVAILABLE" as const)
+              : ("BORROWED" as const),
           createdAt: loan.createdAt,
           updatedAt: loan.updatedAt,
         },
-      },
-    ];
+      }));
+    } else {
+      const copyId =
+        raw.book_copy_id || raw.bookCopyId || raw.copy_id || `copy-${loan.id}`;
+      items = [
+        {
+          loanItem: {
+            id: `loan-item-${loan.id}-0`,
+            companyId: loan.companyId,
+            loanId: loan.id,
+            bookId: raw.book_id || raw.bookId || `book-${loan.id}`,
+            bookCopyId: copyId,
+            returnedAt: loan.returnedAt,
+            status:
+              loan.status === "COMPLETED"
+                ? ("RETURNED" as const)
+                : ("BORROWED" as const),
+            createdAt: loan.createdAt,
+            updatedAt: loan.updatedAt,
+          },
+          book: {
+            id: raw.book_id || raw.bookId || `book-${loan.id}`,
+            companyId: loan.companyId,
+            code: raw.book_code || raw.bookCode || "BK-001",
+            title: raw.book_title || raw.bookTitle || "Buku",
+            status: "AVAILABLE" as const,
+            totalCopies: 1,
+            availableCopies: 1,
+            createdAt: loan.createdAt,
+            updatedAt: loan.updatedAt,
+          },
+          bookCopy: {
+            id: copyId,
+            companyId: loan.companyId,
+            bookId: raw.book_id || raw.bookId || `book-${loan.id}`,
+            code: raw.copy_code || raw.copyCode || "CP-001",
+            status:
+              loan.status === "COMPLETED"
+                ? ("AVAILABLE" as const)
+                : ("BORROWED" as const),
+            createdAt: loan.createdAt,
+            updatedAt: loan.updatedAt,
+          },
+        },
+      ];
+    }
   }
 
   return {
@@ -2358,13 +2512,13 @@ export async function getActiveReturnsApi(
           params: { company_id: compId },
         })
       )
-      .catch(() => api.get("/returns/active"));
+      .catch(() => api.get("/returns/active"))
+      .catch(() => null);
 
-    const items = response.data?.items || response.data || [];
+    const items = response?.data?.items || response?.data || [];
     if (Array.isArray(items) && items.length > 0) {
       const mapped = items.map(mapRawToTransactionData);
       const enriched = await enrichTransactions(mapped);
-      // Filter hanya transaksi yang masih memiliki copy yang dipinjam
       return enriched.filter(
         (tx) =>
           tx.loan.status !== "COMPLETED" &&
@@ -2372,8 +2526,13 @@ export async function getActiveReturnsApi(
       );
     }
 
-    // Jika endpoint active returns kosong di backend, return []
-    return [];
+    // Fallback: Gunakan listLoansApi() yang membaca /loan secara realtime
+    const allLoans = await listLoansApi();
+    return allLoans.filter(
+      (tx) =>
+        tx.loan.status !== "COMPLETED" &&
+        tx.items.some((it) => it.loanItem.status === "BORROWED")
+    );
   } catch (error: any) {
     if (
       error.response?.status >= 500 ||

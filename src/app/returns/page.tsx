@@ -446,27 +446,90 @@ export default function ReturnsPage() {
           .map(({ book, bookCopy }) => `${book.title} (${bookCopy.code})`),
       );
 
+      const returnedIdSet = new Set(selectedItemIds);
+      const updatedItems = selectedLoan.items.map((it) => {
+        if (returnedIdSet.has(it.loanItem.id)) {
+          return {
+            ...it,
+            loanItem: {
+              ...it.loanItem,
+              status: "RETURNED" as const,
+              returnedAt: new Date().toISOString(),
+            },
+            bookCopy: {
+              ...it.bookCopy,
+              status: "AVAILABLE" as const,
+            },
+          };
+        }
+        return it;
+      });
+
+      const hasRemainingBorrowed = updatedItems.some(
+        (it) => it.loanItem.status === "BORROWED"
+      );
+
+      const updatedLoanData: ReturnLoanData = {
+        ...selectedLoan,
+        loan: {
+          ...selectedLoan.loan,
+          ...loan,
+          status: hasRemainingBorrowed
+            ? loan.status || selectedLoan.loan.status
+            : "COMPLETED",
+        },
+        items: updatedItems,
+      };
+
       setSelectedItemIds([]);
 
-      const updatedLoans = loans
-        .map((item) => {
-          if (item.loan.id !== loan.id) {
-            return item;
+      // Update loans state
+      setLoans((prev) =>
+        prev
+          .map((item) => (item.loan.id === loan.id ? updatedLoanData : item))
+          .filter(
+            (item) =>
+              item.loan.status !== "COMPLETED" &&
+              item.items.some((it) => it.loanItem.status === "BORROWED")
+          )
+      );
+
+      setFilteredLoans((prev) =>
+        prev
+          .map((item) => (item.loan.id === loan.id ? updatedLoanData : item))
+          .filter(
+            (item) =>
+              item.loan.status !== "COMPLETED" &&
+              item.items.some((it) => it.loanItem.status === "BORROWED")
+          )
+      );
+
+      if (hasRemainingBorrowed) {
+        setSelectedLoan(updatedLoanData);
+      } else {
+        setSelectedLoan(null);
+      }
+
+      // Re-sync background data from backend
+      void getActiveReturnsApi()
+        .then((latest) => {
+          const activeOnly = latest.filter(
+            (item) =>
+              item.loan.status !== "COMPLETED" &&
+              item.items.some((it) => it.loanItem.status === "BORROWED")
+          );
+          setLoans(activeOnly);
+          setFilteredLoans(activeOnly);
+          if (hasRemainingBorrowed) {
+            const currentSelected = activeOnly.find(
+              (item) => item.loan.id === loan.id
+            );
+            if (currentSelected) {
+              setSelectedLoan(currentSelected);
+            }
           }
-
-          return {
-            ...item,
-            loan,
-          };
         })
-        .filter(
-          (item) =>
-            item.loan.status === "ACTIVE" || item.loan.status === "OVERDUE",
-        );
-
-      setLoans(updatedLoans);
-      setFilteredLoans(updatedLoans);
-      setSelectedLoan(null);
+        .catch(() => {});
     } catch (error) {
       const message =
         error instanceof Error ? error.message : "Pengembalian gagal diproses.";

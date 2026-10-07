@@ -60,6 +60,7 @@ const EMPTY_BOOK_ERRORS: BookFormErrors = {
 
 const MEMBER_PAGE_SIZE = 10;
 const BOOK_PAGE_SIZE = 10;
+const COPY_PAGE_SIZE = 10;
 
 export default function NewLoanPage() {
   const router = useRouter();
@@ -171,6 +172,9 @@ export default function NewLoanPage() {
   const [copyLoadingBookId, setCopyLoadingBookId] = useState<string | null>(
     null,
   );
+  const [copyPageByBookId, setCopyPageByBookId] = useState<
+    Record<string, number>
+  >({});
 
   // =====================================================
   // SCANNER & BARCODE STATE
@@ -745,6 +749,11 @@ export default function NewLoanPage() {
     setSelectedBooks((current) =>
       current.filter((item) => item.book.id !== bookId),
     );
+    setCopyPageByBookId((current) => {
+      const updated = { ...current };
+      delete updated[bookId];
+      return updated;
+    });
   }
 
   // =====================================================
@@ -2155,66 +2164,103 @@ export default function NewLoanPage() {
                                     Tidak ada copy buku yang tersedia.
                                   </p>
                                 </div>
-                              ) : (
-                                <div className="mt-3 grid gap-2 grid-cols-1 xl:grid-cols-2">
-                                  {selectedItem.copies.map((copy) => {
-                                    const unavailableCopy =
-                                      copy.status !== "AVAILABLE";
-                                    const checked =
-                                      selectedItem.selectedCopyIds.includes(
-                                        copy.id,
-                                      );
+                              ) : (() => {
+                                const currentCopyPage =
+                                  copyPageByBookId[book.id] || 1;
+                                const copyTotalPages = Math.ceil(
+                                  selectedItem.copies.length / COPY_PAGE_SIZE,
+                                );
+                                const safeCopyPage = Math.min(
+                                  Math.max(1, currentCopyPage),
+                                  copyTotalPages,
+                                );
+                                const paginatedCopies =
+                                  selectedItem.copies.slice(
+                                    (safeCopyPage - 1) * COPY_PAGE_SIZE,
+                                    safeCopyPage * COPY_PAGE_SIZE,
+                                  );
 
-                                    return (
-                                      <label
-                                        key={copy.id}
-                                        className={`flex items-center justify-between gap-3 rounded-lg border p-2.5 transition ${
-                                          unavailableCopy
-                                            ? "cursor-not-allowed bg-slate-50 opacity-60 border-slate-200"
-                                            : checked
-                                              ? "border-blue-500 bg-blue-50/50 cursor-pointer ring-1 ring-blue-200"
-                                              : "border-slate-200 bg-white hover:border-slate-300 cursor-pointer"
-                                        }`}
-                                      >
-                                        <div className="flex items-center gap-2.5 min-w-0">
-                                          <input
-                                            type="checkbox"
-                                            checked={checked}
-                                            disabled={unavailableCopy}
-                                            onChange={() =>
-                                              toggleCopy(book.id, copy)
-                                            }
-                                            className="h-4 w-4 rounded border-slate-300 text-blue-600 focus:ring-blue-500 disabled:cursor-not-allowed"
-                                          />
-                                          <p className="truncate text-xs sm:text-sm font-semibold text-slate-800">
-                                            {copy.code}
-                                          </p>
-                                        </div>
+                                return (
+                                  <>
+                                    <div className="mt-3 grid gap-2 grid-cols-1 xl:grid-cols-2">
+                                      {paginatedCopies.map((copy) => {
+                                        const unavailableCopy =
+                                          copy.status !== "AVAILABLE";
+                                        const checked =
+                                          selectedItem.selectedCopyIds.includes(
+                                            copy.id,
+                                          );
 
-                                        <span
-                                          className={`shrink-0 rounded-full px-2 py-0.5 text-[11px] font-semibold ${
-                                            copy.status === "AVAILABLE"
-                                              ? "bg-emerald-50 text-emerald-700"
-                                              : copy.status === "BORROWED"
-                                                ? "bg-amber-50 text-amber-700"
-                                                : copy.status === "INACTIVE"
-                                                  ? "bg-slate-100 text-slate-500"
-                                                  : "bg-red-50 text-red-600"
-                                          }`}
-                                        >
-                                          {copy.status === "AVAILABLE"
-                                            ? "Tersedia"
-                                            : copy.status === "BORROWED"
-                                              ? "Dipinjam"
-                                              : copy.status === "INACTIVE"
-                                                ? "Tidak aktif"
-                                                : "Hilang"}
-                                        </span>
-                                      </label>
-                                    );
-                                  })}
-                                </div>
-                              )}
+                                        return (
+                                          <label
+                                            key={copy.id}
+                                            className={`flex items-center justify-between gap-3 rounded-lg border p-2.5 transition ${
+                                              unavailableCopy
+                                                ? "cursor-not-allowed bg-slate-50 opacity-60 border-slate-200"
+                                                : checked
+                                                  ? "border-blue-500 bg-blue-50/50 cursor-pointer ring-1 ring-blue-200"
+                                                  : "border-slate-200 bg-white hover:border-slate-300 cursor-pointer"
+                                            }`}
+                                          >
+                                            <div className="flex items-center gap-2.5 min-w-0">
+                                              <input
+                                                type="checkbox"
+                                                checked={checked}
+                                                disabled={unavailableCopy}
+                                                onChange={() =>
+                                                  toggleCopy(book.id, copy)
+                                                }
+                                                className="h-4 w-4 rounded border-slate-300 text-blue-600 focus:ring-blue-500 disabled:cursor-not-allowed"
+                                              />
+                                              <p className="truncate text-xs sm:text-sm font-semibold text-slate-800">
+                                                {copy.code}
+                                              </p>
+                                            </div>
+
+                                            <span
+                                              className={`shrink-0 rounded-full px-2 py-0.5 text-[11px] font-semibold ${
+                                                copy.status === "AVAILABLE"
+                                                  ? "bg-emerald-50 text-emerald-700"
+                                                  : copy.status === "BORROWED"
+                                                    ? "bg-amber-50 text-amber-700"
+                                                    : copy.status === "INACTIVE"
+                                                      ? "bg-slate-100 text-slate-500"
+                                                      : "bg-red-50 text-red-600"
+                                              }`}
+                                            >
+                                              {copy.status === "AVAILABLE"
+                                                ? "Tersedia"
+                                                : copy.status === "BORROWED"
+                                                  ? "Dipinjam"
+                                                  : copy.status === "INACTIVE"
+                                                    ? "Tidak aktif"
+                                                    : "Hilang"}
+                                            </span>
+                                          </label>
+                                        );
+                                      })}
+                                    </div>
+
+                                    {/* COPIES PAGINATION (WHEN > 10 COPIES) */}
+                                    {copyTotalPages > 1 && (
+                                      <div className="mt-3 pt-2">
+                                        <Pagination
+                                          currentPage={safeCopyPage}
+                                          totalPages={copyTotalPages}
+                                          onPageChange={(nextPage) =>
+                                            setCopyPageByBookId((prev) => ({
+                                              ...prev,
+                                              [book.id]: nextPage,
+                                            }))
+                                          }
+                                          totalItems={selectedItem.copies.length}
+                                          pageSize={COPY_PAGE_SIZE}
+                                        />
+                                      </div>
+                                    )}
+                                  </>
+                                );
+                              })()}
 
                               <p className="mt-3 text-xs sm:text-sm text-slate-600">
                                 Copy dipilih:{" "}
@@ -2523,7 +2569,7 @@ export default function NewLoanPage() {
                   ref={successModalCloseRef}
                   type="button"
                   aria-label="Tutup peminjaman berhasil"
-                  onClick={() => setSuccessLoan(null)}
+                  onClick={closeSuccessModal}
                   className="rounded-md p-2 text-slate-500 transition hover:bg-slate-100 hover:text-slate-700 focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-500"
                 >
                   <span aria-hidden="true" className="text-xl leading-none">

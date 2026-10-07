@@ -16,7 +16,17 @@ export default function LoginPage() {
   const [showPassword, setShowPassword] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
+  const [isSessionExpired, setIsSessionExpired] = useState(false);
   const [checkingAuth, setCheckingAuth] = useState(true);
+
+  useEffect(() => {
+    if (typeof window !== "undefined") {
+      const params = new URLSearchParams(window.location.search);
+      if (params.get("reason") === "expired") {
+        setIsSessionExpired(true);
+      }
+    }
+  }, []);
 
   useEffect(() => {
     const auth = getAuthData();
@@ -145,8 +155,34 @@ export default function LoginPage() {
             <h1 className="text-xl font-bold tracking-tight text-slate-900 sm:text-2xl text-center">
               Masuk ke Akun
             </h1>
-            
           </div>
+
+          {/* EXPIRED SESSION NOTICE */}
+          {isSessionExpired && (
+            <div
+              role="alert"
+              className="mb-5 flex items-start gap-2.5 rounded-xl border border-amber-200 bg-amber-50 p-3.5 text-xs text-amber-900"
+            >
+              <svg
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth="2"
+                className="mt-0.5 h-4 w-4 shrink-0 text-amber-600"
+                aria-hidden="true"
+              >
+                <circle cx="12" cy="12" r="10" />
+                <line x1="12" y1="8" x2="12" y2="12" />
+                <line x1="12" y1="16" x2="12.01" y2="16" />
+              </svg>
+              <div className="flex-1">
+                <p className="font-semibold text-amber-900">Sesi Anda telah berakhir</p>
+                <p className="mt-0.5 text-amber-700 leading-relaxed">
+                  Sesi login Anda telah habis karena batas waktu. Silakan masuk kembali untuk melanjutkan.
+                </p>
+              </div>
+            </div>
+          )}
 
           <form onSubmit={handleSubmit} className="space-y-4">
             {/* EMAIL FIELD */}
