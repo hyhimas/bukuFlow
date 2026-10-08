@@ -69,7 +69,10 @@ export default function LoansPage() {
       setError("");
 
       try {
-        const result = await listLoansApi();
+        const result = await listLoansApi({
+          page,
+          size: pageSize,
+        });
 
         const activeLoans = result.filter(
           ({ loan }) => loan.status === "ACTIVE" || loan.status === "OVERDUE",
@@ -86,7 +89,7 @@ export default function LoansPage() {
     }
 
     void loadTransactions();
-  }, []);
+  }, [page, pageSize]);
 
   /*
    * =========================================================
@@ -508,7 +511,10 @@ export default function LoansPage() {
                     onPageChange={(nextPage) => setPage(nextPage)}
                     totalItems={filteredTransactions.length}
                     pageSize={pageSize}
-                    onPageSizeChange={(newSize) => setPageSize(newSize)}
+                    onPageSizeChange={(newSize) => {
+                      setPageSize(newSize);
+                      setPage(1);
+                    }}
                   />
                 </Card>
               </section>

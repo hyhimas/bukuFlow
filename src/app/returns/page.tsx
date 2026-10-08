@@ -295,7 +295,11 @@ export default function ReturnsPage() {
       setError("");
 
       try {
-        const result = await getActiveReturnsApi();
+        const result = await getActiveReturnsApi({
+          page,
+          size: pageSize,
+          search: query.trim() || undefined,
+        });
 
         const activeOnly = result.filter(
           (item) =>
@@ -315,7 +319,7 @@ export default function ReturnsPage() {
     }
 
     void loadLoans();
-  }, []);
+  }, [page, pageSize]);
 
   const totalPages = Math.max(1, Math.ceil(filteredLoans.length / pageSize));
 
@@ -633,7 +637,7 @@ export default function ReturnsPage() {
           </p>
         </div>
 
-        <div className="mt-5 grid gap-5 md:grid-cols-[minmax(0,1.2fr)_minmax(320px,0.9fr)] lg:grid-cols-[minmax(0,1.55fr)_minmax(360px,0.85fr)] md:items-start">
+        <div className="mt-5 grid gap-4 sm:gap-5 md:grid-cols-[minmax(0,1.12fr)_minmax(330px,0.98fr)] lg:grid-cols-[minmax(0,1.35fr)_minmax(380px,0.9fr)] md:items-start">
           <div className="min-w-0">
             <Card className="p-4 sm:p-5">
               <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
@@ -770,7 +774,10 @@ export default function ReturnsPage() {
                   onPageChange={(nextPage) => setPage(nextPage)}
                   totalItems={filteredLoans.length}
                   pageSize={pageSize}
-                  onPageSizeChange={(newSize) => setPageSize(newSize)}
+                  onPageSizeChange={(newSize) => {
+                    setPageSize(newSize);
+                    setPage(1);
+                  }}
                   className="mt-4 -mx-4 -mb-4 sm:-mx-5 sm:-mb-5 rounded-b-xl border-t"
                 />
               )}
@@ -873,7 +880,7 @@ export default function ReturnsPage() {
                           dikembalikan tetap ditampilkan sebagai riwayat status.
                         </p>
 
-                        <div className="mt-3 space-y-2">
+                        <div className="mt-3 space-y-2.5">
                           {selectedLoan.items.map(
                             ({ loanItem, book, bookCopy }) => {
                               const isBorrowed = loanItem.status === "BORROWED";
@@ -885,14 +892,10 @@ export default function ReturnsPage() {
                               return (
                                 <label
                                   key={loanItem.id}
-                                  className={`grid items-center gap-3 rounded-xl border p-3 transition ${
-                                    isStaff
-                                      ? "grid-cols-[auto_minmax(0,1fr)_auto]"
-                                      : "grid-cols-[minmax(0,1fr)_auto]"
-                                  } ${
+                                  className={`flex items-start gap-3 rounded-xl border p-3.5 transition ${
                                     isBorrowed
                                       ? selected
-                                        ? "border-blue-500 bg-blue-50"
+                                        ? "border-blue-500 bg-blue-50/70 shadow-2xs"
                                         : "border-slate-200 bg-white hover:border-blue-300"
                                       : "border-green-200 bg-green-50/40"
                                   } ${
@@ -907,49 +910,51 @@ export default function ReturnsPage() {
                                       checked={selected}
                                       disabled={!isBorrowed || returnLoading}
                                       onChange={() => toggleItem(loanItem.id)}
-                                      className="h-4 w-4 rounded border-slate-300 focus:ring-2 focus:ring-blue-500 disabled:cursor-not-allowed"
+                                      className="mt-1 h-4 w-4 shrink-0 rounded border-slate-300 text-blue-600 focus:ring-2 focus:ring-blue-500 disabled:cursor-not-allowed"
                                     />
                                   )}
 
-                                  <div className="min-w-0">
-                                    <p
-                                      className="truncate font-medium leading-tight text-slate-900"
-                                      title={book.title}
-                                    >
-                                      {book.title}
-                                    </p>
+                                  <div className="min-w-0 flex-1">
+                                    <div className="flex items-start justify-between gap-2">
+                                      <p
+                                        className="font-semibold text-sm leading-snug text-slate-900 line-clamp-2"
+                                        title={book.title}
+                                      >
+                                        {book.title}
+                                      </p>
 
-                                    <div className="mt-1 flex min-w-0 items-center gap-1.5 text-xs text-slate-500">
-                                      <span className="truncate">
-                                        {book.code}
-                                      </span>
+                                      <div className="shrink-0">
+                                        <Badge
+                                          variant={getItemStatusVariant(
+                                            loanItem.status,
+                                            selectedLoan.loan.status === "OVERDUE",
+                                          )}
+                                        >
+                                          {getItemStatusLabel(
+                                            loanItem.status,
+                                            selectedLoan.loan.status === "OVERDUE",
+                                          )}
+                                        </Badge>
+                                      </div>
+                                    </div>
 
-                                      <span aria-hidden="true">·</span>
-
-                                      <span className="shrink-0 font-semibold text-slate-700">
+                                    <div className="mt-1 flex flex-wrap items-center gap-x-2 gap-y-0.5 text-xs text-slate-500">
+                                      {book.code && <span>{book.code}</span>}
+                                      {book.code && bookCopy.code && (
+                                        <span className="text-slate-300" aria-hidden="true">
+                                          ·-
+                                        </span>
+                                      )}
+                                      <span className="font-medium text-slate-700">
                                         {bookCopy.code}
                                       </span>
                                     </div>
-                                  </div>
-
-                                  <div className="flex min-w-24 shrink-0 flex-col items-center justify-center text-center">
-                                    <Badge
-                                      variant={getItemStatusVariant(
-                                        loanItem.status,
-                                        selectedLoan.loan.status === "OVERDUE",
-                                      )}
-                                    >
-                                      {getItemStatusLabel(
-                                        loanItem.status,
-                                        selectedLoan.loan.status === "OVERDUE",
-                                      )}
-                                    </Badge>
 
                                     {loanItem.status === "RETURNED" &&
                                       loanItem.returnedAt && (
-                                        <span className="mt-1 text-xs text-green-700">
-                                          {formatDate(loanItem.returnedAt)}
-                                        </span>
+                                        <p className="mt-2 text-xs font-medium text-emerald-700">
+                                          Dikembalikan: {formatDate(loanItem.returnedAt)}
+                                        </p>
                                       )}
                                   </div>
                                 </label>

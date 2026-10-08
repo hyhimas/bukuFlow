@@ -1368,13 +1368,16 @@ export default function MasterBooksPage() {
 
           {books.length > 0 && (
             <div className="relative grid grid-cols-1 md:grid-cols-2 gap-3 bg-slate-50/60 p-3 lg:hidden">
-              {books.map((book) => {
+              {books.map((book, idx) => {
                 const isInactive = book.status === "INACTIVE";
+                const isLastOdd = books.length % 2 !== 0 && idx === books.length - 1;
 
                 return (
                   <div
                     key={book.id}
-                    className="rounded-xl border border-slate-200 bg-white p-3 shadow-sm flex flex-col justify-between"
+                    className={`rounded-xl border border-slate-200 bg-white p-3.5 shadow-sm flex flex-col justify-between h-full ${
+                      isLastOdd ? "md:col-span-2 md:w-[calc(50%-6px)] md:mx-auto" : ""
+                    }`}
                   >
                     <div>
                       <div className="flex items-start justify-between gap-3">
@@ -1397,14 +1400,15 @@ export default function MasterBooksPage() {
                         </span>
                       </div>
 
+                      {/* UNIFORM 2x2 INFO GRID */}
                       <div className="mt-3 grid grid-cols-2 gap-2">
                         <div className="rounded-lg border border-slate-100 bg-slate-50 px-3 py-2">
                           <p className="text-[10px] font-semibold uppercase tracking-wide text-slate-400">
                             Kategori
                           </p>
 
-                          <p className="mt-0.5 truncate text-xs font-medium text-slate-700">
-                            {book.category ?? "-"}
+                          <p className="mt-0.5 truncate text-xs font-medium text-slate-700" title={book.category || "-"}>
+                            {book.category && book.category !== "-" ? book.category : "-"}
                           </p>
                         </div>
 
@@ -1421,40 +1425,36 @@ export default function MasterBooksPage() {
                             {book.totalCopies}
                           </p>
                         </div>
-                      </div>
 
-                      {book.isbn && book.isbn !== "-" && (
-                        <div className="mt-2 rounded-lg border border-slate-100 bg-slate-50 px-3 py-2">
+                        <div className="rounded-lg border border-slate-100 bg-slate-50 px-3 py-2">
                           <p className="text-[10px] font-semibold uppercase tracking-wide text-slate-400">
                             ISBN
                           </p>
 
-                          <p className="mt-0.5 truncate text-xs font-medium text-slate-700">
-                            {book.isbn}
+                          <p className="mt-0.5 truncate text-xs font-medium text-slate-700" title={book.isbn || "-"}>
+                            {book.isbn && book.isbn !== "-" ? book.isbn : "-"}
                           </p>
                         </div>
-                      )}
 
-                      {book.author && book.author !== "-" && (
-                        <div className="mt-2 rounded-lg border border-slate-100 bg-slate-50 px-3 py-2">
+                        <div className="rounded-lg border border-slate-100 bg-slate-50 px-3 py-2">
                           <p className="text-[10px] font-semibold uppercase tracking-wide text-slate-400">
                             Pengarang
                           </p>
 
-                          <p className="mt-0.5 truncate text-xs font-medium text-slate-700">
-                            {book.author}
+                          <p className="mt-0.5 truncate text-xs font-medium text-slate-700" title={book.author || "-"}>
+                            {book.author && book.author !== "-" ? book.author : "-"}
                           </p>
                         </div>
-                      )}
+                      </div>
                     </div>
 
-                    <div className="mt-3.5 pt-2.5 border-t border-slate-100 grid grid-cols-2 sm:grid-cols-4 gap-2">
+                    <div className="mt-3.5 pt-2.5 border-t border-slate-100 grid grid-cols-2 gap-2">
                       <button
                         type="button"
                         onClick={() => void openDetail(book)}
                         className="h-9 rounded-lg border border-slate-200 bg-white text-xs font-semibold text-slate-700 shadow-2xs transition hover:bg-slate-50 hover:border-slate-300 flex items-center justify-center gap-1.5 focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-500"
                       >
-                        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="shrink-0">
                           <path d="M2 12s3-7 10-7 10 7 10 7-3 7-10 7-10-7-10-7Z" />
                           <circle cx="12" cy="12" r="3" />
                         </svg>
@@ -1466,7 +1466,7 @@ export default function MasterBooksPage() {
                         onClick={() => void handlePrintBookCopies(book)}
                         className="h-9 rounded-lg border border-slate-200 bg-white text-xs font-semibold text-slate-700 shadow-2xs transition hover:bg-slate-50 hover:border-slate-300 flex items-center justify-center gap-1.5 focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-500"
                       >
-                        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="shrink-0">
                           <path d="M3 5v14M8 5v14M12 5v14M17 5v14M21 5v14" />
                         </svg>
                         <span>Barcode</span>
@@ -1477,7 +1477,7 @@ export default function MasterBooksPage() {
                         onClick={() => openEditForm(book)}
                         className="h-9 rounded-lg border border-slate-200 bg-white text-xs font-semibold text-slate-700 shadow-2xs transition hover:bg-slate-50 hover:border-slate-300 flex items-center justify-center gap-1.5 focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-500"
                       >
-                        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="shrink-0">
                           <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7" />
                           <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z" />
                         </svg>
@@ -1489,13 +1489,13 @@ export default function MasterBooksPage() {
                         onClick={() => openBookStatusConfirm(book)}
                         className={`h-9 rounded-lg border text-xs font-semibold shadow-2xs flex items-center justify-center gap-1.5 transition focus:outline-none focus-visible:ring-2 ${
                           isInactive
-                            ? "border-emerald-200 bg-emerald-50 text-emerald-700 hover:bg-emerald-100 hover:border-emerald-300 focus-visible:ring-emerald-500"
-                            : "border-amber-200 bg-amber-50 text-amber-700 hover:bg-amber-100 hover:border-amber-300 focus-visible:ring-amber-500"
+                            ? "border-emerald-200/80 bg-emerald-50/50 text-emerald-800 hover:bg-emerald-100/70 hover:border-emerald-300 focus-visible:ring-emerald-500"
+                            : "border-amber-200/80 bg-amber-50/50 text-amber-800 hover:bg-amber-100/70 hover:border-amber-300 focus-visible:ring-amber-500"
                         }`}
                       >
                         {isInactive ? (
                           <>
-                            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="shrink-0">
                               <path d="M22 11.08V12a10 10 0 1 1-5.93-9.14" />
                               <polyline points="22 4 12 14.01 9 11.01" />
                             </svg>
@@ -1504,14 +1504,15 @@ export default function MasterBooksPage() {
                         ) : (
                           <>
                             <svg
-                              width="13"
-                              height="13"
+                              width="14"
+                              height="14"
                               viewBox="0 0 24 24"
                               fill="none"
                               stroke="currentColor"
                               strokeWidth="2"
                               strokeLinecap="round"
                               strokeLinejoin="round"
+                              className="shrink-0"
                             >
                               <rect width="20" height="5" x="2" y="3" rx="1" />
                               <path d="M4 8v11a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8" />
@@ -1548,7 +1549,10 @@ export default function MasterBooksPage() {
             onPageChange={(nextPage) => setPage(nextPage)}
             totalItems={total}
             pageSize={pageSize}
-            onPageSizeChange={(newSize) => setPageSize(newSize)}
+            onPageSizeChange={(newSize) => {
+              setPageSize(newSize);
+              setPage(1);
+            }}
           />
         </Card>
       </div>

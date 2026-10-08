@@ -2,6 +2,7 @@
 
 import {
   getMembersApi,
+  getMembersPaginatedApi,
   searchMembersApi,
   getMemberApi,
   createMemberApi,
@@ -9,6 +10,7 @@ import {
   changeMemberStatusApi,
   searchBooksApi,
   getBooksApi,
+  getBooksPaginatedApi,
   createBookApi,
   getBookApi,
   updateBookApi,
@@ -59,21 +61,40 @@ export const masterDataRepository = {
     input: MemberListInput = {},
   ): Promise<PaginatedResult<Member>> {
     const keyword = input.search?.trim() ?? "";
-    const members =
-      keyword.length > 0
-        ? await searchMembersApi(keyword)
-        : await getMembersApi();
+    const page = input.page ?? 1;
+    const pageSize = input.pageSize ?? 10;
+
+    if (keyword.length > 0) {
+      const members = await searchMembersApi(keyword);
+      const filtered =
+        input.status !== undefined
+          ? members.filter((member) => member.status === input.status)
+          : members;
+
+      return paginate(
+        filtered,
+        page,
+        pageSize,
+      );
+    }
+
+    const res = await getMembersPaginatedApi({
+      page,
+      size: pageSize,
+    });
 
     const filtered =
       input.status !== undefined
-        ? members.filter((member) => member.status === input.status)
-        : members;
+        ? res.items.filter((member) => member.status === input.status)
+        : res.items;
 
-    return paginate(
-      filtered,
-      input.page ?? 1,
-      input.pageSize ?? 10,
-    );
+    return {
+      data: filtered,
+      total: res.total,
+      page: res.page,
+      pageSize: res.size,
+      totalPages: res.totalPages,
+    };
   },
 
   async getMember(id: string): Promise<Member | null> {
@@ -135,20 +156,40 @@ export const masterDataRepository = {
     input: BookListInput = {},
   ): Promise<PaginatedResult<Book>> {
     const keyword = input.search?.trim() ?? "";
-    const books = keyword.length > 0
-      ? await searchBooksApi(keyword)
-      : await getBooksApi();
+    const page = input.page ?? 1;
+    const pageSize = input.pageSize ?? 10;
+
+    if (keyword.length > 0) {
+      const books = await searchBooksApi(keyword);
+      const filtered =
+        input.status !== undefined
+          ? books.filter((book) => book.status === input.status)
+          : books;
+
+      return paginate(
+        filtered,
+        page,
+        pageSize,
+      );
+    }
+
+    const res = await getBooksPaginatedApi({
+      page,
+      size: pageSize,
+    });
 
     const filtered =
       input.status !== undefined
-        ? books.filter((book) => book.status === input.status)
-        : books;
+        ? res.items.filter((book) => book.status === input.status)
+        : res.items;
 
-    return paginate(
-      filtered,
-      input.page ?? 1,
-      input.pageSize ?? 10,
-    );
+    return {
+      data: filtered,
+      total: res.total,
+      page: res.page,
+      pageSize: res.size,
+      totalPages: res.totalPages,
+    };
   },
 
   async getBook(id: string): Promise<Book | null> {

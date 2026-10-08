@@ -887,91 +887,92 @@ export default function MasterMembersPage() {
 
           {members.length > 0 && (
             <div className="relative grid grid-cols-1 gap-3 bg-slate-50/60 p-3 sm:p-3 md:grid-cols-2 lg:hidden">
-              {members.map((member) => {
+              {members.map((member, idx) => {
                 const isActive = member.status === "ACTIVE";
+                const isLastOdd = members.length % 2 !== 0 && idx === members.length - 1;
 
                 return (
                   <div
                     key={member.id}
-                    className="rounded-xl border border-slate-200 bg-white p-3 shadow-sm"
+                    className={`rounded-xl border border-slate-200 bg-white p-3.5 shadow-sm flex flex-col justify-between h-full ${
+                      isLastOdd ? "md:col-span-2 md:w-[calc(50%-6px)] md:mx-auto" : ""
+                    }`}
                   >
-                    {/* TOP */}
+                    <div>
+                      {/* TOP */}
 
-                    <div className="flex items-start justify-between gap-3">
-                      <div className="flex min-w-0 items-center gap-2.5">
-                        <div
-                          className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-full text-sm font-bold ${
-                            isActive
-                              ? "bg-blue-50 text-blue-600"
-                              : "bg-slate-100 text-slate-500"
-                          }`}
-                        >
-                          {getInitial(member.name)}
+                      <div className="flex items-start justify-between gap-3">
+                        <div className="flex min-w-0 items-center gap-2.5">
+                          <div
+                            className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-full text-sm font-bold ${
+                              isActive
+                                ? "bg-blue-50 text-blue-600"
+                                : "bg-slate-100 text-slate-500"
+                            }`}
+                          >
+                            {getInitial(member.name)}
+                          </div>
+
+                          <div className="min-w-0">
+                            <p className="text-[11px] font-medium text-slate-400">
+                              {member.memberNumber}
+                            </p>
+
+                            <p className="truncate text-sm font-semibold text-slate-900" title={member.name}>
+                              {member.name}
+                            </p>
+                          </div>
                         </div>
 
-                        <div className="min-w-0">
-                          <p className="text-[11px] font-medium text-slate-400">
-                            {member.memberNumber}
+                        <Badge variant={isActive ? "success" : "neutral"}>
+                          {isActive ? "Aktif" : "Nonaktif"}
+                        </Badge>
+                      </div>
+
+                      {/* INFORMATION */}
+
+                      <div className="mt-3 grid grid-cols-2 gap-2">
+                        <div className="rounded-lg border border-slate-100 bg-slate-50 px-3 py-2">
+                          <p className="text-[10px] font-semibold uppercase tracking-wide text-slate-400">
+                            NIK
                           </p>
 
-                          <p className="truncate text-sm font-semibold text-slate-900">
-                            {member.name}
+                          <p className="mt-0.5 truncate text-xs font-medium text-slate-700" title={member.identityNumber || "-"}>
+                            {member.identityNumber || "-"}
+                          </p>
+                        </div>
+
+                        <div className="rounded-lg border border-slate-100 bg-slate-50 px-3 py-2">
+                          <p className="text-[10px] font-semibold uppercase tracking-wide text-slate-400">
+                            No. HP
+                          </p>
+
+                          <p className="mt-0.5 truncate text-xs font-medium text-slate-700" title={member.phone || "-"}>
+                            {member.phone || "-"}
+                          </p>
+                        </div>
+
+                        <div className="col-span-2 rounded-lg border border-slate-100 bg-slate-50 px-3 py-2">
+                          <p className="text-[10px] font-semibold uppercase tracking-wide text-slate-400">
+                            Email
+                          </p>
+
+                          <p className="mt-0.5 truncate text-xs font-medium text-slate-700" title={member.email || "-"}>
+                            {member.email || "-"}
                           </p>
                         </div>
                       </div>
-
-                      <Badge variant={isActive ? "success" : "neutral"}>
-                        {isActive ? "Aktif" : "Nonaktif"}
-                      </Badge>
                     </div>
-
-                    {/* INFORMATION */}
-
-                    <div className="mt-3 grid grid-cols-2 gap-2">
-                      <div className="rounded-lg border border-slate-100 bg-slate-50 px-3 py-2">
-                        <p className="text-[10px] font-semibold uppercase tracking-wide text-slate-400">
-                          NIK
-                        </p>
-
-                        <p className="mt-0.5 truncate text-xs font-medium text-slate-700">
-                          {member.identityNumber}
-                        </p>
-                      </div>
-
-                      <div className="rounded-lg border border-slate-100 bg-slate-50 px-3 py-2">
-                        <p className="text-[10px] font-semibold uppercase tracking-wide text-slate-400">
-                          No. HP
-                        </p>
-
-                        <p className="mt-0.5 truncate text-xs font-medium text-slate-700">
-                          {member.phone}
-                        </p>
-                      </div>
-                    </div>
-
-                    {/* EMAIL */}
-
-                    {member.email && (
-                      <div className="mt-2 rounded-lg border border-slate-100 bg-slate-50 px-3 py-2">
-                        <p className="text-[10px] font-semibold uppercase tracking-wide text-slate-400">
-                          Email
-                        </p>
-
-                        <p className="mt-0.5 truncate text-xs font-medium text-slate-700">
-                          {member.email}
-                        </p>
-                      </div>
-                    )}
 
                     {/* ACTION */}
 
-                    <div className="mt-3.5 pt-2.5 border-t border-slate-100 grid grid-cols-3 gap-2">
+                    <div className="mt-3.5 pt-2.5 border-t border-slate-100 grid grid-cols-2 gap-2">
                       <button
                         type="button"
                         onClick={() => void openDetail(member)}
                         className="h-9 rounded-lg border border-slate-200 bg-white text-xs font-semibold text-slate-700 shadow-2xs transition hover:bg-slate-50 hover:border-slate-300 flex items-center justify-center gap-1.5 focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-500"
                       >
-                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="shrink-0">
                           <path d="M2 12s3-7 10-7 10 7 10 7-3 7-10 7-10-7-10-7Z" />
                           <circle cx="12" cy="12" r="3" />
                         </svg>
@@ -983,7 +984,7 @@ export default function MasterMembersPage() {
                         onClick={() => openEditForm(member)}
                         className="h-9 rounded-lg border border-slate-200 bg-white text-xs font-semibold text-slate-700 shadow-2xs transition hover:bg-slate-50 hover:border-slate-300 flex items-center justify-center gap-1.5 focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-500"
                       >
-                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="shrink-0">
                           <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7" />
                           <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z" />
                         </svg>
@@ -993,15 +994,15 @@ export default function MasterMembersPage() {
                       <button
                         type="button"
                         onClick={() => openStatusConfirm(member)}
-                        className={`h-9 rounded-lg border text-xs font-semibold flex items-center justify-center gap-1.5 shadow-2xs transition focus:outline-none focus-visible:ring-2 ${
+                        className={`col-span-2 h-9 rounded-lg border text-xs font-semibold flex items-center justify-center gap-1.5 shadow-2xs transition focus:outline-none focus-visible:ring-2 ${
                           isActive
-                            ? "border-amber-200 bg-amber-50 text-amber-700 hover:bg-amber-100 hover:border-amber-300 focus-visible:ring-amber-500"
-                            : "border-emerald-200 bg-emerald-50 text-emerald-700 hover:bg-emerald-100 hover:border-emerald-300 focus-visible:ring-emerald-500"
+                            ? "border-amber-200/80 bg-amber-50/50 text-amber-800 hover:bg-amber-100/70 hover:border-amber-300 focus-visible:ring-amber-500"
+                            : "border-emerald-200/80 bg-emerald-50/50 text-emerald-800 hover:bg-emerald-100/70 hover:border-emerald-300 focus-visible:ring-emerald-500"
                         }`}
                       >
                         {isActive ? (
                           <>
-                            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="shrink-0">
                               <circle cx="12" cy="12" r="10" />
                               <line x1="4.93" y1="4.93" x2="19.07" y2="19.07" />
                             </svg>
@@ -1009,7 +1010,7 @@ export default function MasterMembersPage() {
                           </>
                         ) : (
                           <>
-                            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="shrink-0">
                               <path d="M22 11.08V12a10 10 0 1 1-5.93-9.14" />
                               <polyline points="22 4 12 14.01 9 11.01" />
                             </svg>
@@ -1046,7 +1047,10 @@ export default function MasterMembersPage() {
             onPageChange={(nextPage) => setPage(nextPage)}
             totalItems={total}
             pageSize={pageSize}
-            onPageSizeChange={(newSize) => setPageSize(newSize)}
+            onPageSizeChange={(newSize) => {
+              setPageSize(newSize);
+              setPage(1);
+            }}
           />
         </Card>
       </div>

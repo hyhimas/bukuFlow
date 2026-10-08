@@ -266,7 +266,7 @@ export async function getMembersApi(
       .get("/member", {
         params: {
           page: params?.page ?? 1,
-          size: params?.size ?? 100,
+          size: params?.size ?? 10,
           sortby: params?.sortby ?? undefined,
           order: params?.order ?? "asc",
         },
@@ -276,7 +276,7 @@ export async function getMembersApi(
         return api.get("/office/member", {
           params: {
             page: params?.page ?? 1,
-            size: params?.size ?? 100,
+            size: params?.size ?? 10,
             sortby: params?.sortby ?? undefined,
             order: params?.order ?? "asc",
           },
@@ -302,6 +302,92 @@ export async function getMembersApi(
     }
     const { getMembers } = await import("./mock-api");
     return await getMembers();
+  }
+}
+
+let lastKnownMembersTotal = 0;
+
+export async function getMembersPaginatedApi(
+  params?: ListMembersParams
+): Promise<{ items: Member[]; total: number; page: number; size: number; totalPages: number }> {
+  const page = params?.page ?? 1;
+  const size = params?.size ?? 10;
+  try {
+    const response = await api
+      .get("/member", {
+        params: {
+          page,
+          size,
+          sortby: params?.sortby ?? undefined,
+          order: params?.order ?? "asc",
+        },
+      })
+      .catch((err) => {
+        if (err.response?.status >= 500) throw err;
+        return api.get("/office/member", {
+          params: {
+            page,
+            size,
+            sortby: params?.sortby ?? undefined,
+            order: params?.order ?? "asc",
+          },
+        });
+      });
+
+    const raw = response.data;
+    const items = raw?.items || raw?.data || (Array.isArray(raw) ? raw : []);
+    const mapped = Array.isArray(items) ? items.map(mapRawToMember) : [];
+
+    let total = typeof raw?.total === "number" && raw.total >= 0 ? raw.total : -1;
+    if (total > 0) {
+      lastKnownMembersTotal = total;
+    } else if (lastKnownMembersTotal > 0) {
+      total = lastKnownMembersTotal;
+    } else {
+      if (mapped.length < size) {
+        total = (page - 1) * size + mapped.length;
+        lastKnownMembersTotal = total;
+      } else {
+        total = page * size + 1;
+      }
+    }
+
+    if (mapped.length < size && total > (page - 1) * size + mapped.length) {
+      total = (page - 1) * size + mapped.length;
+      lastKnownMembersTotal = total;
+    }
+
+    const totalPages = Math.max(1, Math.ceil(total / size));
+
+    return {
+      items: mapped,
+      total,
+      page,
+      size,
+      totalPages,
+    };
+  } catch (error: any) {
+    if (
+      error.response?.status >= 500 ||
+      error.code === "ECONNABORTED" ||
+      error.message?.includes("Server Error")
+    ) {
+      throw new Error(
+        formatApiError(error, "Data anggota gagal dimuat karena gangguan server.")
+      );
+    }
+    const { getMembers } = await import("./mock-api");
+    const all = await getMembers();
+    const total = all.length;
+    const totalPages = Math.max(1, Math.ceil(total / size));
+    const start = (page - 1) * size;
+    return {
+      items: all.slice(start, start + size),
+      total,
+      page,
+      size,
+      totalPages,
+    };
   }
 }
 
@@ -652,7 +738,7 @@ export async function getBooksApi(params?: ListBooksParams): Promise<Book[]> {
       .get("/catalog/books", {
         params: {
           page: params?.page ?? 1,
-          size: params?.size ?? 100,
+          size: params?.size ?? 10,
           sortby: params?.sortby ?? undefined,
           order: params?.order ?? "asc",
         },
@@ -662,7 +748,7 @@ export async function getBooksApi(params?: ListBooksParams): Promise<Book[]> {
         return api.get("/office/catalog/books", {
           params: {
             page: params?.page ?? 1,
-            size: params?.size ?? 100,
+            size: params?.size ?? 10,
             sortby: params?.sortby ?? undefined,
             order: params?.order ?? "asc",
           },
@@ -725,6 +811,131 @@ export async function getBooksApi(params?: ListBooksParams): Promise<Book[]> {
     }
     const { searchBooks } = await import("./mock-api");
     return searchBooks("");
+  }
+}
+
+let lastKnownBooksTotal = 0;
+
+export async function getBooksPaginatedApi(
+  params?: ListBooksParams
+): Promise<{ items: Book[]; total: number; page: number; size: number; totalPages: number }> {
+  const page = params?.page ?? 1;
+  const size = params?.size ?? 10;
+  try {
+    const response = await api
+      .get("/catalog/books", {
+        params: {
+          page,
+          size,
+          sortby: params?.sortby ?? undefined,
+          order: params?.order ?? "asc",
+        },
+      })
+      .catch((err) => {
+        if (err.response?.status >= 500) throw err;
+        return api.get("/office/catalog/books", {
+          params: {
+            page,
+            size,
+            sortby: params?.sortby ?? undefined,
+            order: params?.order ?? "asc",
+          },
+        });
+      });
+
+    const raw = response.data;
+    const items = raw?.items || raw?.data || (Array.isArray(raw) ? raw : []);
+
+    const mappedBooks = Array.isArray(items) ? items.map((item: any) => {
+      const rawTotal = item.total_copies ?? item.totalCopies;
+      const rawAvailable = item.available_copies ?? item.availableCopies;
+
+      const hasExplicitTotal =
+        rawTotal !== undefined && rawTotal !== null && Number(rawTotal) > 0;
+      const totalCopies = hasExplicitTotal ? Number(rawTotal) : 1;
+      const availableCopies =
+        hasExplicitTotal && rawAvailable !== undefined && rawAvailable !== null
+          ? Number(rawAvailable)
+          : totalCopies;
+
+      const cleanIsbn = item.isbn && item.isbn !== "-" && item.isbn.trim() !== "" ? item.isbn.trim() : undefined;
+      const cleanAuthor = item.author && item.author !== "-" && item.author.trim() !== "" ? item.author.trim() : undefined;
+      const cleanPublisher = item.publisher && item.publisher !== "-" && item.publisher.trim() !== "" ? item.publisher.trim() : undefined;
+      const cleanCategory = item.category && item.category !== "-" && item.category.trim() !== "" ? item.category.trim() : undefined;
+
+      return {
+        id: item._id || item.id || `book-${Math.random().toString(36).slice(2)}`,
+        companyId: item.company_id || item.companyId || "company-001",
+        code: item.code || "-",
+        isbn: cleanIsbn,
+        title: item.title || "-",
+        author: cleanAuthor,
+        publisher: cleanPublisher,
+        publicationYear:
+          item.published_year ||
+          item.publication_year ||
+          item.publicationYear ||
+          undefined,
+        category: cleanCategory,
+        coverUrl: item.cover_url || item.coverUrl || undefined,
+        status: parseBookStatus(item.status, totalCopies, availableCopies),
+        totalCopies,
+        availableCopies,
+        createdAt: item.created_at || new Date().toISOString(),
+        updatedAt: item.updated_at || new Date().toISOString(),
+      };
+    }) : [];
+
+    let total = typeof raw?.total === "number" && raw.total >= 0 ? raw.total : -1;
+    if (total > 0) {
+      lastKnownBooksTotal = total;
+    } else if (lastKnownBooksTotal > 0) {
+      total = lastKnownBooksTotal;
+    } else {
+      if (mappedBooks.length < size) {
+        total = (page - 1) * size + mappedBooks.length;
+        lastKnownBooksTotal = total;
+      } else {
+        total = page * size + 1;
+      }
+    }
+
+    if (mappedBooks.length < size && total > (page - 1) * size + mappedBooks.length) {
+      total = (page - 1) * size + mappedBooks.length;
+      lastKnownBooksTotal = total;
+    }
+
+    const totalPages = Math.max(1, Math.ceil(total / size));
+
+    return {
+      items: mappedBooks,
+      total,
+      page,
+      size,
+      totalPages,
+    };
+  } catch (error: any) {
+    if (
+      error.response?.status >= 500 ||
+      error.code === "ECONNABORTED" ||
+      error.message?.includes("Server Error")
+    ) {
+      throw new Error(
+        formatApiError(error, "Katalog buku gagal dimuat karena gangguan server.")
+      );
+    }
+    const { searchBooks } = await import("./mock-api");
+    const all = await searchBooks("");
+    const total = all.length;
+    const totalPages = Math.max(1, Math.ceil(total / size));
+    const start = (page - 1) * size;
+    return {
+      items: all.slice(start, start + size),
+      total,
+      page,
+      size,
+      totalPages,
+    };
   }
 }
 
@@ -1513,7 +1724,7 @@ export interface DashboardApiResponse {
 export async function getDashboardApi(): Promise<DashboardApiResponse> {
   try {
     const [books, loans] = await Promise.all([
-      getBooksApi({ size: 100 }),
+      getBooksApi({ size: 10 }),
       listLoansApi(),
     ]);
 
@@ -2251,12 +2462,14 @@ export async function createLoanApi(data: CreateLoanInputData): Promise<Loan> {
 }
 
 async function enrichTransactions(
-  transactions: TransactionData[]
+  transactions: TransactionData[],
+  size?: number
 ): Promise<TransactionData[]> {
   try {
+    const fetchSize = size ? size : undefined;
     const [members, books] = await Promise.all([
-      getMembersApi().catch(() => []),
-      getBooksApi({ size: 100 }).catch(() => []),
+      getMembersApi(fetchSize ? { size: fetchSize } : undefined).catch(() => []),
+      getBooksApi(fetchSize ? { size: fetchSize } : undefined).catch(() => []),
     ]);
 
     // Fast multi-key member map (id, lowercase id, memberNumber, code)
@@ -2456,19 +2669,28 @@ export function sortTransactionsDesc(transactions: TransactionData[]): Transacti
   });
 }
 
-export async function listLoansApi(): Promise<TransactionData[]> {
+export async function listLoansApi(params?: {
+  page?: number;
+  size?: number;
+  search?: string;
+}): Promise<TransactionData[]> {
   try {
+    const queryParams: Record<string, any> = {};
+    if (params?.page) queryParams.page = params.page;
+    if (params?.size) queryParams.size = params.size;
+    if (params?.search) queryParams.search = params.search;
+
     const response = await api
-      .get("/loan")
+      .get("/loan", { params: queryParams })
       .catch((err) => {
         if (err.response?.status >= 500) throw err;
-        return api.get("/loans");
+        return api.get("/loans", { params: queryParams });
       });
 
     const items = response.data?.items || response.data || [];
     if (Array.isArray(items) && items.length > 0) {
       const mapped = items.map(mapRawToTransactionData);
-      return await enrichTransactions(mapped);
+      return await enrichTransactions(mapped, params?.size);
     }
     return [];
   } catch (error: any) {
@@ -2493,32 +2715,58 @@ export async function listLoansApi(): Promise<TransactionData[]> {
   }
 }
 
+export interface ListActiveReturnsParams {
+  companyId?: string;
+  page?: number;
+  size?: number;
+  search?: string;
+}
+
 export async function getActiveReturnsApi(
-  companyId?: string
+  paramsOrCompanyId?: ListActiveReturnsParams | string
 ): Promise<ReturnLoanData[]> {
   const auth = getAuthData();
+  let companyId: string | undefined;
+  let page: number | undefined;
+  let size: number | undefined;
+  let search: string | undefined;
+
+  if (typeof paramsOrCompanyId === "string") {
+    companyId = paramsOrCompanyId;
+  } else if (paramsOrCompanyId) {
+    companyId = paramsOrCompanyId.companyId;
+    page = paramsOrCompanyId.page;
+    size = paramsOrCompanyId.size;
+    search = paramsOrCompanyId.search;
+  }
+
   const compId = companyId || auth?.user?.companyId || "company-001";
+  const queryParams: Record<string, any> = {};
+  if (compId) queryParams.company_id = compId;
+  if (page) queryParams.page = page;
+  if (size) queryParams.size = size;
+  if (search) queryParams.search = search;
 
   try {
     const response = await api
-      .get("/loan/returns/active")
+      .get("/loan/returns/active", { params: queryParams })
       .catch(() =>
         api.get("/loan/returns/active", {
-          params: { company_id: compId },
+          params: queryParams,
         })
       )
       .catch(() =>
         api.get("/office/loan/returns/active", {
-          params: { company_id: compId },
+          params: queryParams,
         })
       )
-      .catch(() => api.get("/returns/active"))
+      .catch(() => api.get("/returns/active", { params: queryParams }))
       .catch(() => null);
 
     const items = response?.data?.items || response?.data || [];
     if (Array.isArray(items) && items.length > 0) {
       const mapped = items.map(mapRawToTransactionData);
-      const enriched = await enrichTransactions(mapped);
+      const enriched = await enrichTransactions(mapped, size);
       return enriched.filter(
         (tx) =>
           tx.loan.status !== "COMPLETED" &&
@@ -2527,7 +2775,7 @@ export async function getActiveReturnsApi(
     }
 
     // Fallback: Gunakan listLoansApi() yang membaca /loan secara realtime
-    const allLoans = await listLoansApi();
+    const allLoans = await listLoansApi({ page, size, search });
     return allLoans.filter(
       (tx) =>
         tx.loan.status !== "COMPLETED" &&
@@ -3500,7 +3748,7 @@ export interface OfficeUserPayload {
 }
 
 export async function getOfficeUsersApi(companyId?: string): Promise<any[]> {
-  const res = await getCompanyUsersApi({ size: 100 });
+  const res = await getCompanyUsersApi({ size: 10 });
   if (companyId) {
     return res.items.filter((u) => u.companyId === companyId);
   }

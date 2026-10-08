@@ -402,12 +402,15 @@ export default function UsersSettingsPage() {
                 1. MOBILE & TABLET CARD VIEW (< lg)
             ========================================================== */}
             <div className="grid grid-cols-1 md:grid-cols-2 gap-3.5 lg:hidden">
-              {users.map((user) => {
+              {users.map((user, idx) => {
                 const isSelf = user.id === currentUserId;
                 const isActive = user.is_active !== undefined ? user.is_active : user.status === "ACTIVE";
+                const isLastOdd = users.length % 2 !== 0 && idx === users.length - 1;
 
                 return (
-                  <Card key={user.id} className="p-4 shadow-sm border border-slate-200/90 transition hover:border-slate-300 flex flex-col justify-between">
+                  <Card key={user.id} className={`p-4 shadow-sm border border-slate-200/90 transition hover:border-slate-300 flex flex-col justify-between h-full ${
+                    isLastOdd ? "md:col-span-2 md:w-[calc(50%-7px)] md:mx-auto" : ""
+                  }`}>
                     <div>
                       {/* User Card Header */}
                       <div className="flex items-start justify-between gap-3">
@@ -509,15 +512,18 @@ export default function UsersSettingsPage() {
               })}
 
               {/* Mobile/Tablet Pagination */}
-              {totalPages > 1 && (
-                <div className="col-span-1 md:col-span-2 overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm mt-2">
+              {totalItems > 0 && (
+                <div className="col-span-1 md:col-span-2 rounded-xl border border-slate-200 bg-white shadow-sm mt-2">
                   <Pagination
                     currentPage={page}
                     totalPages={totalPages}
                     totalItems={totalItems}
                     pageSize={pageSize}
                     onPageChange={(newPage) => setPage(newPage)}
-                    onPageSizeChange={(newSize) => setPageSize(newSize)}
+                    onPageSizeChange={(newSize) => {
+                      setPageSize(newSize);
+                      setPage(1);
+                    }}
                     className="!border-t-0"
                   />
                 </div>
@@ -527,8 +533,8 @@ export default function UsersSettingsPage() {
             {/* =========================================================
                 2. TABLE VIEW (DESKTOP: >= lg)
             ========================================================== */}
-            <Card className="hidden lg:block overflow-hidden">
-              <div className="overflow-x-auto">
+            <Card className="hidden lg:block">
+              <div className="overflow-x-auto rounded-t-xl">
                 <table className="w-full min-w-[850px] table-fixed text-left text-sm text-slate-600">
                   <colgroup>
                     <col className="w-[220px]" />
@@ -672,7 +678,10 @@ export default function UsersSettingsPage() {
                 totalItems={totalItems}
                 pageSize={pageSize}
                 onPageChange={(newPage) => setPage(newPage)}
-                onPageSizeChange={(newSize) => setPageSize(newSize)}
+                onPageSizeChange={(newSize) => {
+                  setPageSize(newSize);
+                  setPage(1);
+                }}
               />
             </Card>
           </div>

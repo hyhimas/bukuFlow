@@ -212,7 +212,7 @@ export default function AppShell({ children }: AppShellProps) {
   const isWarning = remainingSeconds <= 300 && !isCritical; // <= 5 menit
 
   return (
-    <div className="min-h-screen bg-slate-50">
+    <div className="min-h-screen bg-slate-50 flex flex-col">
       {/* HEADER UTAMA */}
       <div className = "print:hidden sticky top-0 z-30 flex h-16 items-center justify-between border-b border-slate-200 bg-white/95 backdrop-blur-sm px-4 sm:px-6">
         {/* Sisi Kiri: Menu & Logo */}
@@ -238,10 +238,10 @@ export default function AppShell({ children }: AppShellProps) {
         </div>
 
         {/* Sisi Kanan: Modern Clean Session Indicator */}
-        <div className="flex items-center gap-2 sm:gap-3">
+        <div className="flex items-center gap-1.5 sm:gap-3 shrink-0">
           {/* Badge / Pill Sesi */}
           <div
-            className={`flex items-center gap-1.5 rounded-full px-3 py-1.5 text-xs font-medium transition-all ${
+            className={`inline-flex items-center gap-1.5 shrink-0 whitespace-nowrap rounded-full px-2.5 sm:px-3 py-1 sm:py-1.5 text-xs font-medium transition-all ${
               isCritical
                 ? "border border-rose-200 bg-rose-50 text-rose-700 animate-pulse"
                 : isWarning
@@ -254,16 +254,16 @@ export default function AppShell({ children }: AppShellProps) {
             ) : (
               <ClockIcon />
             )}
-            <span className="tabular-nums">
+            <span className="tabular-nums whitespace-nowrap inline-flex items-center gap-1 leading-none">
               {isCritical || isWarning ? (
                 <>
-                  <span className="hidden sm:inline">Sesi berakhir dalam </span>
-                  <span className="sm:hidden">Sisa </span>
+                  <span className="hidden sm:inline">Sesi berakhir dalam</span>
+                  <span className="sm:hidden">Sisa</span>
                   <strong className="font-semibold font-mono">{formatTimer(remainingSeconds)}</strong>
                 </>
               ) : (
                 <>
-                  <span className="hidden sm:inline">Sesi aktif · </span>
+                  <span className="hidden sm:inline">Sesi aktif ·</span>
                   <strong className="font-semibold font-mono">{formatTimer(remainingSeconds)}</strong>
                 </>
               )}
@@ -274,7 +274,7 @@ export default function AppShell({ children }: AppShellProps) {
           <button
             type="button"
             onClick={() => setShowReloginModal(true)}
-            className="rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-xs font-medium text-slate-700 shadow-sm transition hover:border-slate-300 hover:bg-slate-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500"
+            className="shrink-0 whitespace-nowrap rounded-lg border border-slate-200 bg-white px-2.5 sm:px-3 py-1 sm:py-1.5 text-xs font-medium text-slate-700 shadow-sm transition hover:border-slate-300 hover:bg-slate-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500"
           >
             Perpanjang
           </button>
@@ -392,7 +392,7 @@ export default function AppShell({ children }: AppShellProps) {
       />
 
       {/* KONTEN UTAMA */}
-      <main className="min-h-screen min-w-0">{children}</main>
+      <div className="flex-1 flex flex-col min-w-0">{children}</div>
     </div>
   );
 }

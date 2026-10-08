@@ -20,6 +20,7 @@ import {
   getBookCopiesApi,
   createLoanApi,
 } from "@/lib/api";
+import { masterDataRepository } from "@/lib/master-data/repository";
 
 import type { Book, BookCopy, Loan, Member } from "@/lib/types";
 import LoadingState from "@/components/ui/LoadingState";
@@ -78,6 +79,8 @@ export default function NewLoanPage() {
   const [members, setMembers] = useState<Member[]>([]);
   const [memberPage, setMemberPage] = useState(1);
   const [memberPageSize, setMemberPageSize] = useState(10);
+  const [memberTotal, setMemberTotal] = useState(0);
+  const [memberTotalPages, setMemberTotalPages] = useState(1);
   const [selectedMember, setSelectedMember] = useState<Member | null>(null);
 
   const [memberLoading, setMemberLoading] = useState(false);
@@ -123,6 +126,8 @@ export default function NewLoanPage() {
   const [books, setBooks] = useState<Book[]>([]);
   const [bookPage, setBookPage] = useState(1);
   const [bookPageSize, setBookPageSize] = useState(10);
+  const [bookTotal, setBookTotal] = useState(0);
+  const [bookTotalPages, setBookTotalPages] = useState(1);
 
   const [bookLoading, setBookLoading] = useState(false);
   const [bookError, setBookError] = useState("");
@@ -344,19 +349,17 @@ export default function NewLoanPage() {
         setMemberError("");
 
         try {
-          const keyword = memberQuery.trim();
-          const result =
-            keyword.length > 0
-              ? await searchMembersApi(keyword)
-              : await getMembersApi();
+          const result = await masterDataRepository.listMembers({
+            search: memberQuery.trim(),
+            status: "ACTIVE",
+            page: memberPage,
+            pageSize: memberPageSize,
+          });
 
           if (!cancelled) {
-            const visibleMembers = keyword
-              ? result
-              : result.filter((member) => member.status === "ACTIVE");
-
-            setMembers(visibleMembers);
-            setMemberPage(1);
+            setMembers(result.data);
+            setMemberTotal(result.total);
+            setMemberTotalPages(result.totalPages);
           }
         } catch (err: any) {
           if (!cancelled) {
@@ -364,7 +367,8 @@ export default function NewLoanPage() {
               err instanceof Error ? err.message : "Data anggota gagal dimuat."
             );
             setMembers([]);
-            setMemberPage(1);
+            setMemberTotal(0);
+            setMemberTotalPages(1);
           }
         } finally {
           if (!cancelled) {
@@ -380,7 +384,7 @@ export default function NewLoanPage() {
       cancelled = true;
       window.clearTimeout(timer);
     };
-  }, [memberQuery, selectedMember, showMemberForm, router]);
+  }, [memberQuery, memberPage, memberPageSize, selectedMember, showMemberForm, router]);
 
   // =====================================================
   // BOOK SEARCH WITH DEBOUNCE
@@ -400,15 +404,16 @@ export default function NewLoanPage() {
         setBookError("");
 
         try {
-          const keyword = bookQuery.trim();
-          const result = await searchBooksApi(keyword);
-          const visibleBooks = keyword
-            ? result
-            : result.filter((book) => book.status !== "INACTIVE");
+          const result = await masterDataRepository.listBooks({
+            search: bookQuery.trim(),
+            page: bookPage,
+            pageSize: bookPageSize,
+          });
 
           if (!cancelled) {
-            setBooks(visibleBooks);
-            setBookPage(1);
+            setBooks(result.data);
+            setBookTotal(result.total);
+            setBookTotalPages(result.totalPages);
           }
         } catch (err: any) {
           if (!cancelled) {
@@ -416,7 +421,8 @@ export default function NewLoanPage() {
               err instanceof Error ? err.message : "Data buku gagal dimuat."
             );
             setBooks([]);
-            setBookPage(1);
+            setBookTotal(0);
+            setBookTotalPages(1);
           }
         } finally {
           if (!cancelled) {
@@ -432,7 +438,7 @@ export default function NewLoanPage() {
       cancelled = true;
       window.clearTimeout(timer);
     };
-  }, [bookQuery, selectedMember]);
+  }, [bookQuery, bookPage, bookPageSize, selectedMember]);
 
   // =====================================================
   // SELECT MEMBER
@@ -907,7 +913,7 @@ export default function NewLoanPage() {
 
       // C. Fallback: Search all catalog books
       if (!matchedBook) {
-        const allBooks = await getBooksApi({ size: 100 }).catch(() => []);
+        const allBooks = await getBooksApi({ size: 10 }).catch(() => []);
         const directBook = allBooks.find(
           (b) =>
             b.code.toUpperCase() === code ||
@@ -1214,30 +1220,6 @@ export default function NewLoanPage() {
     setSuccessLoan(null);
   }
 
-  // =====================================================
-  // PAGINATION CALCULATIONS
-  // =====================================================
-
-  const memberTotalPages = Math.max(
-    1,
-    Math.ceil(members.length / memberPageSize),
-  );
-  const currentMemberPage = Math.min(memberPage, memberTotalPages);
-  const paginatedMembers = members.slice(
-    (currentMemberPage - 1) * memberPageSize,
-    currentMemberPage * memberPageSize,
-  );
-
-  const bookTotalPages = Math.max(
-    1,
-    Math.ceil(books.length / bookPageSize),
-  );
-  const currentBookPage = Math.min(bookPage, bookTotalPages);
-  const paginatedBooks = books.slice(
-    (currentBookPage - 1) * bookPageSize,
-    currentBookPage * bookPageSize,
-  );
-
   if (pageLoading) {
     return (
       <main className="min-h-screen bg-slate-50">
@@ -1276,7 +1258,7 @@ export default function NewLoanPage() {
         ================================================= */}
 
         <div
-          className={`${successLoan ? "pointer-events-none opacity-60" : ""} grid gap-5 md:grid-cols-[minmax(0,1.25fr)_minmax(320px,0.95fr)] lg:grid-cols-[minmax(0,1.55fr)_minmax(360px,0.85fr)] md:items-start`}
+          className={`${successLoan ? "pointer-events-none opacity-60" : ""} grid gap-6 lg:grid-cols-[minmax(0,1.4fr)_minmax(340px,0.85fr)] xl:grid-cols-[minmax(0,1.55fr)_minmax(360px,0.85fr)] lg:items-start`}
         >
           <div className="min-w-0">
             <Card className="p-4 sm:p-5">
@@ -1353,11 +1335,11 @@ export default function NewLoanPage() {
                         </h4>
 
                         <p className="shrink-0 text-xs text-slate-500">
-                          {members.length} anggota
+                          {memberTotal > 0 ? `${memberTotal} anggota` : `${members.length} anggota`}
                         </p>
                       </div>
 
-                      {paginatedMembers.map((member) => {
+                      {members.map((member) => {
                         const inactive = member.status === "INACTIVE";
 
                         return (
@@ -1418,12 +1400,15 @@ export default function NewLoanPage() {
 
                       {/* MEMBER PAGINATION (MOBILE, TABLET & DESKTOP) */}
                       <Pagination
-                        currentPage={currentMemberPage}
+                        currentPage={memberPage}
                         totalPages={memberTotalPages}
                         onPageChange={(nextPage) => setMemberPage(nextPage)}
-                        totalItems={members.length}
+                        totalItems={memberTotal}
                         pageSize={memberPageSize}
-                        onPageSizeChange={(newSize) => setMemberPageSize(newSize)}
+                        onPageSizeChange={(newSize) => {
+                          setMemberPageSize(newSize);
+                          setMemberPage(1);
+                        }}
                         className="mt-4 -mx-4 -mb-4 sm:-mx-5 sm:-mb-5 rounded-b-xl border-t"
                       />
                     </div>
@@ -1966,11 +1951,11 @@ export default function NewLoanPage() {
                       </h4>
 
                       <p className="shrink-0 text-xs text-slate-500">
-                        {books.length} buku
+                        {bookTotal > 0 ? `${bookTotal} buku` : `${books.length} buku`}
                       </p>
                     </div>
 
-                    {paginatedBooks.map((book) => {
+                    {books.map((book) => {
                       const archived = book.status === "INACTIVE";
                       const unavailable = archived || book.availableCopies <= 0;
                       const selectedItem = selectedBooks.find(
@@ -2244,10 +2229,11 @@ export default function NewLoanPage() {
                                       })}
                                     </div>
 
-                                    {/* COPIES PAGINATION (WHEN > 10 COPIES) */}
+                                    {/* COPIES PAGINATION (WHEN > 5 COPIES) */}
                                     {copyTotalPages > 1 && (
-                                      <div className="mt-3 pt-2">
+                                      <div className="mt-2.5 pt-2 border-t border-blue-100/80">
                                         <Pagination
+                                          compact
                                           currentPage={safeCopyPage}
                                           totalPages={copyTotalPages}
                                           onPageChange={(nextPage) =>
@@ -2258,6 +2244,7 @@ export default function NewLoanPage() {
                                           }
                                           totalItems={selectedItem.copies.length}
                                           pageSize={COPY_PAGE_SIZE}
+                                          className="bg-transparent border-t-0 px-0 py-0"
                                         />
                                       </div>
                                     )}
@@ -2280,12 +2267,15 @@ export default function NewLoanPage() {
 
                     {/* BOOK PAGINATION (MOBILE, TABLET & DESKTOP) */}
                     <Pagination
-                      currentPage={currentBookPage}
+                      currentPage={bookPage}
                       totalPages={bookTotalPages}
                       onPageChange={(nextPage) => setBookPage(nextPage)}
-                      totalItems={books.length}
+                      totalItems={bookTotal}
                       pageSize={bookPageSize}
-                      onPageSizeChange={(newSize) => setBookPageSize(newSize)}
+                      onPageSizeChange={(newSize) => {
+                        setBookPageSize(newSize);
+                        setBookPage(1);
+                      }}
                       className="mt-4 -mx-4 -mb-4 sm:-mx-5 sm:-mb-5 rounded-b-xl border-t"
                     />
                   </div>
@@ -2294,7 +2284,7 @@ export default function NewLoanPage() {
             )}
           </div>
 
-          <div className="min-w-0 md:sticky md:top-20 md:self-start space-y-5">
+          <div className="min-w-0 lg:sticky lg:top-20 lg:self-start space-y-5">
             <Card className="p-4 sm:p-5">
               <h3 className="text-base font-semibold text-slate-900">
                 Informasi Peminjaman
