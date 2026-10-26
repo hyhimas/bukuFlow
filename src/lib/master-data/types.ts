@@ -1,9 +1,6 @@
 import type {
-  Book,
-  BookCopy,
   BookCopyStatus,
   BookStatus,
-  Member,
   MemberStatus,
 } from "@/lib/types";
 
@@ -29,10 +26,13 @@ export interface PaginatedResult<T> {
 export interface MemberListInput extends PaginationInput {
   search?: string;
   status?: MemberStatus;
+  sortby?: string;
+  order?: "asc" | "desc";
 }
 
 export interface CreateMemberInput {
   name: string;
+  memberNumber: string;
   phone: string;
   identityNumber: string;
   email?: string;
@@ -55,6 +55,8 @@ export interface ChangeMemberStatusInput {
 export interface BookListInput extends PaginationInput {
   search?: string;
   status?: BookStatus;
+  sortby?: string;
+  order?: "asc" | "desc";
 }
 
 export interface CreateBookInput {
@@ -66,6 +68,7 @@ export interface CreateBookInput {
   publicationYear?: number;
   category?: string;
   totalCopies: number;
+  companyId?: string;
 }
 
 export interface UpdateBookInput {
@@ -75,10 +78,12 @@ export interface UpdateBookInput {
   publisher?: string;
   publicationYear?: number;
   category?: string;
+  companyId?: string;
 }
 
 export interface ChangeBookStatusInput {
   status: BookStatus;
+  companyId?: string;
 }
 
 
@@ -89,16 +94,19 @@ export interface ChangeBookStatusInput {
 export interface BookCopyListInput extends PaginationInput {
   bookId?: string;
   status?: BookCopyStatus;
+  companyId?: string;
 }
 
 export interface CreateBookCopyInput {
   bookId: string;
   count?: number;
+  companyId?: string;
 }
 
 export interface ChangeBookCopyStatusInput {
   status: BookCopyStatus;
   bookId?: string;
+  companyId?: string;
 }
 
 /**

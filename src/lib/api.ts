@@ -1,5 +1,5 @@
 import axios from "axios";
-import { getAccessToken, getTokenType, clearAuthData, getAuthData } from "./auth";
+import { getAccessToken, getTokenType, clearAuthData, getAuthData, markSessionExpired } from "./auth";
 import type {
   Book,
   BookCopy,
@@ -51,33 +51,46 @@ api.interceptors.response.use(
     const isLoginEndpoint = error.config?.url?.includes("/auth/login");
 
     if (error.response?.status === 401 && !isLoginEndpoint) {
-      // Pastikan 401 ini bukan berasal dari request lama (stale token)
-      const currentToken = getAccessToken();
+      const auth = getAuthData();
+      const currentToken = auth?.accessToken || getAccessToken();
 
-      // Abaikan force logout jika sedang mode testing/mock token
-      if (currentToken && currentToken.startsWith("mock-")) {
-        return Promise.reject(error);
+      // Abaikan 401 jika user baru saja login dalam 5 detik terakhir (cegah stale in-flight request dari sesi lama)
+      if (auth?.loginAt) {
+        const timeSinceLogin = Date.now() - new Date(auth.loginAt).getTime();
+        if (timeSinceLogin < 5000) {
+          return Promise.reject(error);
+        }
       }
 
-      const requestAuthHeader = error.config?.headers?.Authorization;
+      // Ambil header authorization dengan aman (mendukung AxiosHeaders instance di Axios v1)
+      const headers = error.config?.headers;
+      const requestAuthHeader =
+        (typeof headers?.get === "function"
+          ? headers.get("Authorization") || headers.get("authorization")
+          : null) ||
+        headers?.Authorization ||
+        headers?.authorization;
+
       const requestToken = requestAuthHeader
         ? String(requestAuthHeader).replace(/^Bearer\s+/i, "").trim()
         : null;
 
-      // Jika token di localStorage sudah diperbarui (login baru berhasil), abaikan 401 dari request lama
+      // Jika token di request berbeda dengan token aktif saat ini (request lama), abaikan 401
       if (currentToken && requestToken && currentToken !== requestToken) {
         return Promise.reject(error);
       }
 
       if (!isLoggingOut) {
         isLoggingOut = true;
-        clearAuthData();
 
         if (
           typeof window !== "undefined" &&
           !window.location.pathname.startsWith("/login")
         ) {
-          window.location.replace("/login");
+          markSessionExpired();
+          window.dispatchEvent(new CustomEvent("bukuflow:session_expired"));
+        } else {
+          clearAuthData();
         }
 
         setTimeout(() => {
@@ -91,77 +104,34 @@ api.interceptors.response.use(
 );
 
 // ----------------------------------------------------
+// Helper: Resolve Company ID
+// ----------------------------------------------------
+
+export function resolveCompanyId(explicit?: string): string {
+  const auth = getAuthData();
+  const isSuperAdmin = auth?.user?.role === "SUPER_ADMIN";
+  const compId = explicit?.trim() || auth?.user?.companyId?.trim();
+  if (!compId) {
+    if (isSuperAdmin) {
+      return "";
+    }
+    throw new Error("ID instansi tidak tersedia di sesi. Silakan login ulang.");
+  }
+  return compId;
+}
+
+// ----------------------------------------------------
 // Helper: Error Formatting
 // ----------------------------------------------------
 
+export { getErrorMessage, getFieldErrors } from "./errors";
+import { getErrorMessage } from "./errors";
+
 export function formatApiError(
   error: any,
-  fallbackMessage: string = "Terjadi kesalahan pada sistem."
+  defaultMessage: string = "Terjadi kesalahan pada sistem."
 ): string {
-  if (!error) return fallbackMessage;
-
-  const status = error.response?.status;
-  const detail = error.response?.data?.detail;
-  const message = error.response?.data?.message;
-
-  let detailStr = "";
-  if (Array.isArray(detail)) {
-    detailStr = detail
-      .map((d: any) => {
-        const field = Array.isArray(d.loc)
-          ? d.loc.filter((l: any) => l !== "body").join(".")
-          : "";
-        return field ? `${field}: ${d.msg}` : d.msg;
-      })
-      .join("; ");
-  } else if (typeof detail === "object" && detail !== null) {
-    detailStr = detail.message || detail.error || JSON.stringify(detail);
-  } else if (typeof detail === "string") {
-    detailStr = detail;
-  } else if (typeof message === "string") {
-    detailStr = message;
-  }
-
-  if (status === 500) {
-    return detailStr
-      ? `Server Error (500): ${detailStr}`
-      : "Server Error (500): Internal Server Error (Database atau Server backend bermasalah)";
-  }
-
-  if (status === 502) {
-    return "Server Error (502): Bad Gateway (Server backend tidak dapat dihubungi)";
-  }
-
-  if (status === 503) {
-    return "Server Error (503): Service Unavailable (Server backend sedang tidak tersedia)";
-  }
-
-  if (status === 504) {
-    return "Server Error (504): Gateway Timeout (Server backend waktu tunggu habis)";
-  }
-
-  if (status && status >= 500) {
-    return detailStr
-      ? `Server Error (${status}): ${detailStr}`
-      : `Server Error (${status}): Terjadi kesalahan internal pada backend.`;
-  }
-
-  if (
-    error.code === "ECONNABORTED" ||
-    error.message?.toLowerCase().includes("timeout")
-  ) {
-    return "Request Timeout: Server backend membutuhkan waktu terlalu lama untuk merespons (Timeout).";
-  }
-
-  if (detailStr) {
-    return detailStr;
-  }
-
-  if (error.message && typeof error.message === "string") {
-    return error.message;
-  }
-
-  return fallbackMessage;
+  return getErrorMessage(error, defaultMessage);
 }
 
 // ----------------------------------------------------
@@ -177,6 +147,12 @@ export async function loginApi(email: string, password: string) {
 
     const raw = response.data;
     const rawUser = raw.data || raw.user || {};
+    const companyId = rawUser.company_id || rawUser.companyId || "";
+    const role = rawUser.role || "STAFF";
+
+    if (role !== "SUPER_ADMIN" && !companyId) {
+      throw new Error("Akun belum terhubung ke instansi.");
+    }
 
     return {
       access_token: raw.access_token,
@@ -186,11 +162,14 @@ export async function loginApi(email: string, password: string) {
         name: rawUser.name,
         email: rawUser.email,
         role: rawUser.role,
-        companyId: rawUser.company_id || rawUser.companyId || "company-001",
+        companyId,
       },
       user: raw.user || raw.data, 
     };
   } catch (error: any) {
+    if (error.message === "Akun belum terhubung ke instansi.") {
+      throw error;
+    }
     throw new Error(formatApiError(error, "Email atau password salah."));
   }
 }
@@ -202,7 +181,9 @@ export async function getMeApi() {
 
 export async function logoutApi() {
   try {
-    await api.post("/auth/logout", {}, { timeout: 1500 }).catch(() => {});
+    await api.post("/auth/logout", {}, { timeout: 1500 });
+  } catch (error: any) {
+    console.warn("Gagal logout di server (tetap membersihkan sesi lokal):", error?.message);
   } finally {
     clearAuthData();
     if (
@@ -230,7 +211,7 @@ export interface CreateMemberInputData {
   phone: string;
   identityNumber: string;
   email?: string;
-  memberNumber?: string;
+  memberNumber: string;
 }
 
 export interface UpdateMemberInputData {
@@ -244,8 +225,8 @@ export interface UpdateMemberInputData {
 
 function mapRawToMember(item: any): Member {
   return {
-    id: item._id || item.id || `member-${Math.random().toString(36).slice(2)}`,
-    companyId: item.company_id || item.companyId || "company-001",
+    id: item._id || item.id || "",
+    companyId: item.company_id || item.companyId || "",
     memberNumber: item.member_number || item.memberNumber || item.code || "-",
     name: item.name || "-",
     identityNumber: item.identity_number || item.identityNumber || "-",
@@ -253,8 +234,8 @@ function mapRawToMember(item: any): Member {
     email: item.email || undefined,
     status: (item.status === "INACTIVE" ? "INACTIVE" : "ACTIVE") as MemberStatus,
     memberType: item.member_type || item.memberType || "UMUM",
-    createdAt: item.created_at || new Date().toISOString(),
-    updatedAt: item.updated_at || new Date().toISOString(),
+    createdAt: item.created_at || "",
+    updatedAt: item.updated_at || item.created_at || "",
   };
 }
 
@@ -262,46 +243,20 @@ export async function getMembersApi(
   params?: ListMembersParams
 ): Promise<Member[]> {
   try {
-    const response = await api
-      .get("/member", {
-        params: {
-          page: params?.page ?? 1,
-          size: params?.size ?? 10,
-          sortby: params?.sortby ?? undefined,
-          order: params?.order ?? "asc",
-        },
-      })
-      .catch((err) => {
-        if (err.response?.status >= 500) throw err;
-        return api.get("/office/member", {
-          params: {
-            page: params?.page ?? 1,
-            size: params?.size ?? 10,
-            sortby: params?.sortby ?? undefined,
-            order: params?.order ?? "asc",
-          },
-        });
-      });
-
-    const items = response.data?.items || response.data || [];
-    if (!Array.isArray(items)) return [];
-
-    return items.map(mapRawToMember);
+    const res = await getMembersPaginatedApi({
+      page: params?.page ?? 1,
+      size: params?.size ?? 10,
+      sortby: params?.sortby,
+      order: params?.order,
+    });
+    return res.items;
   } catch (error: any) {
-    if (
-      error.response?.status >= 500 ||
-      error.code === "ECONNABORTED" ||
-      error.message?.includes("Server Error")
-    ) {
-      throw new Error(
-        formatApiError(error, "Data anggota gagal dimuat karena gangguan server.")
-      );
-    }
     if (error.response?.status === 404) {
       return [];
     }
-    const { getMembers } = await import("./mock-api");
-    return await getMembers();
+    throw new Error(
+      formatApiError(error, "Data anggota gagal dimuat.")
+    );
   }
 }
 
@@ -311,28 +266,71 @@ export async function getMembersPaginatedApi(
   params?: ListMembersParams
 ): Promise<{ items: Member[]; total: number; page: number; size: number; totalPages: number }> {
   const page = params?.page ?? 1;
-  const size = params?.size ?? 10;
-  try {
-    const response = await api
-      .get("/member", {
+  const requestedSize = params?.size ?? 10;
+
+  // Jika memanggil dataset besar (misal ekspor seluruh data dengan size > 100)
+  if (requestedSize > 100) {
+    const batchSize = 100;
+    try {
+      const firstPageRes = await api.get("/member", {
         params: {
-          page,
-          size,
+          page: 1,
+          size: batchSize,
           sortby: params?.sortby ?? undefined,
           order: params?.order ?? "asc",
         },
-      })
-      .catch((err) => {
-        if (err.response?.status >= 500) throw err;
-        return api.get("/office/member", {
-          params: {
-            page,
-            size,
-            sortby: params?.sortby ?? undefined,
-            order: params?.order ?? "asc",
-          },
-        });
       });
+
+      const firstRaw = firstPageRes.data;
+      const firstItems = firstRaw?.items || firstRaw?.data || (Array.isArray(firstRaw) ? firstRaw : []);
+      let allMapped = Array.isArray(firstItems) ? firstItems.map(mapRawToMember) : [];
+      const total = typeof firstRaw?.total === "number" && firstRaw.total >= 0 ? firstRaw.total : allMapped.length;
+      const totalPages = Math.max(1, Math.ceil(total / batchSize));
+
+      if (totalPages > 1) {
+        for (let p = 2; p <= totalPages; p++) {
+          try {
+            const nextRes = await api.get("/member", {
+              params: {
+                page: p,
+                size: batchSize,
+                sortby: params?.sortby ?? undefined,
+                order: params?.order ?? "asc",
+              },
+            });
+            const nextRaw = nextRes.data;
+            const nextItems = nextRaw?.items || nextRaw?.data || (Array.isArray(nextRaw) ? nextRaw : []);
+            if (Array.isArray(nextItems)) {
+              allMapped = allMapped.concat(nextItems.map(mapRawToMember));
+            }
+          } catch {
+            break;
+          }
+        }
+      }
+
+      return {
+        items: allMapped,
+        total,
+        page: 1,
+        size: requestedSize,
+        totalPages: 1,
+      };
+    } catch (error: any) {
+      throw new Error(formatApiError(error, "Data anggota gagal dimuat."));
+    }
+  }
+
+  // Request normal (size <= 100)
+  try {
+    const response = await api.get("/member", {
+      params: {
+        page,
+        size: requestedSize,
+        sortby: params?.sortby ?? undefined,
+        order: params?.order ?? "asc",
+      },
+    });
 
     const raw = response.data;
     const items = raw?.items || raw?.data || (Array.isArray(raw) ? raw : []);
@@ -344,50 +342,32 @@ export async function getMembersPaginatedApi(
     } else if (lastKnownMembersTotal > 0) {
       total = lastKnownMembersTotal;
     } else {
-      if (mapped.length < size) {
-        total = (page - 1) * size + mapped.length;
+      if (mapped.length < requestedSize) {
+        total = (page - 1) * requestedSize + mapped.length;
         lastKnownMembersTotal = total;
       } else {
-        total = page * size + 1;
+        total = page * requestedSize + 1;
       }
     }
 
-    if (mapped.length < size && total > (page - 1) * size + mapped.length) {
-      total = (page - 1) * size + mapped.length;
+    if (mapped.length < requestedSize && total > (page - 1) * requestedSize + mapped.length) {
+      total = (page - 1) * requestedSize + mapped.length;
       lastKnownMembersTotal = total;
     }
 
-    const totalPages = Math.max(1, Math.ceil(total / size));
+    const totalPages = Math.max(1, Math.ceil(total / requestedSize));
 
     return {
       items: mapped,
       total,
       page,
-      size,
+      size: requestedSize,
       totalPages,
     };
   } catch (error: any) {
-    if (
-      error.response?.status >= 500 ||
-      error.code === "ECONNABORTED" ||
-      error.message?.includes("Server Error")
-    ) {
-      throw new Error(
-        formatApiError(error, "Data anggota gagal dimuat karena gangguan server.")
-      );
-    }
-    const { getMembers } = await import("./mock-api");
-    const all = await getMembers();
-    const total = all.length;
-    const totalPages = Math.max(1, Math.ceil(total / size));
-    const start = (page - 1) * size;
-    return {
-      items: all.slice(start, start + size),
-      total,
-      page,
-      size,
-      totalPages,
-    };
+    throw new Error(
+      formatApiError(error, "Data anggota gagal dimuat.")
+    );
   }
 }
 
@@ -400,65 +380,34 @@ export async function searchMembersApi(
   }
 
   try {
-    const response = await api
-      .get("/member/search", {
-        params: {
-          q: cleanQuery,
-        },
-      })
-      .catch((err) => {
-        if (err.response?.status >= 500) throw err;
-        return api.get("/office/member/search", {
-          params: {
-            q: cleanQuery,
-          },
-        });
-      });
+    const response = await api.get("/member/search", {
+      params: {
+        q: cleanQuery,
+      },
+    });
 
     const items = response.data?.items || response.data || [];
     if (!Array.isArray(items)) return [];
 
     return items.map(mapRawToMember);
   } catch (error: any) {
-    if (
-      error.response?.status >= 500 ||
-      error.code === "ECONNABORTED" ||
-      error.message?.includes("Server Error")
-    ) {
-      throw new Error(
-        formatApiError(error, "Pencarian anggota gagal karena gangguan server.")
-      );
-    }
     if (error.response?.status === 404 || error.response?.status === 422) {
       return [];
     }
-    const { searchMembers } = await import("./mock-api");
-    return await searchMembers(cleanQuery);
+    throw new Error(
+      formatApiError(error, "Pencarian anggota gagal diproses.")
+    );
   }
 }
 
 export async function getMemberApi(memberId: string): Promise<Member> {
   try {
-    const response = await api
-      .get(`/member/${memberId}`)
-      .catch((err) => {
-        if (err.response?.status >= 500) throw err;
-        return api.get(`/office/member/${memberId}`);
-      });
-
+    const response = await api.get(`/member/${memberId}`);
     return mapRawToMember(response.data);
   } catch (error: any) {
-    if (
-      error.response?.status >= 500 ||
-      error.code === "ECONNABORTED" ||
-      error.message?.includes("Server Error")
-    ) {
-      throw new Error(
-        formatApiError(error, "Detail anggota gagal dimuat karena gangguan server.")
-      );
-    }
-    const { getMemberById } = await import("./mock-api");
-    return await getMemberById(memberId);
+    throw new Error(
+      formatApiError(error, "Detail anggota gagal dimuat.")
+    );
   }
 }
 
@@ -468,10 +417,17 @@ export async function createMemberApi(
   const cleanNik = data.identityNumber.trim();
 
   // Ambil list member untuk validasi NIK unik dan generate nomor urut sequential
-  const existingMembers = await getMembersApi().catch((err) => {
-    if (err.message?.includes("Server Error")) throw err;
-    return [];
-  });
+  let existingMembers: Member[] = [];
+  try {
+    existingMembers = await getMembersApi();
+  } catch (err: any) {
+    throw new Error(
+      formatApiError(
+        err,
+        "Gagal memuat data anggota untuk validasi NIK dan penomoran. Silakan periksa koneksi atau coba lagi."
+      )
+    );
+  }
 
   // 1. Validasi Keunikan NIK
   const duplicateNik = existingMembers.some(
@@ -483,18 +439,10 @@ export async function createMemberApi(
     );
   }
 
-  // 2. Generate Format Nomor Anggota Berurutan (MBR-001, MBR-002, dst)
-  let memberNumber = data.memberNumber?.trim();
+  // 2. Validasi Nomor Anggota Wajib (Sesuai spesifikasi Backend MemberCreateRequest)
+  const memberNumber = data.memberNumber?.trim();
   if (!memberNumber) {
-    const usedNumbers = existingMembers
-      .map((m) => {
-        const match = m.memberNumber?.match(/(\d+)$/);
-        return match ? Number(match[1]) : 0;
-      })
-      .filter((n) => n > 0);
-
-    const highestNumber = usedNumbers.length > 0 ? Math.max(...usedNumbers) : 0;
-    memberNumber = `MBR-${String(highestNumber + 1).padStart(3, "0")}`;
+    throw new Error("Nomor anggota wajib diisi.");
   }
 
   const payload = {
@@ -506,39 +454,12 @@ export async function createMemberApi(
   };
 
   try {
-    const response = await api
-      .post("/member", payload)
-      .catch((err) => {
-        if (err.response?.status >= 500) throw err;
-        return api.post("/office/member", payload);
-      });
-
+    const response = await api.post("/member", payload);
     return mapRawToMember(response.data);
   } catch (error: any) {
-    if (
-      error.response?.status >= 500 ||
-      error.code === "ECONNABORTED" ||
-      error.message?.includes("Server Error")
-    ) {
-      throw new Error(
-        formatApiError(error, "Gagal membuat anggota baru karena gangguan server.")
-      );
-    }
-
-    const errorMsg = formatApiError(error, "");
-    if (errorMsg) {
-      throw new Error(errorMsg);
-    }
-
-    const { createMember } = await import("./mock-api");
-    return await createMember({
-      name: data.name,
-      phone: data.phone,
-      identityNumber: data.identityNumber,
-      email: data.email,
-      memberType: "UMUM",
-      status: "ACTIVE",
-    });
+    throw new Error(
+      formatApiError(error, "Gagal membuat anggota baru.")
+    );
   }
 }
 
@@ -548,10 +469,17 @@ export async function updateMemberApi(
 ): Promise<Member> {
   if (data.identityNumber) {
     const cleanNik = data.identityNumber.trim();
-    const existingMembers = await getMembersApi().catch((err) => {
-      if (err.message?.includes("Server Error")) throw err;
-      return [];
-    });
+    let existingMembers: Member[] = [];
+    try {
+      existingMembers = await getMembersApi();
+    } catch (err: any) {
+      throw new Error(
+        formatApiError(
+          err,
+          "Gagal memuat data anggota untuk validasi NIK. Silakan periksa koneksi atau coba lagi."
+        )
+      );
+    }
     const duplicateNik = existingMembers.some(
       (m) => m.id !== memberId && m.identityNumber?.trim() === cleanNik
     );
@@ -575,66 +503,23 @@ export async function updateMemberApi(
   }
 
   try {
-    const response = await api
-      .patch(`/member/${memberId}`, payload)
-      .catch((err) => {
-        if (err.response?.status >= 500) throw err;
-        return api.patch(`/office/member/${memberId}`, payload);
-      });
-
+    const response = await api.patch(`/member/${memberId}`, payload);
     return mapRawToMember(response.data);
   } catch (error: any) {
-    if (
-      error.response?.status >= 500 ||
-      error.code === "ECONNABORTED" ||
-      error.message?.includes("Server Error")
-    ) {
-      throw new Error(
-        formatApiError(error, "Gagal memperbarui anggota karena gangguan server.")
-      );
-    }
-
-    const errorMsg = formatApiError(error, "");
-    if (errorMsg) {
-      throw new Error(errorMsg);
-    }
-
-    const { updateMember, changeMemberStatus } = await import("./mock-api");
-    if (data.status) {
-      return await changeMemberStatus(memberId, data.status);
-    }
-    return await updateMember(memberId, {
-      name: data.name || "",
-      identityNumber: data.identityNumber || "",
-      phone: data.phone || "",
-      email: data.email,
-    });
+    throw new Error(
+      formatApiError(error, "Gagal memperbarui anggota.")
+    );
   }
 }
 
 export async function deleteMemberApi(memberId: string): Promise<{ id: string; status?: string }> {
   try {
-    const response = await api
-      .delete(`/member/${memberId}`)
-      .catch((err) => {
-        if (err.response?.status >= 500) throw err;
-        return api
-          .delete(`/office/member/${memberId}`)
-          .catch(() => api.delete(`/bukuflow/office/member/${memberId}`));
-      });
-
+    const response = await api.delete(`/member/${memberId}`);
     return response.data;
   } catch (error: any) {
-    if (
-      error.response?.status >= 500 ||
-      error.code === "ECONNABORTED" ||
-      error.message?.includes("Server Error")
-    ) {
-      throw new Error(
-        formatApiError(error, "Gagal menghapus anggota karena gangguan server.")
-      );
-    }
-    throw error;
+    throw new Error(
+      formatApiError(error, "Gagal menghapus anggota.")
+    );
   }
 }
 
@@ -642,55 +527,21 @@ export async function changeMemberStatusApi(
   memberId: string,
   status: MemberStatus
 ): Promise<Member> {
-  if (status === "INACTIVE") {
-    try {
-      await deleteMemberApi(memberId);
-      try {
-        const member = await getMemberApi(memberId);
-        return {
-          id: member.id,
-          companyId: member.companyId,
-          memberNumber: member.memberNumber,
-          name: member.name,
-          memberType: member.memberType,
-          identityNumber: member.identityNumber,
-          phone: member.phone,
-          email: member.email,
-          status: "INACTIVE",
-          createdAt: member.createdAt,
-          updatedAt: new Date().toISOString(),
-        };
-      } catch {
-        return {
-          id: memberId,
-          companyId: "company-001",
-          memberNumber: "-",
-          name: "-",
-          memberType: "UMUM",
-          identityNumber: "-",
-          phone: "-",
-          email: "",
-          status: "INACTIVE",
-          createdAt: new Date().toISOString(),
-          updatedAt: new Date().toISOString(),
-        };
-      }
-    } catch (error: any) {
-      if (
-        error.response?.status >= 500 ||
-        error.code === "ECONNABORTED" ||
-        error.message?.includes("Server Error")
-      ) {
-        throw new Error(
-          formatApiError(error, "Gagal menonaktifkan anggota karena gangguan server.")
-        );
-      }
-      const { changeMemberStatus } = await import("./mock-api");
-      return await changeMemberStatus(memberId, status);
-    }
+  try {
+    const response = await api.patch(`/member/${memberId}`, {
+      status: status === "INACTIVE" ? "INACTIVE" : "ACTIVE",
+    });
+    return mapRawToMember(response.data);
+  } catch (error: any) {
+    throw new Error(
+      formatApiError(
+        error,
+        status === "ACTIVE"
+          ? "Gagal mengaktifkan anggota."
+          : "Gagal menonaktifkan anggota."
+      )
+    );
   }
-
-  return updateMemberApi(memberId, { status });
 }
 
 function parseBookStatus(
@@ -732,159 +583,121 @@ export interface ListBooksParams {
   order?: "asc" | "desc";
 }
 
-export async function getBooksApi(params?: ListBooksParams): Promise<Book[]> {
-  try {
-    const response = await api
-      .get("/catalog/books", {
-        params: {
-          page: params?.page ?? 1,
-          size: params?.size ?? 10,
-          sortby: params?.sortby ?? undefined,
-          order: params?.order ?? "asc",
-        },
-      })
-      .catch((err) => {
-        if (err.response?.status >= 500) throw err;
-        return api.get("/office/catalog/books", {
-          params: {
-            page: params?.page ?? 1,
-            size: params?.size ?? 10,
-            sortby: params?.sortby ?? undefined,
-            order: params?.order ?? "asc",
-          },
-        });
-      });
-
-    const items = response.data?.items || response.data || [];
-
-    return items.map((item: any) => {
-      const rawTotal = item.total_copies ?? item.totalCopies;
-      const rawAvailable = item.available_copies ?? item.availableCopies;
-
-      const hasExplicitTotal =
-        rawTotal !== undefined && rawTotal !== null && Number(rawTotal) > 0;
-      const totalCopies = hasExplicitTotal ? Number(rawTotal) : 1;
-      const availableCopies =
-        hasExplicitTotal && rawAvailable !== undefined && rawAvailable !== null
-          ? Number(rawAvailable)
-          : totalCopies;
-
-      const cleanIsbn = item.isbn && item.isbn !== "-" && item.isbn.trim() !== "" ? item.isbn.trim() : undefined;
-      const cleanAuthor = item.author && item.author !== "-" && item.author.trim() !== "" ? item.author.trim() : undefined;
-      const cleanPublisher = item.publisher && item.publisher !== "-" && item.publisher.trim() !== "" ? item.publisher.trim() : undefined;
-      const cleanCategory = item.category && item.category !== "-" && item.category.trim() !== "" ? item.category.trim() : undefined;
-
-      return {
-        id: item._id || item.id || `book-${Math.random().toString(36).slice(2)}`,
-        companyId: item.company_id || item.companyId || "company-001",
-        code: item.code || "-",
-        isbn: cleanIsbn,
-        title: item.title || "-",
-        author: cleanAuthor,
-        publisher: cleanPublisher,
-        publicationYear:
-          item.published_year ||
-          item.publication_year ||
-          item.publicationYear ||
-          undefined,
-        category: cleanCategory,
-        coverUrl: item.cover_url || item.coverUrl || undefined,
-        status: parseBookStatus(item.status, totalCopies, availableCopies),
-        totalCopies,
-        availableCopies,
-        createdAt: item.created_at || new Date().toISOString(),
-        updatedAt: item.updated_at || new Date().toISOString(),
-      };
-    });
-  } catch (error: any) {
-    if (
-      error.response?.status >= 500 ||
-      error.code === "ECONNABORTED" ||
-      error.message?.includes("Server Error")
-    ) {
-      throw new Error(
-        formatApiError(error, "Katalog buku gagal dimuat karena gangguan server.")
-      );
-    }
-    if (error.response?.status === 404 || error.response?.status === 422) {
-      return [];
-    }
-    const { searchBooks } = await import("./mock-api");
-    return searchBooks("");
-  }
-}
-
 let lastKnownBooksTotal = 0;
 
-export async function getBooksPaginatedApi(
+export async function getBooksApi(
   params?: ListBooksParams
 ): Promise<{ items: Book[]; total: number; page: number; size: number; totalPages: number }> {
   const page = params?.page ?? 1;
-  const size = params?.size ?? 10;
-  try {
-    const response = await api
-      .get("/catalog/books", {
+  const requestedSize = params?.size ?? 10;
+
+  const mapItem = (item: any): Book => {
+    const rawTotal = item.total_copies ?? item.totalCopies;
+    const rawAvailable = item.available_copies ?? item.availableCopies;
+
+    const hasExplicitTotal =
+      rawTotal !== undefined && rawTotal !== null && Number(rawTotal) > 0;
+    const totalCopies = hasExplicitTotal ? Number(rawTotal) : 1;
+    const availableCopies =
+      hasExplicitTotal && rawAvailable !== undefined && rawAvailable !== null
+        ? Number(rawAvailable)
+        : totalCopies;
+
+    const cleanIsbn = item.isbn && item.isbn !== "-" && item.isbn.trim() !== "" ? item.isbn.trim() : undefined;
+    const cleanAuthor = item.author && item.author !== "-" && item.author.trim() !== "" ? item.author.trim() : undefined;
+    const cleanPublisher = item.publisher && item.publisher !== "-" && item.publisher.trim() !== "" ? item.publisher.trim() : undefined;
+    const cleanCategory = item.category && item.category !== "-" && item.category.trim() !== "" ? item.category.trim() : undefined;
+
+    return {
+      id: item._id || item.id || "",
+      companyId: item.company_id || item.companyId || "",
+      code: item.code || "-",
+      isbn: cleanIsbn,
+      title: item.title || "-",
+      author: cleanAuthor,
+      publisher: cleanPublisher,
+      publicationYear:
+        item.published_year ||
+        item.publication_year ||
+        item.publicationYear ||
+        undefined,
+      category: cleanCategory,
+      coverUrl: item.cover_url || item.coverUrl || undefined,
+      status: parseBookStatus(item.status, totalCopies, availableCopies),
+      totalCopies,
+      availableCopies,
+      createdAt: item.created_at || "",
+      updatedAt: item.updated_at || item.created_at || "",
+    };
+  };
+
+  // Jika caller meminta dataset besar (misal ekspor seluruh data dengan size > 100)
+  if (requestedSize > 100) {
+    const batchSize = 100;
+    try {
+      const firstRes = await api.get("/catalog/books", {
         params: {
-          page,
-          size,
+          page: 1,
+          size: batchSize,
           sortby: params?.sortby ?? undefined,
           order: params?.order ?? "asc",
         },
-      })
-      .catch((err) => {
-        if (err.response?.status >= 500) throw err;
-        return api.get("/office/catalog/books", {
-          params: {
-            page,
-            size,
-            sortby: params?.sortby ?? undefined,
-            order: params?.order ?? "asc",
-          },
-        });
       });
+
+      const firstRaw = firstRes.data;
+      const firstItems = firstRaw?.items || firstRaw?.data || (Array.isArray(firstRaw) ? firstRaw : []);
+      let allMapped = Array.isArray(firstItems) ? firstItems.map(mapItem) : [];
+      const total = typeof firstRaw?.total === "number" && firstRaw.total >= 0 ? firstRaw.total : allMapped.length;
+      const totalPages = Math.max(1, Math.ceil(total / batchSize));
+
+      if (totalPages > 1) {
+        for (let p = 2; p <= totalPages; p++) {
+          try {
+            const nextRes = await api.get("/catalog/books", {
+              params: {
+                page: p,
+                size: batchSize,
+                sortby: params?.sortby ?? undefined,
+                order: params?.order ?? "asc",
+              },
+            });
+            const nextRaw = nextRes.data;
+            const nextItems = nextRaw?.items || nextRaw?.data || (Array.isArray(nextRaw) ? nextRaw : []);
+            if (Array.isArray(nextItems)) {
+              allMapped = allMapped.concat(nextItems.map(mapItem));
+            }
+          } catch {
+            break;
+          }
+        }
+      }
+
+      return {
+        items: allMapped,
+        total,
+        page: 1,
+        size: requestedSize,
+        totalPages: 1,
+      };
+    } catch (error: any) {
+      throw new Error(formatApiError(error, "Katalog buku gagal dimuat."));
+    }
+  }
+
+  // Request normal (size <= 100)
+  try {
+    const response = await api.get("/catalog/books", {
+      params: {
+        page,
+        size: requestedSize,
+        sortby: params?.sortby ?? undefined,
+        order: params?.order ?? "asc",
+      },
+    });
 
     const raw = response.data;
     const items = raw?.items || raw?.data || (Array.isArray(raw) ? raw : []);
-
-    const mappedBooks = Array.isArray(items) ? items.map((item: any) => {
-      const rawTotal = item.total_copies ?? item.totalCopies;
-      const rawAvailable = item.available_copies ?? item.availableCopies;
-
-      const hasExplicitTotal =
-        rawTotal !== undefined && rawTotal !== null && Number(rawTotal) > 0;
-      const totalCopies = hasExplicitTotal ? Number(rawTotal) : 1;
-      const availableCopies =
-        hasExplicitTotal && rawAvailable !== undefined && rawAvailable !== null
-          ? Number(rawAvailable)
-          : totalCopies;
-
-      const cleanIsbn = item.isbn && item.isbn !== "-" && item.isbn.trim() !== "" ? item.isbn.trim() : undefined;
-      const cleanAuthor = item.author && item.author !== "-" && item.author.trim() !== "" ? item.author.trim() : undefined;
-      const cleanPublisher = item.publisher && item.publisher !== "-" && item.publisher.trim() !== "" ? item.publisher.trim() : undefined;
-      const cleanCategory = item.category && item.category !== "-" && item.category.trim() !== "" ? item.category.trim() : undefined;
-
-      return {
-        id: item._id || item.id || `book-${Math.random().toString(36).slice(2)}`,
-        companyId: item.company_id || item.companyId || "company-001",
-        code: item.code || "-",
-        isbn: cleanIsbn,
-        title: item.title || "-",
-        author: cleanAuthor,
-        publisher: cleanPublisher,
-        publicationYear:
-          item.published_year ||
-          item.publication_year ||
-          item.publicationYear ||
-          undefined,
-        category: cleanCategory,
-        coverUrl: item.cover_url || item.coverUrl || undefined,
-        status: parseBookStatus(item.status, totalCopies, availableCopies),
-        totalCopies,
-        availableCopies,
-        createdAt: item.created_at || new Date().toISOString(),
-        updatedAt: item.updated_at || new Date().toISOString(),
-      };
-    }) : [];
+    const mappedBooks = Array.isArray(items) ? items.map(mapItem) : [];
 
     let total = typeof raw?.total === "number" && raw.total >= 0 ? raw.total : -1;
     if (total > 0) {
@@ -892,52 +705,34 @@ export async function getBooksPaginatedApi(
     } else if (lastKnownBooksTotal > 0) {
       total = lastKnownBooksTotal;
     } else {
-      if (mappedBooks.length < size) {
-        total = (page - 1) * size + mappedBooks.length;
+      if (mappedBooks.length < requestedSize) {
+        total = (page - 1) * requestedSize + mappedBooks.length;
         lastKnownBooksTotal = total;
       } else {
-        total = page * size + 1;
+        total = page * requestedSize + 1;
       }
     }
 
-    if (mappedBooks.length < size && total > (page - 1) * size + mappedBooks.length) {
-      total = (page - 1) * size + mappedBooks.length;
+    if (mappedBooks.length < requestedSize && total > (page - 1) * requestedSize + mappedBooks.length) {
+      total = (page - 1) * requestedSize + mappedBooks.length;
       lastKnownBooksTotal = total;
     }
 
-    const totalPages = Math.max(1, Math.ceil(total / size));
+    const totalPages = Math.max(1, Math.ceil(total / requestedSize));
 
     return {
       items: mappedBooks,
       total,
       page,
-      size,
+      size: requestedSize,
       totalPages,
     };
   } catch (error: any) {
-    if (
-      error.response?.status >= 500 ||
-      error.code === "ECONNABORTED" ||
-      error.message?.includes("Server Error")
-    ) {
-      throw new Error(
-        formatApiError(error, "Katalog buku gagal dimuat karena gangguan server.")
-      );
-    }
-    const { searchBooks } = await import("./mock-api");
-    const all = await searchBooks("");
-    const total = all.length;
-    const totalPages = Math.max(1, Math.ceil(total / size));
-    const start = (page - 1) * size;
-    return {
-      items: all.slice(start, start + size),
-      total,
-      page,
-      size,
-      totalPages,
-    };
+    throw new Error(formatApiError(error, "Katalog buku gagal dimuat."));
   }
 }
+
+export const getBooksPaginatedApi = getBooksApi;
 
 export interface CreateBookInputData {
   code: string;
@@ -950,7 +745,10 @@ export interface CreateBookInputData {
   totalCopies: number;
 }
 
-export async function createBookApi(data: CreateBookInputData): Promise<Book> {
+export async function createBookApi(
+  data: CreateBookInputData,
+  companyId?: string
+): Promise<Book> {
   const currentYear = new Date().getFullYear();
   const bookCode = data.code.trim().toUpperCase();
   const totalCopies = Number(data.totalCopies) || 1;
@@ -969,7 +767,13 @@ export async function createBookApi(data: CreateBookInputData): Promise<Book> {
   };
 
   try {
-    const response = await api.post("/catalog/books", payload);
+    const compId = resolveCompanyId(companyId);
+    const isSuperAdmin = getAuthData()?.user?.role === "SUPER_ADMIN";
+    const endpoint =
+      isSuperAdmin && compId ? "/office/catalog/books" : "/catalog/books";
+    const params = isSuperAdmin && compId ? { company_id: compId } : undefined;
+
+    const response = await api.post(endpoint, payload, { params });
 
     const raw = response.data?.book || response.data?.data || response.data;
     const bookId = raw?._id || raw?.id;
@@ -977,7 +781,7 @@ export async function createBookApi(data: CreateBookInputData): Promise<Book> {
 
     const createdBook: Book = {
       id: bookId || `book-${Date.now()}`,
-      companyId: raw?.company_id || raw?.companyId || "company-001",
+      companyId: raw?.company_id || raw?.companyId || compId || "",
       code: finalCode,
       isbn: raw?.isbn || data.isbn || undefined,
       title: raw?.title || data.title,
@@ -993,11 +797,11 @@ export async function createBookApi(data: CreateBookInputData): Promise<Book> {
       status: "AVAILABLE",
       totalCopies: totalCopies,
       availableCopies: totalCopies,
-      createdAt: raw?.created_at || new Date().toISOString(),
-      updatedAt: raw?.updated_at || new Date().toISOString(),
+      createdAt: raw?.created_at || "",
+      updatedAt: raw?.updated_at || raw?.created_at || "",
     };
 
-    // Auto-create initial book copies (Mendukung Array Bulk maupun Single Object Fallback)
+    // Auto-create initial book copies sesuai OpenAPI (POST array of BookCopyCreateRequest)
     if (bookId && totalCopies > 0) {
       try {
         const copiesPayload = Array.from({ length: totalCopies }, (_, index) => ({
@@ -1006,50 +810,24 @@ export async function createBookApi(data: CreateBookInputData): Promise<Book> {
           status: "AVAILABLE",
         }));
 
-        // 1. Coba kirim langsung sebagai Array (Sesuai alur baru)
-        await api
-          .post(`/catalog/books/${bookId}/copies`, copiesPayload)
-          .catch(async (err) => {
-            // 2. Jika BE menolak (karena masih format single object), looping kirim per item
-            if (err.response?.status === 422 || err.response?.status === 400) {
-              for (const copy of copiesPayload) {
-                await api
-                  .post(`/catalog/books/${bookId}/copies`, copy)
-                  .catch(() => null);
-              }
-            }
-          });
+        const copyEndpoint =
+          isSuperAdmin && compId
+            ? `/office/catalog/books/${bookId}/copies`
+            : `/catalog/books/${bookId}/copies`;
+
+        await api.post(copyEndpoint, copiesPayload, { params });
       } catch (copyErr) {
-        console.warn("Gagal membuat copies:", copyErr);
+        throw new Error(
+          `Buku berhasil dibuat, namun gagal menginisialisasi salinan buku: ${formatApiError(copyErr, "Gagal membuat salinan.")}`
+        );
       }
     }
 
     return createdBook;
   } catch (error: any) {
-    console.error(">>> [DEBUG CREATE BOOK ERROR]", {
-      status: error.response?.status,
-      statusText: error.response?.statusText,
-      data: error.response?.data,
-      sentPayload: payload,
-    });
-
-    if (
-      error.response?.status >= 500 ||
-      error.code === "ECONNABORTED" ||
-      error.message?.includes("Server Error")
-    ) {
-      throw new Error(
-        formatApiError(error, "Gagal membuat buku karena gangguan server.")
-      );
-    }
-    
-    const errorMsg = formatApiError(error, "");
-    if (errorMsg && error.response?.status) {
-      throw new Error(errorMsg);
-    }
-
-    const { createBook } = await import("./mock-api");
-    return createBook(data);
+    throw new Error(
+      formatApiError(error, "Gagal membuat buku baru.")
+    );
   }
 }
 
@@ -1057,23 +835,14 @@ export async function searchBooksApi(keyword: string = ""): Promise<Book[]> {
   const cleanQuery = keyword.trim();
 
   if (cleanQuery.length === 0) {
-    return getBooksApi();
+    const res = await getBooksApi({ size: 10 });
+    return res.items;
   }
 
   try {
-
-    const response = await api
-      .get("/catalog/books/search", { params: { q: cleanQuery } })
-      .catch((err) => {
-        if (err.response?.status >= 500) throw err;
-        return api.get("/office/catalog/books/search", {
-          params: { q: cleanQuery },
-        });
-      })
-      .catch((err) => {
-        if (err.response?.status >= 500) throw err;
-        return api.get("/books/search", { params: { q: cleanQuery } });
-      });
+    const response = await api.get("/catalog/books/search", {
+      params: { q: cleanQuery },
+    });
 
     const items = response.data?.items || response.data || [];
 
@@ -1095,8 +864,8 @@ export async function searchBooksApi(keyword: string = ""): Promise<Book[]> {
       const cleanCategory = item.category && item.category !== "-" && item.category.trim() !== "" ? item.category.trim() : undefined;
 
       return {
-        id: item._id || item.id || `book-${Math.random().toString(36).slice(2)}`,
-        companyId: item.company_id || item.companyId || "company-001",
+        id: item._id || item.id || "",
+        companyId: item.company_id || item.companyId || "",
         code: item.code || "-",
         isbn: cleanIsbn,
         title: item.title || "-",
@@ -1112,31 +881,43 @@ export async function searchBooksApi(keyword: string = ""): Promise<Book[]> {
         status: parseBookStatus(item.status, totalCopies, availableCopies),
         totalCopies,
         availableCopies,
-        createdAt: item.created_at || new Date().toISOString(),
-        updatedAt: item.updated_at || new Date().toISOString(),
+        createdAt: item.created_at || "",
+        updatedAt: item.updated_at || item.created_at || "",
       };
     });
   } catch (error: any) {
-    if (
-      error.response?.status >= 500 ||
-      error.code === "ECONNABORTED" ||
-      error.message?.includes("Server Error")
-    ) {
-      throw new Error(
-        formatApiError(error, "Pencarian buku gagal karena gangguan server.")
-      );
-    }
     if (error.response?.status === 404 || error.response?.status === 422) {
       return [];
     }
-    const { searchBooks } = await import("./mock-api");
-    return searchBooks(cleanQuery);
+    throw new Error(
+      formatApiError(error, "Pencarian buku gagal diproses.")
+    );
   }
 }
 
-export async function getBookApi(bookId: string): Promise<Book | null> {
+export async function getBookApi(
+  bookId: string,
+  companyId?: string
+): Promise<Book | null> {
   try {
-    const response = await api.get(`/catalog/books/${bookId}`);
+    const compId = resolveCompanyId(companyId);
+    const isSuperAdmin = getAuthData()?.user?.role === "SUPER_ADMIN";
+    const endpoint =
+      isSuperAdmin && compId
+        ? `/office/catalog/books/${bookId}`
+        : `/catalog/books/${bookId}`;
+    const params = isSuperAdmin && compId ? { company_id: compId } : undefined;
+
+    let response: any;
+    try {
+      response = await api.get(endpoint, { params });
+    } catch (err: any) {
+      if (isSuperAdmin && compId) {
+        response = await api.get(`/catalog/books/${bookId}`);
+      } else {
+        throw err;
+      }
+    }
 
     const item = response.data;
     if (!item) return null;
@@ -1159,7 +940,7 @@ export async function getBookApi(bookId: string): Promise<Book | null> {
 
     return {
       id: item._id || item.id || bookId,
-      companyId: item.company_id || item.companyId || "company-001",
+      companyId: item.company_id || item.companyId || compId || "",
       code: item.code || "-",
       isbn: cleanIsbn,
       title: item.title || "-",
@@ -1175,25 +956,16 @@ export async function getBookApi(bookId: string): Promise<Book | null> {
       status: parseBookStatus(item.status, totalCopies, availableCopies),
       totalCopies,
       availableCopies,
-      createdAt: item.created_at || new Date().toISOString(),
-      updatedAt: item.updated_at || new Date().toISOString(),
+      createdAt: item.created_at || "",
+      updatedAt: item.updated_at || item.created_at || "",
     };
   } catch (error: any) {
-    if (
-      error.response?.status >= 500 ||
-      error.code === "ECONNABORTED" ||
-      error.message?.includes("Server Error")
-    ) {
-      throw new Error(
-        formatApiError(error, "Detail buku gagal dimuat karena gangguan server.")
-      );
-    }
-    const { getBookById } = await import("./mock-api");
-    try {
-      return await getBookById(bookId);
-    } catch {
+    if (error.response?.status === 404) {
       return null;
     }
+    throw new Error(
+      formatApiError(error, "Detail buku gagal dimuat.")
+    );
   }
 }
 
@@ -1209,7 +981,8 @@ export interface UpdateBookInputData {
 
 export async function updateBookApi(
   bookId: string,
-  data: UpdateBookInputData
+  data: UpdateBookInputData,
+  companyId?: string
 ): Promise<Book> {
   const payload: any = {};
   if (data.title !== undefined) payload.title = data.title.trim();
@@ -1223,7 +996,15 @@ export async function updateBookApi(
   }
 
   try {
-    const response = await api.patch(`/catalog/books/${bookId}`, payload);
+    const compId = resolveCompanyId(companyId);
+    const isSuperAdmin = getAuthData()?.user?.role === "SUPER_ADMIN";
+    const endpoint =
+      isSuperAdmin && compId
+        ? `/office/catalog/books/${bookId}`
+        : `/catalog/books/${bookId}`;
+    const params = isSuperAdmin && compId ? { company_id: compId } : undefined;
+
+    const response = await api.patch(endpoint, payload, { params });
 
     const item = response.data;
     const rawTotal = item.total_copies ?? item.totalCopies;
@@ -1239,7 +1020,7 @@ export async function updateBookApi(
 
     return {
       id: item._id || item.id || bookId,
-      companyId: item.company_id || item.companyId || "company-001",
+      companyId: item.company_id || item.companyId || compId || "",
       code: item.code || "-",
       isbn: item.isbn || undefined,
       title: item.title || "-",
@@ -1255,79 +1036,86 @@ export async function updateBookApi(
       status: parseBookStatus(item.status, totalCopies, availableCopies),
       totalCopies,
       availableCopies,
-      createdAt: item.created_at || new Date().toISOString(),
-      updatedAt: item.updated_at || new Date().toISOString(),
+      createdAt: item.created_at || "",
+      updatedAt: item.updated_at || item.created_at || "",
     };
   } catch (error: any) {
-    if (
-      error.response?.status >= 500 ||
-      error.code === "ECONNABORTED" ||
-      error.message?.includes("Server Error")
-    ) {
-      throw new Error(
-        formatApiError(error, "Gagal memperbarui buku karena gangguan server.")
-      );
-    }
-    const { updateBook, changeBookStatus } = await import("./mock-api");
-    if (data.status) {
-      return await changeBookStatus(bookId, data.status);
-    }
-    return await updateBook(bookId, data as any);
+    throw new Error(
+      formatApiError(error, "Gagal memperbarui buku.")
+    );
   }
 }
 
-export async function deleteBookApi(bookId: string): Promise<{ id: string; status?: string }> {
+export async function deleteBookApi(
+  bookId: string,
+  companyId?: string
+): Promise<{ id: string; status?: string }> {
   try {
-    const response = await api.delete(`/catalog/books/${bookId}`);
+    const compId = resolveCompanyId(companyId);
+    const isSuperAdmin = getAuthData()?.user?.role === "SUPER_ADMIN";
+    const endpoint =
+      isSuperAdmin && compId
+        ? `/office/catalog/books/${bookId}`
+        : `/catalog/books/${bookId}`;
+    const params = isSuperAdmin && compId ? { company_id: compId } : undefined;
+
+    const response = await api.delete(endpoint, { params });
     return response.data;
   } catch (error: any) {
-    if (
-      error.response?.status >= 500 ||
-      error.code === "ECONNABORTED" ||
-      error.message?.includes("Server Error")
-    ) {
-      throw new Error(
-        formatApiError(error, "Gagal menghapus buku karena gangguan server.")
-      );
-    }
-    throw error;
+    throw new Error(
+      formatApiError(error, "Gagal menghapus buku.")
+    );
   }
 }
 
 export async function changeBookStatusApi(
   bookId: string,
-  status: BookStatus
+  status: BookStatus,
+  companyId?: string
 ): Promise<Book> {
   // Aturan Bisnis PRD: Buku tidak boleh diarsipkan jika ada copy yang sedang dipinjam
   if (status === "INACTIVE") {
     try {
-      const copies = await getBookCopiesApi(bookId);
+      const copies = await getBookCopiesApi(bookId, companyId);
       const borrowedCopies = copies.filter((c) => c.status === "BORROWED");
       if (borrowedCopies.length > 0) {
         throw new Error(
-          "Buku tidak dapat diarsipkan karena masih memiliki copy yang sedang dipinjam."
+          "Buku tidak dapat diarsipkan karena masih memiliki eksemplar yang sedang dipinjam."
         );
       }
     } catch (e: any) {
-      if (e.message?.includes("masih memiliki copy yang sedang dipinjam")) {
+      if (e.message?.includes("masih memiliki eksemplar yang sedang dipinjam")) {
         throw e;
       }
     }
   }
 
-  // Gunakan PATCH /catalog/books/{bookId} agar copies buku tetap utuh dan tidak terhapus oleh Backend
-  return updateBookApi(bookId, { status });
+  // Gunakan PATCH /catalog/books/{bookId} atau /office/catalog/books/{bookId} agar copies buku tetap utuh
+  return updateBookApi(bookId, { status }, companyId);
 }
 
 export async function getBookCopiesApi(
   bookId: string,
   companyId?: string
 ): Promise<BookCopy[]> {
-  const auth = getAuthData();
-  const compId = companyId || auth?.user?.companyId || "company-001";
+  const compId = resolveCompanyId(companyId);
 
   try {
-    const response = await api.get(`/catalog/books/${bookId}/copies`);
+    const auth = typeof window !== "undefined" ? getAuthData() : null;
+    const isSuperAdmin = auth?.user?.role === "SUPER_ADMIN";
+    let response;
+
+    if (companyId || isSuperAdmin) {
+      try {
+        response = await api.get(`/office/catalog/books/${bookId}/copies`, {
+          params: { company_id: compId },
+        });
+      } catch {
+        response = await api.get(`/catalog/books/${bookId}/copies`);
+      }
+    } else {
+      response = await api.get(`/catalog/books/${bookId}/copies`);
+    }
 
     const rawData = response.data;
     let items: any[] = [];
@@ -1345,13 +1133,13 @@ export async function getBookCopiesApi(
     }
 
     const mapped: BookCopy[] = items.map((item: any) => ({
-      id: item._id || item.id || `copy-${bookId}-${Math.random().toString(36).slice(2)}`,
+      id: item._id || item.id || "",
       companyId: item.company_id || item.companyId || compId,
       bookId: item.book_id || item.bookId || bookId,
       code: item.copy_code || item.code || "-",
       status: (item.status as BookCopyStatus) || "AVAILABLE",
-      createdAt: item.created_at || new Date().toISOString(),
-      updatedAt: item.updated_at || new Date().toISOString(),
+      createdAt: item.created_at || "",
+      updatedAt: item.updated_at || item.created_at || "",
     }));
 
     // Deduplikasi copy buku berdasarkan code:
@@ -1382,17 +1170,9 @@ export async function getBookCopiesApi(
 
     return Array.from(copyMap.values());
   } catch (error: any) {
-    if (
-      error.response?.status >= 500 ||
-      error.code === "ECONNABORTED" ||
-      error.message?.includes("Server Error")
-    ) {
-      throw new Error(
-        formatApiError(error, "Daftar copy buku gagal dimuat karena gangguan server.")
-      );
-    }
-    const { getBookCopies } = await import("./mock-api");
-    return await getBookCopies(bookId);
+    throw new Error(
+      formatApiError(error, "Daftar eksemplar buku gagal dimuat.")
+    );
   }
 }
 
@@ -1401,10 +1181,15 @@ export async function createBookCopiesBulkApi(
   count: number = 1,
   companyId?: string
 ): Promise<BookCopy[]> {
-  const auth = getAuthData();
-  const compId = companyId || auth?.user?.companyId || "company-001";
+  const compId = resolveCompanyId(companyId);
+  const isSuperAdmin = getAuthData()?.user?.role === "SUPER_ADMIN";
 
-  const existingCopies = await getBookCopiesApi(bookId, compId).catch(() => []);
+  let existingCopies: BookCopy[] = [];
+  try {
+    existingCopies = await getBookCopiesApi(bookId, compId);
+  } catch (err: unknown) {
+    throw new Error(formatApiError(err, "Gagal memeriksa salinan buku yang sudah ada."));
+  }
   
   let maxNumber = 0;
   for (const c of existingCopies) {
@@ -1418,8 +1203,11 @@ export async function createBookCopiesBulkApi(
   }
   const startingNumber = Math.max(existingCopies.length, maxNumber);
 
-  const book = await getBookApi(bookId).catch(() => null);
-  const bookCode = book?.code || `BK-${bookId.slice(-4).toUpperCase()}`;
+  const book = await getBookApi(bookId, compId);
+  if (!book?.code) {
+    throw new Error("Data buku tidak ditemukan atau kode buku tidak valid.");
+  }
+  const bookCode = book.code;
 
   const countToAdd = Math.max(1, count);
   const copiesPayload = Array.from({ length: countToAdd }, (_, idx) => {
@@ -1432,8 +1220,22 @@ export async function createBookCopiesBulkApi(
   });
 
   try {
-    // 1. Coba kirim langsung sebagai Array (Sesuai update backend terbaru)
-    const response = await api.post(`/catalog/books/${bookId}/copies`, copiesPayload);
+    const endpoint =
+      isSuperAdmin && compId
+        ? `/office/catalog/books/${bookId}/copies`
+        : `/catalog/books/${bookId}/copies`;
+    const params = isSuperAdmin && compId ? { company_id: compId } : undefined;
+
+    let response: any;
+    try {
+      response = await api.post(endpoint, copiesPayload, { params });
+    } catch (arrErr: any) {
+      if (arrErr.response?.status === 422) {
+        response = await api.post(endpoint, copiesPayload[0], { params });
+      } else {
+        throw arrErr;
+      }
+    }
 
     const rawData =
       response.data?.copies ||
@@ -1451,59 +1253,18 @@ export async function createBookCopiesBulkApi(
     }
 
     return items.map((item: any, idx: number) => ({
-      id: item?._id || item?.id || `copy-${bookId}-${Date.now()}-${idx}`,
+      id: item?._id || item?.id || "",
       companyId: item?.company_id || item?.companyId || compId,
       bookId: item?.book_id || item?.bookId || bookId,
       code: item?.copy_code || item?.code || copiesPayload[idx]?.copy_code || "-",
       status: (item?.status as BookCopyStatus) || "AVAILABLE",
-      createdAt: item?.created_at || new Date().toISOString(),
-      updatedAt: item?.updated_at || new Date().toISOString(),
+      createdAt: item?.created_at || "",
+      updatedAt: item?.updated_at || item?.created_at || "",
     }));
   } catch (error: any) {
-    // Fallback: Jika BE masih mendukung single object atau butuh looping
-    if (error.response?.status === 422 || error.response?.status === 400) {
-      try {
-        const createdList: BookCopy[] = [];
-        for (const payload of copiesPayload) {
-          const res = await api.post(`/catalog/books/${bookId}/copies`, payload);
-          const item = res.data?.copy || res.data?.data || res.data;
-          createdList.push({
-            id: item?._id || item?.id || `copy-${Date.now()}`,
-            companyId: item?.company_id || item?.companyId || compId,
-            bookId: item?.book_id || item?.bookId || bookId,
-            code: item?.copy_code || item?.code || payload.copy_code,
-            status: (item?.status as BookCopyStatus) || "AVAILABLE",
-            createdAt: item?.created_at || new Date().toISOString(),
-            updatedAt: item?.updated_at || new Date().toISOString(),
-          });
-        }
-        return createdList;
-      } catch (innerErr) {
-        // Biarkan lanjut ke error handling utama di bawah jika gagal
-      }
-    }
-
-    if (
-      error.response?.status >= 500 ||
-      error.code === "ECONNABORTED" ||
-      error.message?.includes("Server Error")
-    ) {
-      throw new Error(
-        formatApiError(error, "Gagal membuat copy buku karena gangguan server.")
-      );
-    }
-
-    const errorMsg = formatApiError(error, "");
-    if (errorMsg) {
-      throw new Error(errorMsg);
-    }
-
-    const { createBookCopy } = await import("./mock-api");
-    const mockList: BookCopy[] = [];
-    for (let i = 0; i < countToAdd; i++) {
-      mockList.push(await createBookCopy(bookId));
-    }
-    return mockList;
+    throw new Error(
+      formatApiError(error, "Gagal membuat eksemplar buku.")
+    );
   }
 }
 
@@ -1518,37 +1279,43 @@ export async function createBookCopyApi(
 
 export async function deleteBookCopyApi(
   bookId: string,
-  copyId: string
+  copyId: string,
+  companyId?: string
 ): Promise<{ id: string; status?: string }> {
   try {
-    const response = await api.delete(`/catalog/books/${bookId}/copies/${copyId}`);
+    const compId = resolveCompanyId(companyId);
+    const isSuperAdmin = getAuthData()?.user?.role === "SUPER_ADMIN";
+    const endpoint =
+      isSuperAdmin && compId
+        ? `/office/catalog/books/${bookId}/copies/${copyId}`
+        : `/catalog/books/${bookId}/copies/${copyId}`;
+    const params = isSuperAdmin && compId ? { company_id: compId } : undefined;
+
+    const response = await api.delete(endpoint, { params });
     return response.data;
   } catch (error: any) {
-    if (
-      error.response?.status >= 500 ||
-      error.code === "ECONNABORTED" ||
-      error.message?.includes("Server Error")
-    ) {
-      throw new Error(
-        formatApiError(error, "Gagal menghapus copy buku karena gangguan server.")
-      );
-    }
-    throw error;
+    throw new Error(
+      formatApiError(error, "Gagal menghapus eksemplar buku.")
+    );
   }
 }
 
 export async function changeBookCopyStatusApi(
   bookId: string,
   copyId: string,
-  status: BookCopyStatus
+  status: BookCopyStatus,
+  companyId?: string
 ): Promise<BookCopy> {
+  const compId = resolveCompanyId(companyId);
+  const isSuperAdmin = getAuthData()?.user?.role === "SUPER_ADMIN";
+
   // Aturan Bisnis PRD: Copy yang sedang BORROWED tidak boleh diubah statusnya ke arsip/nonaktif
   let targetCopy: BookCopy | undefined;
   try {
-    const copies = await getBookCopiesApi(bookId);
+    const copies = await getBookCopiesApi(bookId, compId);
     targetCopy = copies.find((c) => c.id === copyId);
     if (targetCopy && targetCopy.status === "BORROWED") {
-      throw new Error("Copy yang sedang dipinjam tidak dapat diubah statusnya.");
+      throw new Error("Eksemplar yang sedang dipinjam tidak dapat diubah statusnya.");
     }
   } catch (e: any) {
     if (e.message?.includes("sedang dipinjam")) {
@@ -1557,39 +1324,27 @@ export async function changeBookCopyStatusApi(
   }
 
   // 1. KASUS INACTIVE (Tidak Aktif / Tidak Tersedia):
-  // Backend FastAPI melarang PATCH dengan status INACTIVE (melempar 400: 'Status BORROWED dan INACTIVE bukan update catalog').
   // Di Backend, soft-delete / menonaktifkan copy dilakukan melalui endpoint DELETE /catalog/books/{bookId}/copies/{copyId}.
   if (status === "INACTIVE") {
     try {
-      await deleteBookCopyApi(bookId, copyId);
+      await deleteBookCopyApi(bookId, copyId, compId);
       return {
         id: copyId,
-        companyId: targetCopy?.companyId || "company-001",
+        companyId: targetCopy?.companyId || compId || "",
         bookId,
         code: targetCopy?.code || "-",
         status: "INACTIVE",
-        createdAt: targetCopy?.createdAt || new Date().toISOString(),
-        updatedAt: new Date().toISOString(),
+        createdAt: targetCopy?.createdAt || "",
+        updatedAt: targetCopy?.updatedAt || "",
       };
     } catch (error: any) {
-      if (
-        error.response?.status >= 500 ||
-        error.code === "ECONNABORTED" ||
-        error.message?.includes("Server Error")
-      ) {
-        throw new Error(
-          formatApiError(error, "Gagal menonaktifkan copy buku karena gangguan server.")
-        );
-      }
-      const { changeBookCopyStatus } = await import("./mock-api");
-      return await changeBookCopyStatus(copyId, status);
+      throw new Error(
+        formatApiError(error, "Gagal menonaktifkan eksemplar buku.")
+      );
     }
   }
 
   // 2. KASUS MENGAKTIFKAN KEMBALI COPY YANG INACTIVE (Menjadi Tersedia atau Hilang):
-  // Karena copy sebelumnya di-soft-delete (status INACTIVE) dan backend memfilter status != INACTIVE pada PATCH,
-  // memanggil PATCH akan menghasilkan 404. Maka kita langsung mendaftarkannya kembali via POST /copies
-  // sehingga bersih dan tidak memicu error 404 merah di DevTools!
   if (targetCopy?.status === "INACTIVE" && targetCopy?.code) {
     try {
       const payload = [
@@ -1599,12 +1354,18 @@ export async function changeBookCopyStatusApi(
           status: status,
         },
       ];
+      const endpoint =
+        isSuperAdmin && compId
+          ? `/office/catalog/books/${bookId}/copies`
+          : `/catalog/books/${bookId}/copies`;
+      const params = isSuperAdmin && compId ? { company_id: compId } : undefined;
+
       let postRes: any;
       try {
-        postRes = await api.post(`/catalog/books/${bookId}/copies`, payload);
+        postRes = await api.post(endpoint, payload, { params });
       } catch (arrErr: any) {
         if (arrErr.response?.status === 422) {
-          postRes = await api.post(`/catalog/books/${bookId}/copies`, payload[0]);
+          postRes = await api.post(endpoint, payload[0], { params });
         } else {
           throw arrErr;
         }
@@ -1617,144 +1378,80 @@ export async function changeBookCopyStatusApi(
       const item = Array.isArray(raw) ? raw[0] : (raw?.item || raw);
       return {
         id: item?._id || item?.id || copyId,
-        companyId: item?.company_id || item?.companyId || targetCopy.companyId || "company-001",
+        companyId: item?.company_id || item?.companyId || targetCopy.companyId || compId || "",
         bookId,
         code: item?.copy_code || item?.code || targetCopy.code,
         status: (item?.status as BookCopyStatus) || status,
-        createdAt: item?.created_at || new Date().toISOString(),
-        updatedAt: item?.updated_at || new Date().toISOString(),
+        createdAt: item?.created_at || "",
+        updatedAt: item?.updated_at || item?.created_at || "",
       };
     } catch (postErr: any) {
-      if (
-        postErr.response?.status >= 500 ||
-        postErr.code === "ECONNABORTED" ||
-        postErr.message?.includes("Server Error")
-      ) {
-        throw new Error(
-          formatApiError(postErr, "Gagal mengaktifkan copy buku karena gangguan server.")
-        );
-      }
-      const { changeBookCopyStatus } = await import("./mock-api");
-      return await changeBookCopyStatus(copyId, status);
+      throw new Error(
+        formatApiError(postErr, "Gagal mengaktifkan eksemplar buku.")
+      );
     }
   }
 
   // 3. KASUS COPY AKTIF (Ubah antara AVAILABLE <-> LOST):
   try {
+    const endpoint =
+      isSuperAdmin && compId
+        ? `/office/catalog/books/${bookId}/copies/${copyId}`
+        : `/catalog/books/${bookId}/copies/${copyId}`;
+    const params = isSuperAdmin && compId ? { company_id: compId } : undefined;
+
     const response = await api.patch(
-      `/catalog/books/${bookId}/copies/${copyId}`,
+      endpoint,
       {
         status,
-      }
+      },
+      { params }
     );
 
     const item = response.data;
     return {
       id: item._id || item.id || copyId,
-      companyId: item.company_id || item.companyId || "company-001",
+      companyId: item.company_id || item.companyId || compId || "",
       bookId: item.book_id || item.bookId || bookId,
       code: item.copy_code || item.code || targetCopy?.code || "-",
       status: (item.status as BookCopyStatus) || status,
-      createdAt: item.created_at || new Date().toISOString(),
-      updatedAt: item.updated_at || new Date().toISOString(),
+      createdAt: item.created_at || "",
+      updatedAt: item.updated_at || item.created_at || "",
     };
   } catch (error: any) {
-    // Fallback jika backend merespons 404 (karena copy ternyata soft-deleted)
-    if ((error.response?.status === 404 || error.response?.status === 400) && targetCopy?.code) {
-      try {
-        const payload = [
-          {
-            copy_code: targetCopy.code,
-            location: "-",
-            status: status,
-          },
-        ];
-        let postRes: any;
-        try {
-          postRes = await api.post(`/catalog/books/${bookId}/copies`, payload);
-        } catch (arrErr: any) {
-          if (arrErr.response?.status === 422) {
-            postRes = await api.post(`/catalog/books/${bookId}/copies`, payload[0]);
-          } else {
-            throw arrErr;
-          }
-        }
-        const raw =
-          postRes.data?.items ||
-          postRes.data?.copies ||
-          postRes.data?.data ||
-          postRes.data;
-        const item = Array.isArray(raw) ? raw[0] : (raw?.item || raw);
-        return {
-          id: item?._id || item?.id || copyId,
-          companyId: item?.company_id || item?.companyId || targetCopy.companyId || "company-001",
-          bookId,
-          code: item?.copy_code || item?.code || targetCopy.code,
-          status: (item?.status as BookCopyStatus) || status,
-          createdAt: item?.created_at || new Date().toISOString(),
-          updatedAt: item?.updated_at || new Date().toISOString(),
-        };
-      } catch (postErr) {
-        // Lanjut ke fallback di bawah jika gagal
-      }
-    }
-
-    if (
-      error.response?.status >= 500 ||
-      error.code === "ECONNABORTED" ||
-      error.message?.includes("Server Error")
-    ) {
-      throw new Error(
-        formatApiError(error, "Gagal mengubah status copy buku karena gangguan server.")
-      );
-    }
-    const { changeBookCopyStatus } = await import("./mock-api");
-    return await changeBookCopyStatus(copyId, status);
+    throw new Error(
+      formatApiError(error, "Gagal mengubah status eksemplar buku.")
+    );
   }
 }
 
 export interface DashboardApiResponse {
-  booksAvailable: number;
-  booksBorrowed: number;
-  activeLoans: number;
-  overdueLoans: number;
+  booksAvailable?: number | null;
+  booksBorrowed?: number | null;
+  activeLoans?: number | null;
+  overdueLoans?: number | null;
   recentLoans: Array<Loan & { memberName: string }>;
+  rawResponse?: Record<string, any>;
 }
 
 export async function getDashboardApi(): Promise<DashboardApiResponse> {
   try {
-    const [books, loans] = await Promise.all([
-      getBooksApi({ size: 10 }),
-      listLoansApi(),
+    const [dashRes, loansRes] = await Promise.all([
+      api.get("/dashboard"),
+      listLoansApi({ page: 1, size: 10, sortby: "updated_at", order: "desc" }),
     ]);
 
-    const booksAvailable = books.reduce(
-      (acc, b) => acc + (b.availableCopies || 0),
-      0
-    );
-    const booksBorrowed = books.reduce(
-      (acc, b) =>
-        acc + Math.max(0, (b.totalCopies || 0) - (b.availableCopies || 0)),
-      0
-    );
+    const items = dashRes.data?.items || dashRes.data?.data || dashRes.data || {};
+    const rawBooksAvail = items.books_available ?? items.booksAvailable;
+    const rawActiveLoans = items.active_loans ?? items.activeLoans;
+    const rawOverdueLoans = items.overdue_loans ?? items.overdueLoans;
 
-    const today = new Date();
-    today.setHours(0, 0, 0, 0);
+    const booksAvailable = rawBooksAvail !== undefined && rawBooksAvail !== null ? Number(rawBooksAvail) : null;
+    const activeLoans = rawActiveLoans !== undefined && rawActiveLoans !== null ? Number(rawActiveLoans) : null;
+    const overdueLoans = rawOverdueLoans !== undefined && rawOverdueLoans !== null ? Number(rawOverdueLoans) : null;
 
-    const activeLoans = loans.filter((tx) => {
-      if (tx.loan.status !== "ACTIVE") return false;
-      const dueDate = new Date(`${tx.loan.dueAt.slice(0, 10)}T00:00:00`);
-      return Number.isNaN(dueDate.getTime()) || dueDate >= today;
-    }).length;
-
-    const overdueLoans = loans.filter((tx) => {
-      if (tx.loan.status === "OVERDUE") return true;
-      if (tx.loan.status !== "ACTIVE") return false;
-      const dueDate = new Date(`${tx.loan.dueAt.slice(0, 10)}T00:00:00`);
-      return !Number.isNaN(dueDate.getTime()) && dueDate < today;
-    }).length;
-
-    const sortedLoans = [...loans].sort((a, b) => {
+    const rawLoans = loansRes?.items || [];
+    const sortedLoans = [...rawLoans].sort((a, b) => {
       const getLatestTime = (tx: TransactionData) => {
         const l = tx.loan;
         const times = [
@@ -1779,126 +1476,58 @@ export async function getDashboardApi(): Promise<DashboardApiResponse> {
 
     return {
       booksAvailable,
-      booksBorrowed,
+      booksBorrowed: null,
       activeLoans,
       overdueLoans,
       recentLoans,
+      rawResponse: dashRes.data,
     };
   } catch (error: any) {
-    if (
-      error.response?.status >= 500 ||
-      error.code === "ECONNABORTED" ||
-      error.message?.includes("Server Error")
-    ) {
-      throw new Error(
-        formatApiError(error, "Dashboard gagal dimuat karena gangguan server backend.")
-      );
-    }
-    // Fallback ke mock dashboard jika terjadi kegagalan non-500
-    const { getDashboard } = await import("./mock-api");
-    const fallback = await getDashboard();
-    return {
-      ...fallback,
-      recentLoans: fallback.recentLoans.slice(0, 10),
-    };
+    throw new Error(
+      formatApiError(error, "Dashboard gagal dimuat.")
+    );
   }
 }
 
 export interface OfficeDashboardData {
   companyId: string;
-  companyName: string;
-  totalBooks: number;
-  booksAvailable: number;
-  booksBorrowed: number;
-  activeLoans: number;
-  overdueLoans: number;
-  totalMembers: number;
-  totalUsers: number;
-  recentLoans: Array<{
-    id: string;
-    loanNumber: string;
-    memberName: string;
-    borrowedAt: string;
-    dueAt: string;
-    status: string;
-  }>;
+  booksAvailable?: number | null;
+  activeLoans?: number | null;
+  overdueLoans?: number | null;
+  rawResponse?: Record<string, any>;
 }
 
-export async function getOfficeDashboardApi(companyId?: string): Promise<OfficeDashboardData> {
-  const compId = companyId || "company-001";
+export async function getOfficeDashboardApi(companyId: string): Promise<OfficeDashboardData> {
+  const compId = companyId?.trim() || "";
+  if (!compId) {
+    throw new Error("Pilih instansi terlebih dahulu.");
+  }
   try {
     const response = await api.get("/office/dashboard", {
       params: { company_id: compId },
     });
-    const raw = response.data?.data || response.data?.dashboard || response.data;
+    const items = response.data?.items || response.data?.data || response.data || {};
+    const rawBooksAvail = items.books_available ?? items.booksAvailable;
+    const rawActiveLoans = items.active_loans ?? items.activeLoans;
+    const rawOverdueLoans = items.overdue_loans ?? items.overdueLoans;
+
+    const booksAvailable = rawBooksAvail !== undefined && rawBooksAvail !== null ? Number(rawBooksAvail) : null;
+    const activeLoans = rawActiveLoans !== undefined && rawActiveLoans !== null ? Number(rawActiveLoans) : null;
+    const overdueLoans = rawOverdueLoans !== undefined && rawOverdueLoans !== null ? Number(rawOverdueLoans) : null;
+
     return {
       companyId: compId,
-      companyName: raw?.company_name || raw?.companyName || (compId === "company-002" ? "SMP Negeri 2 Bandung" : compId === "company-003" ? "Institut Teknologi Nusantara" : "SMA Negeri 1 Jakarta"),
-      totalBooks: Number(raw?.total_books ?? raw?.totalBooks ?? (compId === "company-002" ? 82 : compId === "company-003" ? 210 : 45)),
-      booksAvailable: Number(raw?.books_available ?? raw?.booksAvailable ?? (compId === "company-002" ? 70 : compId === "company-003" ? 185 : 38)),
-      booksBorrowed: Number(raw?.books_borrowed ?? raw?.booksBorrowed ?? (compId === "company-002" ? 12 : compId === "company-003" ? 25 : 7)),
-      activeLoans: Number(raw?.active_loans ?? raw?.activeLoans ?? (compId === "company-002" ? 10 : compId === "company-003" ? 20 : 5)),
-      overdueLoans: Number(raw?.overdue_loans ?? raw?.overdueLoans ?? (compId === "company-002" ? 2 : compId === "company-003" ? 5 : 2)),
-      totalMembers: Number(raw?.total_members ?? raw?.totalMembers ?? (compId === "company-002" ? 240 : compId === "company-003" ? 550 : 120)),
-      totalUsers: Number(raw?.total_users ?? raw?.totalUsers ?? (compId === "company-002" ? 6 : compId === "company-003" ? 12 : 4)),
-      recentLoans: Array.isArray(raw?.recent_loans || raw?.recentLoans)
-        ? (raw?.recent_loans || raw?.recentLoans)
-        : [
-            {
-              id: "loan-01",
-              loanNumber: "TRX-B63334",
-              memberName: "Demo Member Two",
-              borrowedAt: new Date(Date.now() - 3 * 86400000).toISOString(),
-              dueAt: new Date(Date.now() + 4 * 86400000).toISOString(),
-              status: "ACTIVE",
-            },
-            {
-              id: "loan-02",
-              loanNumber: "TRX-B63337",
-              memberName: "Demo Member Two",
-              borrowedAt: new Date(Date.now() - 3 * 86400000).toISOString(),
-              dueAt: new Date(Date.now() + 4 * 86400000).toISOString(),
-              status: "ACTIVE",
-            },
-          ],
+      booksAvailable,
+      activeLoans,
+      overdueLoans,
+      rawResponse: response.data,
     };
   } catch (err: any) {
-    if (err.response?.status >= 500) {
-      throw new Error(formatApiError(err, "Office dashboard gagal dimuat karena gangguan server."));
-    }
-    return {
-      companyId: compId,
-      companyName: compId === "company-002" ? "SMP Negeri 2 Bandung" : compId === "company-003" ? "Institut Teknologi Nusantara" : "SMA Negeri 1 Jakarta",
-      totalBooks: compId === "company-002" ? 82 : compId === "company-003" ? 210 : 45,
-      booksAvailable: compId === "company-002" ? 70 : compId === "company-003" ? 185 : 38,
-      booksBorrowed: compId === "company-002" ? 12 : compId === "company-003" ? 25 : 7,
-      activeLoans: compId === "company-002" ? 10 : compId === "company-003" ? 20 : 5,
-      overdueLoans: compId === "company-002" ? 2 : compId === "company-003" ? 5 : 2,
-      totalMembers: compId === "company-002" ? 240 : compId === "company-003" ? 550 : 120,
-      totalUsers: compId === "company-002" ? 6 : compId === "company-003" ? 12 : 4,
-      recentLoans: [
-        {
-          id: "loan-01",
-          loanNumber: "TRX-B63334",
-          memberName: "Demo Member Two",
-          borrowedAt: new Date(Date.now() - 3 * 86400000).toISOString(),
-          dueAt: new Date(Date.now() + 4 * 86400000).toISOString(),
-          status: "ACTIVE",
-        },
-        {
-          id: "loan-02",
-          loanNumber: "TRX-B63337",
-          memberName: "Demo Member Two",
-          borrowedAt: new Date(Date.now() - 3 * 86400000).toISOString(),
-          dueAt: new Date(Date.now() + 4 * 86400000).toISOString(),
-          status: "ACTIVE",
-        },
-      ],
-    };
+    throw new Error(formatApiError(err, "Office dashboard gagal dimuat dari server."));
   }
 }
 
-function formatCleanLoanNumber(raw: any): string {
+export function formatCleanLoanNumber(raw: any): string {
   const candidate = raw.loan_number || raw.loanNumber || raw.code;
   if (candidate && candidate !== "-" && typeof candidate === "string") {
     const isLongHexOrUuid =
@@ -1913,7 +1542,7 @@ function formatCleanLoanNumber(raw: any): string {
     }
   }
 
-  const rawId = String(raw.id || raw.loan_id || raw._id || "");
+  const rawId = String(raw.id || raw.loan_id || raw._id || candidate || "");
   if (rawId) {
     const parts = rawId.split("-");
     const lastPart = parts[parts.length - 1] || parts[0];
@@ -1925,7 +1554,7 @@ function formatCleanLoanNumber(raw: any): string {
     }
   }
 
-  return `TRX-${Math.random().toString(36).substring(2, 8).toUpperCase()}`;
+  return candidate || "-";
 }
 
 function extractCopyIdsFromRaw(raw: any): string[] {
@@ -2002,84 +1631,84 @@ function mapRawToTransactionData(raw: any): TransactionData {
     raw.loan?.id ||
     raw.loan_id ||
     raw.loanId ||
-    `loan-${Math.random().toString(36).slice(2)}`;
+    "";
 
-    const rawCreatedAt =
-      raw.created_at ||
-      raw.createdAt ||
-      raw.loan?.created_at ||
+  const rawCreatedAt =
+    raw.created_at ||
+    raw.createdAt ||
+    raw.loan?.created_at ||
+    raw.borrowed_at ||
+    raw.borrowedAt ||
+    raw.loan?.borrowed_at ||
+    "";
+
+  const rawUpdatedAt =
+    raw.updated_at ||
+    raw.updatedAt ||
+    raw.loan?.updated_at ||
+    raw.returned_at ||
+    raw.returnedAt ||
+    raw.loan?.returned_at ||
+    rawCreatedAt;
+
+  const dueAtValue =
+    raw.due_at ||
+    raw.dueAt ||
+    raw.loan?.due_at ||
+    "";
+
+  const todayDate = new Date();
+  todayDate.setHours(0, 0, 0, 0);
+  const parsedDueDate = dueAtValue ? new Date(`${dueAtValue.slice(0, 10)}T00:00:00`) : new Date(NaN);
+  const isOverdueRealtime =
+    !Number.isNaN(parsedDueDate.getTime()) && parsedDueDate.getTime() < todayDate.getTime();
+
+  const isLoanCompleted =
+    raw.status === "COMPLETED" ||
+    raw.loan?.status === "COMPLETED" ||
+    raw.returned_at ||
+    raw.returnedAt ||
+    raw.loan?.returned_at;
+
+  const computedLoanStatus: Loan["status"] = isLoanCompleted
+    ? "COMPLETED"
+    : raw.status === "OVERDUE" || raw.loan?.status === "OVERDUE" || isOverdueRealtime
+    ? "OVERDUE"
+    : (raw.status || raw.loan?.status || "ACTIVE");
+
+  const loan: Loan = {
+    id: loanId,
+    companyId: raw.company_id || raw.companyId || "",
+    loanNumber: formatCleanLoanNumber(raw),
+    memberId:
+      raw.member_id ||
+      raw.memberId ||
+      raw.member?.id ||
+      raw.member?._id ||
+      raw.loan?.member_id ||
+      "-",
+    borrowedBy:
+      raw.borrowed_by ||
+      raw.borrowedBy ||
+      raw.user_id ||
+      raw.user?.id ||
+      "-",
+    borrowedAt:
       raw.borrowed_at ||
       raw.borrowedAt ||
       raw.loan?.borrowed_at ||
-      new Date().toISOString();
-
-    const rawUpdatedAt =
-      raw.updated_at ||
-      raw.updatedAt ||
-      raw.loan?.updated_at ||
+      rawCreatedAt,
+    dueAt: dueAtValue,
+    returnedAt:
       raw.returned_at ||
       raw.returnedAt ||
       raw.loan?.returned_at ||
-      rawCreatedAt;
-
-    const dueAtValue =
-      raw.due_at ||
-      raw.dueAt ||
-      raw.loan?.due_at ||
-      new Date().toISOString();
-
-    const todayDate = new Date();
-    todayDate.setHours(0, 0, 0, 0);
-    const parsedDueDate = new Date(`${dueAtValue.slice(0, 10)}T00:00:00`);
-    const isOverdueRealtime =
-      !Number.isNaN(parsedDueDate.getTime()) && parsedDueDate.getTime() < todayDate.getTime();
-
-    const isLoanCompleted =
-      raw.status === "COMPLETED" ||
-      raw.loan?.status === "COMPLETED" ||
-      raw.returned_at ||
-      raw.returnedAt ||
-      raw.loan?.returned_at;
-
-    const computedLoanStatus: Loan["status"] = isLoanCompleted
-      ? "COMPLETED"
-      : raw.status === "OVERDUE" || raw.loan?.status === "OVERDUE" || isOverdueRealtime
-      ? "OVERDUE"
-      : (raw.status || raw.loan?.status || "ACTIVE");
-
-    const loan: Loan = {
-      id: loanId,
-      companyId: raw.company_id || raw.companyId || "company-001",
-      loanNumber: formatCleanLoanNumber(raw),
-      memberId:
-        raw.member_id ||
-        raw.memberId ||
-        raw.member?.id ||
-        raw.member?._id ||
-        raw.loan?.member_id ||
-        "-",
-      borrowedBy:
-        raw.borrowed_by ||
-        raw.borrowedBy ||
-        raw.user_id ||
-        raw.user?.id ||
-        "-",
-      borrowedAt:
-        raw.borrowed_at ||
-        raw.borrowedAt ||
-        raw.loan?.borrowed_at ||
-        rawCreatedAt,
-      dueAt: dueAtValue,
-      returnedAt:
-        raw.returned_at ||
-        raw.returnedAt ||
-        raw.loan?.returned_at ||
-        undefined,
-      status: computedLoanStatus,
-      notes: raw.notes || undefined,
-      createdAt: rawCreatedAt,
-      updatedAt: rawUpdatedAt,
-    };
+      undefined,
+    status: computedLoanStatus,
+    notes: raw.notes || undefined,
+    createdAt: rawCreatedAt,
+    updatedAt: rawUpdatedAt,
+  };
 
   const member: Member = raw.member
     ? {
@@ -2087,14 +1716,14 @@ function mapRawToTransactionData(raw: any): TransactionData {
         companyId:
           raw.member.company_id || raw.member.companyId || loan.companyId,
         memberNumber:
-          raw.member.member_number || raw.member.memberNumber || "MBR-001",
+          raw.member.member_number || raw.member.memberNumber || "-",
         name: raw.member.name || raw.member_name || raw.memberName || "-",
         memberType:
-          raw.member.member_type || raw.member.memberType || "INTERNAL",
+          raw.member.member_type || raw.member.memberType || "UMUM",
         identityNumber:
           raw.member.identity_number ||
           raw.member.identityNumber ||
-          "0000000000000000",
+          "-",
         phone: raw.member.phone || "-",
         email: raw.member.email || undefined,
         status: raw.member.status || "ACTIVE",
@@ -2106,10 +1735,10 @@ function mapRawToTransactionData(raw: any): TransactionData {
     : {
         id: loan.memberId,
         companyId: loan.companyId,
-        memberNumber: "MBR-001",
-        name: raw.member_name || raw.memberName || "Anggota",
-        memberType: "INTERNAL",
-        identityNumber: "0000000000000000",
+        memberNumber: raw.member_number || raw.memberNumber || "-",
+        name: raw.member_name || raw.memberName || "-",
+        memberType: "UMUM",
+        identityNumber: raw.identity_number || raw.identityNumber || "-",
         phone: "-",
         status: "ACTIVE",
         createdAt: loan.createdAt,
@@ -2120,9 +1749,9 @@ function mapRawToTransactionData(raw: any): TransactionData {
     ? {
         id: raw.user._id || raw.user.id || loan.borrowedBy,
         companyId: raw.user.company_id || raw.user.companyId || loan.companyId,
-        name: raw.user.name || raw.user_name || raw.userName || "Petugas",
-        username: raw.user.username || raw.user.user_name || "petugas",
-        email: raw.user.email || "staff@bukuflow.com",
+        name: raw.user.name || raw.user_name || raw.userName || "-",
+        username: raw.user.username || raw.user.user_name || (raw.user.name ? raw.user.name.toLowerCase().replace(/\s+/g, "") : "-"),
+        email: raw.user.email || raw.user_email || "-",
         role: raw.user.role || "STAFF",
         status: raw.user.status || "ACTIVE",
         createdAt: raw.user.created_at || raw.user.createdAt || loan.createdAt,
@@ -2131,9 +1760,9 @@ function mapRawToTransactionData(raw: any): TransactionData {
     : {
         id: loan.borrowedBy,
         companyId: loan.companyId,
-        name: raw.user_name || raw.userName || "Petugas",
-        username: "petugas",
-        email: "staff@bukuflow.com",
+        name: raw.user_name || raw.userName || "-",
+        username: (raw.user_name || raw.userName || "-").toLowerCase().replace(/\s+/g, ""),
+        email: raw.user_email || raw.email || "-",
         role: "STAFF" as const,
         status: "ACTIVE" as const,
         createdAt: loan.createdAt,
@@ -2186,8 +1815,8 @@ function mapRawToTransactionData(raw: any): TransactionData {
           rawItem.title ||
           raw.book_title ||
           raw.bookTitle ||
-          "Buku"
-        : raw.book_title || raw.bookTitle || "Buku";
+          "-"
+        : raw.book_title || raw.bookTitle || "-";
 
       const itemBookCode = isObject
         ? rawItem.book_code ||
@@ -2196,8 +1825,8 @@ function mapRawToTransactionData(raw: any): TransactionData {
           rawItem.code ||
           raw.book_code ||
           raw.bookCode ||
-          "BK-001"
-        : raw.book_code || raw.bookCode || "BK-001";
+          "-"
+        : raw.book_code || raw.bookCode || "-";
 
       const itemCopyCode = isObject
         ? rawItem.copy_code ||
@@ -2206,8 +1835,8 @@ function mapRawToTransactionData(raw: any): TransactionData {
           rawItem.copy?.code ||
           raw.copy_code ||
           raw.copyCode ||
-          "CP-001"
-        : raw.copy_code || raw.copyCode || "CP-001";
+          "-"
+        : raw.copy_code || raw.copyCode || "-";
 
       const rawReturnedAt = isObject
         ? rawItem.returned_at ||
@@ -2237,7 +1866,7 @@ function mapRawToTransactionData(raw: any): TransactionData {
           rawItem?.updated_at ||
           rawItem?.updatedAt ||
           loan.updatedAt ||
-          new Date().toISOString()
+          undefined
         : undefined;
 
       const itemId = isObject
@@ -2309,8 +1938,8 @@ function mapRawToTransactionData(raw: any): TransactionData {
         book: {
           id: raw.book_id || raw.bookId || `book-${loan.id}`,
           companyId: loan.companyId,
-          code: raw.book_code || raw.bookCode || "BK-001",
-          title: raw.book_title || raw.bookTitle || "Buku",
+          code: raw.book_code || raw.bookCode || "-",
+          title: raw.book_title || raw.bookTitle || "-",
           status: "AVAILABLE" as const,
           totalCopies: 1,
           availableCopies: 1,
@@ -2321,7 +1950,7 @@ function mapRawToTransactionData(raw: any): TransactionData {
           id: cId,
           companyId: loan.companyId,
           bookId: raw.book_id || raw.bookId || `book-${loan.id}`,
-          code: raw.copy_code || raw.copyCode || "CP-001",
+          code: raw.copy_code || raw.copyCode || "-",
           status:
             loan.status === "COMPLETED"
               ? ("AVAILABLE" as const)
@@ -2352,8 +1981,8 @@ function mapRawToTransactionData(raw: any): TransactionData {
           book: {
             id: raw.book_id || raw.bookId || `book-${loan.id}`,
             companyId: loan.companyId,
-            code: raw.book_code || raw.bookCode || "BK-001",
-            title: raw.book_title || raw.bookTitle || "Buku",
+            code: raw.book_code || raw.bookCode || "-",
+            title: raw.book_title || raw.bookTitle || "-",
             status: "AVAILABLE" as const,
             totalCopies: 1,
             availableCopies: 1,
@@ -2364,7 +1993,7 @@ function mapRawToTransactionData(raw: any): TransactionData {
             id: copyId,
             companyId: loan.companyId,
             bookId: raw.book_id || raw.bookId || `book-${loan.id}`,
-            code: raw.copy_code || raw.copyCode || "CP-001",
+            code: raw.copy_code || raw.copyCode || "-",
             status:
               loan.status === "COMPLETED"
                 ? ("AVAILABLE" as const)
@@ -2399,14 +2028,14 @@ export interface CreateLoanInputData {
 }
 
 function toIsoDateTime(dateStr: string, isEndOfDay = false): string {
-  if (!dateStr) return new Date().toISOString();
+  if (!dateStr) return "";
   if (dateStr.includes("T")) {
     const d = new Date(dateStr);
-    return Number.isNaN(d.getTime()) ? new Date().toISOString() : d.toISOString();
+    return Number.isNaN(d.getTime()) ? "" : d.toISOString();
   }
   const timePart = isEndOfDay ? "T23:59:59.000Z" : "T00:00:00.000Z";
   const d = new Date(`${dateStr}${timePart}`);
-  return Number.isNaN(d.getTime()) ? new Date().toISOString() : d.toISOString();
+  return Number.isNaN(d.getTime()) ? "" : d.toISOString();
 }
 
 export async function createLoanApi(data: CreateLoanInputData): Promise<Loan> {
@@ -2429,8 +2058,8 @@ export async function createLoanApi(data: CreateLoanInputData): Promise<Loan> {
     const raw = response.data?.loan || response.data;
     if (raw && (raw.id || raw._id || raw.loan_number || raw.loanNumber)) {
       return {
-        id: raw._id || raw.id || `loan-${Date.now()}`,
-        companyId: raw.company_id || raw.companyId || "company-001",
+        id: raw._id || raw.id || "",
+        companyId: raw.company_id || raw.companyId || resolveCompanyId() || "",
         loanNumber: formatCleanLoanNumber(raw),
         memberId: raw.member_id || raw.memberId || data.memberId,
         borrowedBy: raw.borrowed_by || raw.borrowedBy || "-",
@@ -2439,23 +2068,12 @@ export async function createLoanApi(data: CreateLoanInputData): Promise<Loan> {
         returnedAt: raw.returned_at || raw.returnedAt || undefined,
         status: (raw.status as Loan["status"]) || "ACTIVE",
         notes: raw.notes || undefined,
-        createdAt: raw.created_at || raw.createdAt || new Date().toISOString(),
-        updatedAt: raw.updated_at || raw.updatedAt || new Date().toISOString(),
+        createdAt: raw.created_at || raw.createdAt || "",
+        updatedAt: raw.updated_at || raw.updatedAt || "",
       };
     }
 
-    return {
-      id: `loan-${Date.now()}`,
-      companyId: "company-001",
-      loanNumber: `TRX-${Date.now().toString().slice(-6)}`,
-      memberId: data.memberId,
-      borrowedBy: "-",
-      borrowedAt: payload.borrowed_at,
-      dueAt: payload.due_at,
-      status: "ACTIVE",
-      createdAt: new Date().toISOString(),
-      updatedAt: new Date().toISOString(),
-    };
+    throw new Error("Format respons pembuatan peminjaman tidak valid.");
   } catch (error: any) {
     throw new Error(formatApiError(error, "Gagal membuat data peminjaman."));
   }
@@ -2466,11 +2084,21 @@ async function enrichTransactions(
   size?: number
 ): Promise<TransactionData[]> {
   try {
-    const fetchSize = size ? size : undefined;
-    const [members, books] = await Promise.all([
-      getMembersApi(fetchSize ? { size: fetchSize } : undefined).catch(() => []),
-      getBooksApi(fetchSize ? { size: fetchSize } : undefined).catch(() => []),
+    const fetchSize = size ? Math.min(size, 20) : Math.min(Math.max(10, transactions.length), 20);
+    // Best-effort data augmentation: Jika gagal memuat metadata tambahan anggota atau katalog,
+    // transaksi peminjaman tetap ditampilkan ke pengguna menggunakan data dasar/ID pada record transaksi.
+    const [members, booksRes] = await Promise.all([
+      getMembersApi(fetchSize ? { size: fetchSize } : undefined).catch((err) => {
+        console.warn("Gagal memuat metadata anggota untuk enrichment transaksi:", err);
+        return [];
+      }),
+      getBooksApi(fetchSize ? { size: fetchSize } : undefined).catch((err) => {
+        console.warn("Gagal memuat katalog buku untuk enrichment transaksi:", err);
+        return { items: [] as Book[], total: 0, page: 1, size: 10, totalPages: 1 };
+      }),
     ]);
+
+    const books: Book[] = Array.isArray(booksRes) ? booksRes : (booksRes?.items || []);
 
     // Fast multi-key member map (id, lowercase id, memberNumber, code)
     const memberMap = new Map<string, Member>();
@@ -2520,7 +2148,7 @@ async function enrichTransactions(
     }
 
     const matchingBooks = books.filter((b) => neededBookIds.has(b.id));
-    const targetBooks = matchingBooks.length > 0 ? matchingBooks : books;
+    const targetBooks = matchingBooks;
 
     // Fast multi-key copies map (id, code, uppercase code, barcode)
     const copiesMap = new Map<string, { book: Book; copy: BookCopy }>();
@@ -2591,10 +2219,10 @@ async function enrichTransactions(
           ) {
             it.loanItem.status = "RETURNED";
             it.loanItem.returnedAt =
-              tx.loan.returnedAt || it.loanItem.returnedAt || new Date().toISOString();
+              tx.loan.returnedAt || it.loanItem.returnedAt || undefined;
           }
         } else {
-          // Fallback: lookup parent book by bookId or code
+          // Lookup parent book by bookId or code
           const foundBook =
             (it.loanItem?.bookId && bookMap.get(it.loanItem.bookId)) ||
             (it.book?.id && bookMap.get(it.book.id)) ||
@@ -2604,15 +2232,6 @@ async function enrichTransactions(
             it.book = foundBook;
             it.loanItem.bookId = foundBook.id;
             it.bookCopy.bookId = foundBook.id;
-
-            if (
-              !it.bookCopy.code ||
-              it.bookCopy.code === "-" ||
-              it.bookCopy.code === "CP-001" ||
-              it.bookCopy.code.endsWith("-001")
-            ) {
-              it.bookCopy.code = `${foundBook.code}-C01`;
-            }
           }
         }
       }
@@ -2624,13 +2243,10 @@ async function enrichTransactions(
 
       if (allReturned || tx.loan.status === "COMPLETED" || tx.loan.returnedAt) {
         tx.loan.status = "COMPLETED";
-        if (!tx.loan.returnedAt) {
-          tx.loan.returnedAt = new Date().toISOString();
-        }
       }
     }
-  } catch {
-    // Ignore enrichment failure
+  } catch (err) {
+    console.warn("Gagal melakukan enrichment data transaksi:", err);
   }
 
   return sortTransactionsDesc(transactions);
@@ -2669,30 +2285,270 @@ export function sortTransactionsDesc(transactions: TransactionData[]): Transacti
   });
 }
 
-export async function listLoansApi(params?: {
+export interface ListLoansParams {
+  items?: number;
   page?: number;
   size?: number;
   search?: string;
-}): Promise<TransactionData[]> {
+  q?: string;
+  status?: string | string[];
+  startDate?: string;
+  endDate?: string;
+  borrowed_from?: string;
+  borrowed_to?: string;
+  due_from?: string;
+  due_to?: string;
+  returned_from?: string;
+  returned_to?: string;
+  loan_id?: string;
+  member_id?: string;
+  borrowed_by?: string;
+  book_id?: string;
+  copy_id?: string;
+  sortby?: string;
+  order?: "asc" | "desc" | string;
+  companyId?: string;
+  skipEnrich?: boolean;
+}
+
+export async function getMemberActiveLoanCountApi(memberId: string): Promise<number> {
+  if (!memberId) return 0;
   try {
-    const queryParams: Record<string, any> = {};
-    if (params?.page) queryParams.page = params.page;
-    if (params?.size) queryParams.size = params.size;
-    if (params?.search) queryParams.search = params.search;
+    const res = await listLoansApi({
+      member_id: memberId,
+      status: "ACTIVE",
+      size: 10,
+      skipEnrich: true,
+    });
+    const activeItems = res.items.filter(
+      (tx) => tx.loan.status !== "COMPLETED" && !tx.loan.returnedAt
+    );
+    return typeof res.total === "number" && res.total >= 0 && activeItems.length >= res.items.length
+      ? res.total
+      : activeItems.length;
+  } catch (err) {
+    console.warn("Gagal menghitung transaksi aktif anggota:", err);
+    return 0;
+  }
+}
 
-    const response = await api
-      .get("/loan", { params: queryParams })
-      .catch((err) => {
-        if (err.response?.status >= 500) throw err;
-        return api.get("/loans", { params: queryParams });
+export async function listLoansApi(
+  params?: ListLoansParams
+): Promise<{ items: TransactionData[]; total: number; page: number; size: number; totalPages: number }> {
+  const page = params?.page ?? 1;
+  const size = params?.size ?? 10;
+  try {
+    const queryParams: Record<string, any> = {
+      page,
+      size,
+    };
+
+    const rawSearch = (params?.q || params?.search || "").trim();
+    const isOnlyTrxPrefix = /^trx[-_\s]*$/i.test(rawSearch);
+    const isOnlyPunctuation = /^[-_\s]+$/.test(rawSearch);
+    const cleanHexCandidate = rawSearch.replace(/^TRX[-_\s]*/i, "").trim();
+
+    if (rawSearch && !isOnlyTrxPrefix && !isOnlyPunctuation) {
+      if (/^[0-9a-fA-F]{24}$/.test(rawSearch)) {
+        queryParams.loan_id = rawSearch;
+      } else if (/^[0-9a-fA-F]{24}$/.test(cleanHexCandidate)) {
+        queryParams.loan_id = cleanHexCandidate;
+      } else if (cleanHexCandidate && cleanHexCandidate !== rawSearch) {
+        queryParams.q = cleanHexCandidate;
+      } else {
+        queryParams.q = rawSearch;
+      }
+    }
+
+    if (params?.status) {
+      queryParams.status = Array.isArray(params.status) ? params.status : [params.status];
+    }
+
+    const compId = resolveCompanyId(params?.companyId);
+    if (compId) queryParams.company_id = compId;
+
+    const bFrom = params?.borrowed_from || params?.startDate;
+    if (bFrom) queryParams.borrowed_from = bFrom.includes("T") ? bFrom : toIsoDateTime(bFrom, false);
+
+    const bTo = params?.borrowed_to || params?.endDate;
+    if (bTo) queryParams.borrowed_to = bTo.includes("T") ? bTo : toIsoDateTime(bTo, true);
+
+    if (params?.due_from) queryParams.due_from = params.due_from.includes("T") ? params.due_from : toIsoDateTime(params.due_from, false);
+    if (params?.due_to) queryParams.due_to = params.due_to.includes("T") ? params.due_to : toIsoDateTime(params.due_to, true);
+    if (params?.returned_from) queryParams.returned_from = params.returned_from.includes("T") ? params.returned_from : toIsoDateTime(params.returned_from, false);
+    if (params?.returned_to) queryParams.returned_to = params.returned_to.includes("T") ? params.returned_to : toIsoDateTime(params.returned_to, true);
+    if (params?.loan_id) queryParams.loan_id = params.loan_id;
+    if (params?.member_id) queryParams.member_id = params.member_id;
+    if (params?.borrowed_by) queryParams.borrowed_by = params.borrowed_by;
+    if (params?.book_id) queryParams.book_id = params.book_id;
+    if (params?.copy_id) queryParams.copy_id = params.copy_id;
+    if (params?.sortby) queryParams.sortby = params.sortby;
+    if (params?.order) queryParams.order = params.order;
+
+    const customParamsSerializer = (p: Record<string, any>) => {
+      const sp = new URLSearchParams();
+      for (const [key, value] of Object.entries(p)) {
+        if (value === undefined || value === null) continue;
+        if (Array.isArray(value)) {
+          value.forEach((v) => sp.append(key, String(v)));
+        } else {
+          sp.append(key, String(value));
+        }
+      }
+      return sp.toString();
+    };
+
+    const response = await api.get("/loan/search", {
+      params: queryParams,
+      paramsSerializer: customParamsSerializer,
+    });
+
+    const raw = response.data;
+    let items = raw?.items || raw?.data || (Array.isArray(raw) ? raw : []);
+
+    if (items.length > 0 && cleanHexCandidate && cleanHexCandidate !== rawSearch) {
+      const candLower = cleanHexCandidate.toLowerCase();
+      const queryLower = rawSearch.toLowerCase();
+      const strictlyMatched = items.filter((rawLoan: any) => {
+        const rawId = String(rawLoan.id || rawLoan._id || rawLoan.loan_id || "").toLowerCase();
+        const formatted = formatCleanLoanNumber(rawLoan).toLowerCase();
+        return (
+          formatted.includes(candLower) ||
+          formatted.includes(queryLower) ||
+          rawId.endsWith(candLower) ||
+          rawId.includes(candLower)
+        );
       });
+      if (strictlyMatched.length > 0) {
+        items = strictlyMatched;
+      }
+    }
 
-    const items = response.data?.items || response.data || [];
+    if (
+      items.length === 0 &&
+      rawSearch &&
+      !isOnlyTrxPrefix &&
+      !isOnlyPunctuation
+    ) {
+      const fallbackParams = { ...queryParams };
+      delete fallbackParams.q;
+      fallbackParams.size = Math.min(Math.max(size, 20), 50);
+      try {
+        const fbRes = await api.get("/loan/search", {
+          params: fallbackParams,
+          paramsSerializer: customParamsSerializer,
+        });
+        const fbRaw = fbRes.data;
+        const fbItems = fbRaw?.items || fbRaw?.data || (Array.isArray(fbRaw) ? fbRaw : []);
+        if (Array.isArray(fbItems) && fbItems.length > 0) {
+          const targetSuffix = cleanHexCandidate.toLowerCase();
+          const targetFull = rawSearch.toLowerCase();
+          const matched = fbItems.filter((rawLoan: any) => {
+            const rawId = String(rawLoan.id || rawLoan._id || rawLoan.loan_id || "").toLowerCase();
+            const formatted = formatCleanLoanNumber(rawLoan).toLowerCase();
+            const borrower = String(rawLoan.borrowed_by || rawLoan.borrowedBy || rawLoan.member_name || "").toLowerCase();
+
+            return (
+              formatted === targetFull ||
+              formatted.includes(targetFull) ||
+              (targetSuffix && formatted.includes(targetSuffix)) ||
+              (targetSuffix && rawId.endsWith(targetSuffix)) ||
+              (targetSuffix && rawId.includes(targetSuffix)) ||
+              (targetFull && borrower.includes(targetFull))
+            );
+          });
+          if (matched.length > 0) {
+            items = matched;
+          }
+        }
+      } catch {
+        // Abaikan jika fallback pencarian ID backend gagal
+      }
+    }
+
+    let enriched: TransactionData[] = [];
     if (Array.isArray(items) && items.length > 0) {
       const mapped = items.map(mapRawToTransactionData);
-      return await enrichTransactions(mapped, params?.size);
+      enriched = params?.skipEnrich ? mapped : await enrichTransactions(mapped, size);
     }
-    return [];
+
+    if (params?.status) {
+      const requestedStatuses = (
+        Array.isArray(params.status) ? params.status : [params.status]
+      ).map((s) => s.toUpperCase());
+
+      enriched = enriched.filter((tx) => {
+        if (requestedStatuses.includes("ACTIVE") && !requestedStatuses.includes("COMPLETED")) {
+          return tx.loan.status !== "COMPLETED" && !tx.loan.returnedAt;
+        }
+        if (requestedStatuses.includes("COMPLETED")) {
+          return tx.loan.status === "COMPLETED" || Boolean(tx.loan.returnedAt);
+        }
+        return requestedStatuses.includes(tx.loan.status);
+      });
+    }
+
+    const filterFromDate = (params?.startDate || params?.borrowed_from || "").slice(0, 10);
+    const filterToDate = (params?.endDate || params?.borrowed_to || "").slice(0, 10);
+    const filterDueFrom = (params?.due_from || "").slice(0, 10);
+    const filterDueTo = (params?.due_to || "").slice(0, 10);
+    const filterRetFrom = (params?.returned_from || "").slice(0, 10);
+    const filterRetTo = (params?.returned_to || "").slice(0, 10);
+
+    if (filterFromDate || filterToDate || filterDueFrom || filterDueTo || filterRetFrom || filterRetTo) {
+      enriched = enriched.filter((tx) => {
+        const itemBorrowedDate = (tx.loan.borrowedAt || "").slice(0, 10);
+        if (filterFromDate && itemBorrowedDate && itemBorrowedDate < filterFromDate) return false;
+        if (filterToDate && itemBorrowedDate && itemBorrowedDate > filterToDate) return false;
+
+        const itemDueDate = (tx.loan.dueAt || "").slice(0, 10);
+        if (filterDueFrom && itemDueDate && itemDueDate < filterDueFrom) return false;
+        if (filterDueTo && itemDueDate && itemDueDate > filterDueTo) return false;
+
+        const itemRetDate = (tx.loan.returnedAt || "").slice(0, 10);
+        if (filterRetFrom) {
+          if (!itemRetDate || itemRetDate < filterRetFrom) return false;
+        }
+        if (filterRetTo) {
+          if (!itemRetDate || itemRetDate > filterRetTo) return false;
+        }
+
+        return true;
+      });
+    }
+
+    let total =
+      typeof raw?.total === "number" && raw.total >= 0
+        ? raw.total
+        : typeof raw?.count === "number" && raw.count >= 0
+        ? raw.count
+        : -1;
+
+    const hasFilterApplied = Boolean(
+      params?.status || filterFromDate || filterToDate || filterDueFrom || filterDueTo || filterRetFrom || filterRetTo
+    );
+    if (total === -1 || (hasFilterApplied && enriched.length < items.length)) {
+      if (enriched.length < size) {
+        total = (page - 1) * size + enriched.length;
+      } else {
+        total = page * size + 1;
+      }
+    }
+
+    const totalPages =
+      typeof raw?.total_pages === "number" && raw.total_pages > 0 && !(hasFilterApplied && enriched.length < items.length)
+        ? raw.total_pages
+        : typeof raw?.totalPages === "number" && raw.totalPages > 0 && !(hasFilterApplied && enriched.length < items.length)
+        ? raw.totalPages
+        : Math.max(1, Math.ceil(total / size));
+
+    return {
+      items: enriched,
+      total,
+      page,
+      size,
+      totalPages,
+    };
   } catch (error: any) {
     if (
       error.response?.status >= 500 ||
@@ -2706,12 +2562,12 @@ export async function listLoansApi(params?: {
         )
       );
     }
-    if (error.response?.status === 404) {
-      return [];
+    if (error.response?.status === 404 || error.response?.status === 422) {
+      throw new Error(
+        formatApiError(error, "Daftar peminjaman gagal dimuat."),
+      );
     }
-    // Fallback ke mock jika backend belum tersedia
-    const { getTransactions } = await import("./mock-api");
-    return getTransactions();
+    throw error;
   }
 }
 
@@ -2724,93 +2580,119 @@ export interface ListActiveReturnsParams {
 
 export async function getActiveReturnsApi(
   paramsOrCompanyId?: ListActiveReturnsParams | string
-): Promise<ReturnLoanData[]> {
-  const auth = getAuthData();
+): Promise<{ items: ReturnLoanData[]; total: number; page: number; size: number; totalPages: number }> {
   let companyId: string | undefined;
-  let page: number | undefined;
-  let size: number | undefined;
+  let page: number = 1;
+  let size: number = 10;
   let search: string | undefined;
 
   if (typeof paramsOrCompanyId === "string") {
     companyId = paramsOrCompanyId;
   } else if (paramsOrCompanyId) {
     companyId = paramsOrCompanyId.companyId;
-    page = paramsOrCompanyId.page;
-    size = paramsOrCompanyId.size;
+    page = paramsOrCompanyId.page ?? 1;
+    size = paramsOrCompanyId.size ?? 10;
     search = paramsOrCompanyId.search;
   }
 
-  const compId = companyId || auth?.user?.companyId || "company-001";
-  const queryParams: Record<string, any> = {};
-  if (compId) queryParams.company_id = compId;
-  if (page) queryParams.page = page;
-  if (size) queryParams.size = size;
-  if (search) queryParams.search = search;
+  const compId = resolveCompanyId(companyId);
+  const cleanSearch = search?.trim() || "";
+  const isHexLoanId = /^[0-9a-fA-F]{24}$/.test(cleanSearch);
+
+  // Gunakan search loans endpoint (/loan) ke backend secara langsung dengan status pinjaman aktif & terlambat
+  const res = await listLoansApi({
+    page,
+    size: cleanSearch ? Math.max(size, 20) : size,
+    q: isHexLoanId ? undefined : (cleanSearch || undefined),
+    loan_id: isHexLoanId ? cleanSearch : undefined,
+    status: ["ACTIVE", "OVERDUE"],
+    companyId: compId,
+  });
+
+  // Guard: pastikan hanya transaksi yang belum selesai dan masih memiliki eksemplar yang dipinjam
+  const activeItems = res.items.filter(
+    (tx) =>
+      tx.loan.status !== "COMPLETED" &&
+      !tx.loan.returnedAt &&
+      tx.items.some((it) => it.loanItem.status === "BORROWED")
+  );
+
+  return {
+    items: activeItems.slice(0, size),
+    total: activeItems.length,
+    page,
+    size,
+    totalPages: Math.max(1, Math.ceil(activeItems.length / size)),
+  };
+}
+
+export const listActiveReturnsApi = getActiveReturnsApi;
+
+export async function getLoanByIdApi(
+  loanId: string,
+  companyId?: string
+): Promise<ReturnLoanData | null> {
+  const cleanId = (loanId || "").trim();
+  if (!cleanId) return null;
+  const compId = resolveCompanyId(companyId);
 
   try {
-    const response = await api
-      .get("/loan/returns/active", { params: queryParams })
-      .catch(() =>
-        api.get("/loan/returns/active", {
-          params: queryParams,
-        })
-      )
-      .catch(() =>
-        api.get("/office/loan/returns/active", {
-          params: queryParams,
-        })
-      )
-      .catch(() => api.get("/returns/active", { params: queryParams }))
-      .catch(() => null);
-
-    const items = response?.data?.items || response?.data || [];
-    if (Array.isArray(items) && items.length > 0) {
-      const mapped = items.map(mapRawToTransactionData);
-      const enriched = await enrichTransactions(mapped, size);
-      return enriched.filter(
-        (tx) =>
-          tx.loan.status !== "COMPLETED" &&
-          tx.items.some((it) => it.loanItem.status === "BORROWED")
-      );
+    // 1. Coba endpoint langsung: GET /loan/:id
+    try {
+      const response = await api.get(`/loan/${cleanId}`, {
+        params: compId ? { company_id: compId } : undefined,
+      });
+      const raw = response.data?.loan || response.data?.data || response.data;
+      if (raw && (raw.id || raw._id)) {
+        const mapped = mapRawToTransactionData(raw);
+        const enriched = await enrichTransactions([mapped], 1);
+        if (enriched.length > 0) return enriched[0];
+      }
+    } catch {
+      // Abaikan jika endpoint /loan/:id 404
     }
 
-    // Fallback: Gunakan listLoansApi() yang membaca /loan secara realtime
-    const allLoans = await listLoansApi({ page, size, search });
-    return allLoans.filter(
-      (tx) =>
-        tx.loan.status !== "COMPLETED" &&
-        tx.items.some((it) => it.loanItem.status === "BORROWED")
+    // 2. Coba endpoint search dengan loan_id: GET /loan/search?loan_id=:id
+    const searchRes = await listLoansApi({
+      loan_id: cleanId,
+      size: 5,
+      companyId: compId,
+    });
+    const foundById = searchRes.items.find(
+      (it) =>
+        it.loan.id === cleanId ||
+        it.loan.loanNumber.toLowerCase() === cleanId.toLowerCase()
     );
-  } catch (error: any) {
-    if (
-      error.response?.status >= 500 ||
-      error.code === "ECONNABORTED" ||
-      error.message?.includes("Server Error")
-    ) {
-      throw new Error(
-        formatApiError(
-          error,
-          "Daftar pengembalian aktif gagal dimuat karena gangguan server."
-        )
-      );
+    if (foundById) {
+      return foundById;
     }
-    if (error.response?.status === 404) {
-      return [];
-    }
-    // Fallback ke mock jika backend belum tersedia
-    const { getReturnLoans } = await import("./mock-api");
-    return getReturnLoans();
+
+    // 3. Cari dengan query q jika format nomor transaksi
+    const qRes = await listLoansApi({
+      q: cleanId,
+      size: 5,
+      companyId: compId,
+    });
+    const foundQ = qRes.items.find(
+      (it) =>
+        it.loan.id === cleanId ||
+        it.loan.loanNumber.toLowerCase() === cleanId.toLowerCase()
+    );
+
+    return foundQ || null;
+  } catch (err) {
+    console.warn("Gagal getLoanByIdApi:", err);
+    return null;
   }
 }
 
 export async function returnLoanItemsApi(
   loanId: string,
   copyIds: string[],
-  fallbackItemIds?: string[],
+  _itemIds?: string[],
   companyId?: string
 ): Promise<Loan> {
-  const auth = getAuthData();
-  const compId = companyId || auth?.user?.companyId || "company-001";
+  const compId = resolveCompanyId(companyId);
 
   try {
     // Sanitize copyIds: bersihkan prefix seperti 'copy-' dan prioritaskan 24-hex MongoDB ObjectId
@@ -2829,18 +2711,7 @@ export async function returnLoanItemsApi(
       copy_ids: finalCopyIds,
     };
 
-    const response = await api
-      .post(`/loan/returns/${loanId}`, payload)
-      .catch(() =>
-        api.post(`/loan/returns/${loanId}`, payload, {
-          params: { company_id: compId },
-        })
-      )
-      .catch(() =>
-        api.post(`/office/loan/returns/${loanId}`, payload, {
-          params: { company_id: compId },
-        })
-      );
+    const response = await api.post(`/loan/returns/${loanId}`, payload);
 
     const raw = response.data?.loan || response.data;
     if (raw && (raw.id || raw._id)) {
@@ -2850,21 +2721,16 @@ export async function returnLoanItemsApi(
         loanNumber: formatCleanLoanNumber(raw),
         memberId: raw.member_id || raw.memberId || "-",
         borrowedBy: raw.borrowed_by || raw.borrowedBy || "-",
-        borrowedAt:
-          raw.borrowed_at || raw.borrowedAt || new Date().toISOString(),
-        dueAt: raw.due_at || raw.dueAt || new Date().toISOString(),
-        returnedAt:
-          raw.returned_at || raw.returnedAt || new Date().toISOString(),
-        status: raw.status || "COMPLETED",
-        createdAt:
-          raw.created_at || raw.createdAt || new Date().toISOString(),
-        updatedAt:
-          raw.updated_at || raw.updatedAt || new Date().toISOString(),
+        borrowedAt: raw.borrowed_at || raw.borrowedAt || "",
+        dueAt: raw.due_at || raw.dueAt || "",
+        returnedAt: raw.returned_at || raw.returnedAt || "",
+        status: (raw.status as Loan["status"]) || "COMPLETED",
+        createdAt: raw.created_at || raw.createdAt || "",
+        updatedAt: raw.updated_at || raw.updatedAt || "",
       };
     }
     throw new Error("Format respons pengembalian tidak valid.");
   } catch (error: any) {
-    // Jika backend mengembalikan 409 Conflict: "Copy sudah dikembalikan"
     const detail =
       error.response?.data?.detail || error.response?.data?.message || "";
     const isAlreadyReturned =
@@ -2873,45 +2739,19 @@ export async function returnLoanItemsApi(
         detail.toLowerCase().includes("sudah dikembalikan"));
 
     if (isAlreadyReturned) {
-      return {
-        id: loanId,
-        companyId: compId,
-        loanNumber: `TRX-${loanId.slice(-6).toUpperCase()}`,
-        memberId: "-",
-        borrowedBy: "-",
-        borrowedAt: new Date().toISOString(),
-        dueAt: new Date().toISOString(),
-        returnedAt: new Date().toISOString(),
-        status: "COMPLETED",
-        createdAt: new Date().toISOString(),
-        updatedAt: new Date().toISOString(),
-      };
-    }
-    if (
-      error.response?.status >= 500 ||
-      error.code === "ECONNABORTED" ||
-      error.message?.includes("Server Error")
-    ) {
       throw new Error(
-        formatApiError(
-          error,
-          "Pengembalian buku gagal diproses oleh server backend."
-        )
+        typeof detail === "string" && detail
+          ? detail
+          : "Buku pada peminjaman ini sudah dikembalikan sebelumnya."
       );
     }
 
-    const errorMsg = formatApiError(error, "");
-    if (errorMsg) {
-      throw new Error(errorMsg);
-    }
-
-    // Fallback ke mock jika backend benar-benar 404
-    if (error.response?.status === 404) {
-      const { returnLoanItems } = await import("./mock-api");
-      return returnLoanItems(loanId, fallbackItemIds || copyIds);
-    }
-
-    throw new Error("Pengembalian buku gagal diproses oleh server.");
+    throw new Error(
+      formatApiError(
+        error,
+        "Pengembalian buku gagal diproses oleh server."
+      )
+    );
   }
 }
 
@@ -2945,16 +2785,61 @@ export async function getOfficeMembersApi(
     size?: number;
     sortby?: string;
     order?: string;
+    search?: string;
   } = {}
 ): Promise<OfficeMembersListResponse> {
-  const compId = companyId || "company-001";
+  const compId = companyId?.trim() || "";
+  if (!compId) {
+    throw new Error("Pilih instansi terlebih dahulu.");
+  }
   const page = params.page || 1;
-  const size = params.size || 10;
-  const sortby = params.sortby || "name";
+  const size = Math.min(100, Math.max(1, params.size || 10));
+  const sortby = params.sortby;
   const order = params.order || "asc";
+  const search = params.search?.trim();
 
   try {
-    const response = await api.get("/bukuflow/office/member", {
+    if (search) {
+      const response = await api.get("/office/member/search", {
+        params: {
+          q: search,
+          company_id: compId,
+        },
+      });
+
+      const raw = response.data;
+      const items = Array.isArray(raw?.items)
+        ? raw.items
+        : Array.isArray(raw?.data)
+        ? raw.data
+        : Array.isArray(raw)
+        ? raw
+        : [];
+
+      const mappedItems: Member[] = items.map((item: any) => ({
+        id: String(item._id || item.id || item.member_id || ""),
+        companyId: String(item.company_id || compId),
+        memberNumber: String(item.member_number || item.memberNumber || "-"),
+        name: String(item.name || "-"),
+        memberType: "UMUM",
+        identityNumber: String(item.identity_number || item.identityNumber || "-"),
+        phone: String(item.phone || "-"),
+        email: item.email || undefined,
+        status: (item.status === "INACTIVE" ? "INACTIVE" : "ACTIVE") as any,
+        createdAt: item.created_at || "",
+        updatedAt: item.updated_at || item.created_at || "",
+      }));
+
+      return {
+        items: mappedItems,
+        total: mappedItems.length,
+        page: 1,
+        size: mappedItems.length || 10,
+        totalPages: 1,
+      };
+    }
+
+    const response = await api.get("/office/member", {
       params: {
         company_id: compId,
         page,
@@ -2974,21 +2859,21 @@ export async function getOfficeMembersApi(
       : [];
 
     const mappedItems: Member[] = items.map((item: any) => ({
-      id: String(item.id || item.member_id || `mbr-${Math.random()}`),
-      companyId: String(item.company_id || item.companyId || compId),
+      id: String(item._id || item.id || item.member_id || ""),
+      companyId: String(item.company_id || compId),
       memberNumber: String(item.member_number || item.memberNumber || "-"),
       name: String(item.name || "-"),
-      memberType: (item.member_type || item.memberType || "UMUM") as any,
+      memberType: "UMUM",
       identityNumber: String(item.identity_number || item.identityNumber || "-"),
       phone: String(item.phone || "-"),
-      email: String(item.email || "-"),
+      email: item.email || undefined,
       status: (item.status === "INACTIVE" ? "INACTIVE" : "ACTIVE") as any,
-      createdAt: String(item.created_at || item.createdAt || new Date().toISOString()),
-      updatedAt: String(item.updated_at || item.updatedAt || new Date().toISOString()),
+      createdAt: item.created_at || "",
+      updatedAt: item.updated_at || item.created_at || "",
     }));
 
-    const total = Number(raw?.total || raw?.count || mappedItems.length);
-    const totalPages = Number(raw?.total_pages || raw?.totalPages || Math.ceil(total / size) || 1);
+    const total = Number(raw?.total !== undefined ? raw.total : mappedItems.length);
+    const totalPages = total > 0 ? Math.ceil(total / size) : 1;
 
     return {
       items: mappedItems,
@@ -2998,26 +2883,7 @@ export async function getOfficeMembersApi(
       totalPages,
     };
   } catch (error: any) {
-    if (error.response?.status >= 500) {
-      throw new Error(formatApiError(error, "Gagal memuat data member office."));
-    }
-
-    // Fallback Mock Data per Company
-    const { mockMembers, ensureMockStoreHydrated } = await import("./mock-store");
-    ensureMockStoreHydrated();
-    const allMembers = mockMembers.filter((m: Member) => m.companyId === compId);
-    const total = allMembers.length;
-    const totalPages = Math.ceil(total / size) || 1;
-    const start = (page - 1) * size;
-    const paginated = allMembers.slice(start, start + size);
-
-    return {
-      items: paginated,
-      total,
-      page,
-      size,
-      totalPages,
-    };
+    throw new Error(formatApiError(error, "Gagal memuat data anggota office."));
   }
 }
 
@@ -3025,9 +2891,12 @@ export async function searchOfficeMembersApi(
   companyId: string,
   query: string
 ): Promise<Member[]> {
-  const compId = companyId || "company-001";
+  const compId = companyId?.trim() || "";
+  if (!compId) {
+    throw new Error("Pilih instansi terlebih dahulu.");
+  }
   try {
-    const response = await api.get("/bukuflow/office/member/search", {
+    const response = await api.get("/office/member/search", {
       params: {
         q: query,
         company_id: compId,
@@ -3035,33 +2904,29 @@ export async function searchOfficeMembersApi(
     });
 
     const raw = response.data;
-    const items = Array.isArray(raw?.data) ? raw.data : Array.isArray(raw) ? raw : [];
+    const items = Array.isArray(raw?.items)
+      ? raw.items
+      : Array.isArray(raw?.data)
+      ? raw.data
+      : Array.isArray(raw)
+      ? raw
+      : [];
 
     return items.map((item: any) => ({
-      id: String(item.id || item.member_id || `mbr-${Math.random()}`),
-      companyId: String(item.company_id || item.companyId || compId),
+      id: String(item._id || item.id || item.member_id || ""),
+      companyId: String(item.company_id || compId),
       memberNumber: String(item.member_number || item.memberNumber || "-"),
       name: String(item.name || "-"),
-      memberType: (item.member_type || item.memberType || "UMUM") as any,
+      memberType: "UMUM",
       identityNumber: String(item.identity_number || item.identityNumber || "-"),
       phone: String(item.phone || "-"),
-      email: String(item.email || "-"),
+      email: item.email || undefined,
       status: (item.status === "INACTIVE" ? "INACTIVE" : "ACTIVE") as any,
-      createdAt: String(item.created_at || item.createdAt || new Date().toISOString()),
-      updatedAt: String(item.updated_at || item.updatedAt || new Date().toISOString()),
+      createdAt: item.created_at || "",
+      updatedAt: item.updated_at || item.created_at || "",
     }));
   } catch (error: any) {
-    const { mockMembers, ensureMockStoreHydrated } = await import("./mock-store");
-    ensureMockStoreHydrated();
-    const q = query.toLowerCase();
-    return mockMembers.filter(
-      (m: Member) =>
-        m.companyId === compId &&
-        (m.name.toLowerCase().includes(q) ||
-          m.memberNumber.toLowerCase().includes(q) ||
-          m.identityNumber.toLowerCase().includes(q) ||
-          m.phone.toLowerCase().includes(q))
-    );
+    throw new Error(formatApiError(error, "Gagal mencari data anggota office."));
   }
 }
 
@@ -3069,155 +2934,153 @@ export async function getOfficeMemberDetailApi(
   companyId: string,
   memberId: string
 ): Promise<Member> {
-  const compId = companyId || "company-001";
+  const compId = companyId?.trim() || "";
+  if (!compId) {
+    throw new Error("Pilih instansi terlebih dahulu.");
+  }
   try {
-    const response = await api.get(`/bukuflow/office/member/${memberId}`, {
+    const response = await api.get(`/office/member/${memberId}`, {
       params: { company_id: compId },
     });
 
     const item = response.data?.data || response.data;
     return {
-      id: String(item.id || item.member_id || memberId),
-      companyId: String(item.company_id || item.companyId || compId),
+      id: String(item._id || item.id || item.member_id || memberId),
+      companyId: String(item.company_id || compId),
       memberNumber: String(item.member_number || item.memberNumber || "-"),
       name: String(item.name || "-"),
-      memberType: (item.member_type || item.memberType || "UMUM") as any,
+      memberType: "UMUM",
       identityNumber: String(item.identity_number || item.identityNumber || "-"),
       phone: String(item.phone || "-"),
-      email: String(item.email || "-"),
+      email: item.email || undefined,
       status: (item.status === "INACTIVE" ? "INACTIVE" : "ACTIVE") as any,
-      createdAt: String(item.created_at || item.createdAt || new Date().toISOString()),
-      updatedAt: String(item.updated_at || item.updatedAt || new Date().toISOString()),
+      createdAt: item.created_at || "",
+      updatedAt: item.updated_at || item.created_at || "",
     };
   } catch (error: any) {
-    const { mockMembers, ensureMockStoreHydrated } = await import("./mock-store");
-    ensureMockStoreHydrated();
-    const found = mockMembers.find((m: Member) => m.id === memberId);
-    if (!found) throw new Error("Member tidak ditemukan.");
-    return found;
+    throw new Error(formatApiError(error, "Anggota tidak ditemukan."));
   }
 }
 
 export async function createOfficeMemberApi(
   companyId: string,
-  payload: OfficeMemberPayload
+  payload: {
+    name: string;
+    member_number?: string;
+    memberNumber?: string;
+    identity_number?: string;
+    identityNumber?: string;
+    phone: string;
+    email?: string;
+  }
 ): Promise<Member> {
-  const compId = companyId || "company-001";
+  const compId = companyId?.trim() || "";
+  if (!compId) {
+    throw new Error("Pilih instansi terlebih dahulu.");
+  }
+  const memberNumber = (payload.member_number || payload.memberNumber || "").trim();
+  if (!memberNumber) {
+    throw new Error("Nomor anggota (member_number) WAJIB diisi dari input pengguna.");
+  }
+  if (!payload.name?.trim()) {
+    throw new Error("Nama anggota wajib diisi.");
+  }
+  const identityNumber = (payload.identity_number || payload.identityNumber || "").trim();
+  if (!identityNumber) {
+    throw new Error("Nomor identitas (NIK) wajib diisi.");
+  }
+  if (!payload.phone?.trim()) {
+    throw new Error("Nomor telepon wajib diisi.");
+  }
+
   const body = {
     name: payload.name.trim(),
-    member_number: payload.member_number || payload.memberNumber || `MBR-${Date.now().toString().slice(-4)}`,
-    identity_number: payload.identity_number || payload.identityNumber || "-",
+    member_number: memberNumber,
+    identity_number: identityNumber,
     phone: payload.phone.trim(),
-    email: payload.email ? payload.email.trim() : "",
+    email: payload.email?.trim() || null,
   };
 
   try {
-    const response = await api.post("/bukuflow/office/member", body, {
+    const response = await api.post("/office/member", body, {
       params: { company_id: compId },
     });
 
     const item = response.data?.data || response.data;
     return {
-      id: String(item.id || item.member_id || `mbr-${Date.now()}`),
-      companyId: String(item.company_id || compId),
-      memberNumber: String(item.member_number || body.member_number),
-      name: String(item.name || body.name),
+      id: String(item._id || item.id || ""),
+      companyId: compId,
+      memberNumber: item.member_number || body.member_number,
+      name: item.name || body.name,
       memberType: "UMUM",
-      identityNumber: String(item.identity_number || body.identity_number),
-      phone: String(item.phone || body.phone),
-      email: String(item.email || body.email),
-      status: "ACTIVE",
-      createdAt: new Date().toISOString(),
-      updatedAt: new Date().toISOString(),
+      identityNumber: item.identity_number || body.identity_number,
+      phone: item.phone || body.phone,
+      email: item.email || body.email || undefined,
+      status: item.status || "ACTIVE",
+      createdAt: item.created_at || "",
+      updatedAt: item.updated_at || item.created_at || "",
     };
   } catch (error: any) {
-    if (error.response?.status >= 500) {
-      throw new Error(formatApiError(error, "Gagal membuat member baru."));
-    }
-
-    // Fallback Mock create
-    const { mockMembers, ensureMockStoreHydrated, persistMockState } = await import("./mock-store");
-    ensureMockStoreHydrated();
-    const newMember: Member = {
-      id: `mbr-${Date.now()}`,
-      companyId: compId,
-      memberNumber: body.member_number,
-      name: body.name,
-      memberType: "UMUM",
-      identityNumber: body.identity_number,
-      phone: body.phone,
-      email: body.email,
-      status: "ACTIVE",
-      createdAt: new Date().toISOString(),
-      updatedAt: new Date().toISOString(),
-    };
-
-    mockMembers.unshift(newMember);
-    persistMockState();
-    return newMember;
+    throw new Error(formatApiError(error, "Gagal membuat anggota baru."));
   }
 }
 
 export async function updateOfficeMemberApi(
   companyId: string,
   memberId: string,
-  payload: Partial<OfficeMemberPayload>
+  payload: {
+    name?: string;
+    member_number?: string;
+    memberNumber?: string;
+    identity_number?: string;
+    identityNumber?: string;
+    phone?: string;
+    email?: string | null;
+    status?: "ACTIVE" | "INACTIVE";
+  }
 ): Promise<Member> {
-  const compId = companyId || "company-001";
+  const compId = companyId?.trim() || "";
+  if (!compId) {
+    throw new Error("Pilih instansi terlebih dahulu.");
+  }
   const body: Record<string, any> = {};
   if (payload.name !== undefined) body.name = payload.name.trim();
-  if (payload.member_number || payload.memberNumber) body.member_number = payload.member_number || payload.memberNumber;
-  if (payload.identity_number || payload.identityNumber) body.identity_number = payload.identity_number || payload.identityNumber;
+  const num = payload.member_number || payload.memberNumber;
+  if (num !== undefined) body.member_number = num.trim();
+  const idNum = payload.identity_number || payload.identityNumber;
+  if (idNum !== undefined) body.identity_number = idNum.trim();
   if (payload.phone !== undefined) body.phone = payload.phone.trim();
-  if (payload.email !== undefined) body.email = payload.email.trim();
+  if (payload.email !== undefined) body.email = payload.email ? payload.email.trim() : null;
   if (payload.status !== undefined) body.status = payload.status;
 
   try {
-    const response = await api.patch(`/bukuflow/office/member/${memberId}`, body, {
+    const response = await api.patch(`/office/member/${memberId}`, body, {
       params: { company_id: compId },
     });
 
     const item = response.data?.data || response.data;
     return {
-      id: String(item.id || memberId),
-      companyId: String(item.company_id || compId),
+      id: String(item._id || item.id || memberId),
+      companyId: compId,
       memberNumber: String(item.member_number || body.member_number || "-"),
       name: String(item.name || body.name || "-"),
       memberType: "UMUM",
       identityNumber: String(item.identity_number || body.identity_number || "-"),
       phone: String(item.phone || body.phone || "-"),
-      email: String(item.email || body.email || "-"),
+      email: item.email || body.email || undefined,
       status: (item.status === "INACTIVE" ? "INACTIVE" : "ACTIVE") as any,
-      createdAt: new Date().toISOString(),
-      updatedAt: new Date().toISOString(),
+      createdAt: item.created_at || "",
+      updatedAt: item.updated_at || item.created_at || "",
     };
   } catch (error: any) {
-    if (error.response?.status >= 500) {
-      throw new Error(formatApiError(error, "Gagal memperbarui data member."));
-    }
-
-    // Fallback Mock update
-    const { mockMembers, ensureMockStoreHydrated, persistMockState } = await import("./mock-store");
-    ensureMockStoreHydrated();
-    const index = mockMembers.findIndex((m: Member) => m.id === memberId);
-    if (index === -1) throw new Error("Member tidak ditemukan.");
-
-    const existing = mockMembers[index];
-    const updated: Member = {
-      ...existing,
-      name: body.name ?? existing.name,
-      memberNumber: body.member_number ?? existing.memberNumber,
-      identityNumber: body.identity_number ?? existing.identityNumber,
-      phone: body.phone ?? existing.phone,
-      email: body.email ?? existing.email,
-      status: (body.status as any) ?? existing.status,
-      updatedAt: new Date().toISOString(),
-    };
-
-    mockMembers[index] = updated;
-    persistMockState();
-    return updated;
+    throw new Error(formatApiError(error, "Gagal memperbarui data anggota."));
   }
+}
+
+export async function deleteOfficeMemberApi(_companyId: string, _memberId: string): Promise<boolean> {
+  throw new Error(
+    "MENUNGGU BE: Endpoint delete anggota tidak tersedia di server. Nonaktifkan anggota menggunakan PATCH status INACTIVE."
+  );
 }
 
 // =========================================================
@@ -3225,117 +3088,161 @@ export async function updateOfficeMemberApi(
 // =========================================================
 
 export interface CreateCompanyPayload {
-  code: string;
+  id?: string;
+  code?: string;
+  initial?: string;
   name: string;
   address?: string;
   timezone?: string;
+  logoUrl?: string | null;
+  isActive?: boolean;
   status?: "ACTIVE" | "INACTIVE" | "SUSPENDED";
 }
 
 export interface UpdateCompanyPayload {
-  name?: string;
+  name: string;
   code?: string;
+  initial?: string;
   address?: string;
   timezone?: string;
+  logoUrl?: string | null;
+  isActive?: boolean;
   status?: "ACTIVE" | "INACTIVE" | "SUSPENDED";
 }
 
-export async function getCompaniesApi(): Promise<Company[]> {
+const COMPANY_META_KEY = "bukuflow_company_meta";
+
+interface StoredCompanyMeta {
+  initial?: string;
+  code?: string;
+  isActive?: boolean;
+}
+
+function getStoredCompanyMetaMap(): Record<string, StoredCompanyMeta> {
+  if (typeof window === "undefined") return {};
   try {
-    const response = await api.get("/bukuflow/companies").catch(() =>
-      api.get("/bukuflow/office/companies")
-    );
-    const raw = response.data;
-    const items = Array.isArray(raw?.data) ? raw.data : Array.isArray(raw) ? raw : [];
-    if (items.length > 0) {
-      return items.map((c: any) => ({
-        id: String(c.id || c.company_id || `company-${Math.random().toString(36).slice(2, 6)}`),
-        code: String(c.code || "SMAN1-JKT"),
-        name: String(c.name || "Perpustakaan"),
-        logo: c.logo || "",
-        address: c.address || "",
-        status: (c.status || "ACTIVE") as any,
-        timezone: c.timezone || "Asia/Jakarta",
-        createdAt: c.created_at || c.createdAt || new Date().toISOString(),
-        updatedAt: c.updated_at || c.updatedAt || new Date().toISOString(),
-      }));
-    }
-    throw new Error("No companies in response");
+    const raw = localStorage.getItem(COMPANY_META_KEY);
+    return raw ? JSON.parse(raw) : {};
   } catch {
-    // Fallback Mock Store
-    const { mockCompanies, ensureMockStoreHydrated } = await import("./mock-store");
-    ensureMockStoreHydrated();
-    return [...mockCompanies];
+    return {};
   }
 }
 
-export async function getCompanyDetailApi(id: string): Promise<Company> {
+export function saveStoredCompanyMeta(id: string, meta: StoredCompanyMeta): void {
+  if (typeof window === "undefined" || !id) return;
   try {
-    const response = await api.get(`/bukuflow/companies/${id}`).catch(() =>
-      api.get(`/bukuflow/office/companies/${id}`)
-    );
-    const item = response.data?.data || response.data;
-    return {
-      id: String(item.id || id),
-      code: String(item.code || "CODE"),
-      name: String(item.name || "Perpustakaan"),
-      logo: item.logo || "",
-      address: item.address || "",
-      status: (item.status || "ACTIVE") as any,
-      timezone: item.timezone || "Asia/Jakarta",
-      createdAt: item.created_at || item.createdAt || new Date().toISOString(),
-      updatedAt: item.updated_at || item.updatedAt || new Date().toISOString(),
-    };
+    const map = getStoredCompanyMetaMap();
+    map[id] = { ...map[id], ...meta };
+    localStorage.setItem(COMPANY_META_KEY, JSON.stringify(map));
   } catch {
-    const { mockCompanies, ensureMockStoreHydrated } = await import("./mock-store");
-    ensureMockStoreHydrated();
-    const found = mockCompanies.find((c: Company) => c.id === id);
-    if (!found) throw new Error("Instansi / Perusahaan tidak ditemukan.");
-    return found;
+    // ignore
   }
+}
+
+export async function getCompaniesApi(): Promise<Company[]> {
+  const response = await api.get("/office/company");
+  const raw = response.data;
+  const items = raw?.items || raw?.data || (Array.isArray(raw) ? raw : []);
+  const metaMap = getStoredCompanyMetaMap();
+
+  return items.map((item: Record<string, unknown>) => {
+    const id = String(item.id || item._id || "");
+    const cached = metaMap[id];
+
+    let isActive = true;
+    if (item.isActive !== undefined) {
+      isActive = Boolean(item.isActive);
+    } else if (item.is_active !== undefined) {
+      isActive = Boolean(item.is_active);
+    } else if (cached?.isActive !== undefined) {
+      isActive = cached.isActive;
+    }
+
+    const code = String(
+      item.initial || item.code || cached?.initial || cached?.code || (id ? id.slice(-6).toUpperCase() : "-")
+    ).toUpperCase();
+
+    return {
+      id,
+      name: String(item.name || item.company_name || "-"),
+      code,
+      address: String(item.address || ""),
+      timezone: String(item.timezone || "Asia/Jakarta"),
+      status: isActive ? "ACTIVE" : "INACTIVE",
+      logo: typeof item.logoUrl === "string" ? item.logoUrl : undefined,
+      createdAt:
+        typeof item.createdTime === "string"
+          ? item.createdTime
+          : typeof item.createdAt === "string"
+          ? item.createdAt
+          : typeof item.created_at === "string"
+          ? item.created_at
+          : undefined,
+    };
+  });
+}
+
+export async function getCompanyDetailApi(_id: string): Promise<Company> {
+  throw new Error("MENUNGGU BE: Endpoint detail instansi belum tersedia di backend.");
+}
+
+function generateObjectId(): string {
+  const timestamp = Math.floor(Date.now() / 1000).toString(16).padStart(8, "0");
+  const random = Array.from({ length: 16 }, () => Math.floor(Math.random() * 16).toString(16)).join("");
+  return timestamp + random;
 }
 
 export async function createCompanyApi(payload: CreateCompanyPayload): Promise<Company> {
+  const companyId = (payload.id && /^[0-9a-fA-F]{24}$/.test(payload.id.trim()))
+    ? payload.id.trim()
+    : generateObjectId();
+
+  let initial = (payload.initial || payload.code || "").trim();
+  if (!payload.name?.trim()) {
+    throw new Error("Nama instansi wajib diisi.");
+  }
+  if (!initial) {
+    initial = payload.name.replace(/[^a-zA-Z0-9]/g, "").slice(0, 6).toLowerCase() || "inst";
+  }
+
+  const isActive =
+    payload.isActive !== undefined
+      ? payload.isActive
+      : payload.status !== undefined
+      ? payload.status === "ACTIVE"
+      : true;
+
   const body = {
-    code: payload.code.trim().toUpperCase(),
     name: payload.name.trim(),
-    address: payload.address?.trim() || "",
-    timezone: payload.timezone || "Asia/Jakarta",
-    status: payload.status || "ACTIVE",
+    initial: initial.toLowerCase(),
+    logoUrl: payload.logoUrl ?? null,
+    isActive: isActive,
+    isDeleted: false,
   };
 
   try {
-    const response = await api.post("/bukuflow/companies", body).catch(() =>
-      api.post("/bukuflow/office/companies", body)
-    );
-    const item = response.data?.data || response.data;
+    const response = await api.put(`/office/company/${companyId}`, body);
+    const item = response.data?.data || response.data || {};
+
+    saveStoredCompanyMeta(companyId, {
+      initial: body.initial,
+      code: body.initial.toUpperCase(),
+      isActive: body.isActive,
+    });
+
     return {
-      id: String(item.id || item.company_id || `comp-${Date.now()}`),
-      code: String(item.code || body.code),
+      id: String(item._id || item.id || companyId),
       name: String(item.name || body.name),
-      address: String(item.address || body.address),
-      status: (item.status || body.status) as any,
-      timezone: item.timezone || body.timezone,
-      createdAt: new Date().toISOString(),
-      updatedAt: new Date().toISOString(),
+      code: String(item.initial || body.initial).toUpperCase(),
+      address: String(item.address || ""),
+      timezone: String(item.timezone || "Asia/Jakarta"),
+      status: (item.isActive ?? body.isActive) ? "ACTIVE" : "INACTIVE",
+      logo: item.logoUrl ?? undefined,
+      createdAt: item.createdTime || item.createdAt || new Date().toISOString(),
+      updatedAt: item.updatedTime || item.updatedAt || new Date().toISOString(),
     };
-  } catch {
-    // Fallback Mock create & persist
-    const { mockCompanies, ensureMockStoreHydrated, persistMockState } = await import("./mock-store");
-    ensureMockStoreHydrated();
-    const newComp: Company = {
-      id: `company-${Date.now().toString().slice(-4)}`,
-      code: body.code,
-      name: body.name,
-      address: body.address,
-      status: body.status as any,
-      timezone: body.timezone,
-      createdAt: new Date().toISOString(),
-      updatedAt: new Date().toISOString(),
-    };
-    mockCompanies.push(newComp);
-    persistMockState();
-    return newComp;
+  } catch (err: any) {
+    throw new Error(formatApiError(err, "Gagal menambahkan instansi baru."));
   }
 }
 
@@ -3343,57 +3250,136 @@ export async function updateCompanyApi(
   id: string,
   payload: UpdateCompanyPayload
 ): Promise<Company> {
+  const companyId = id?.trim();
+  if (!companyId) {
+    throw new Error("ID instansi tidak valid.");
+  }
+  let initial = (payload.initial || payload.code || "").trim();
+  if (!payload.name?.trim()) {
+    throw new Error("Nama instansi wajib diisi.");
+  }
+  if (!initial) {
+    initial = payload.name.replace(/[^a-zA-Z0-9]/g, "").slice(0, 6).toLowerCase() || "inst";
+  }
+
+  const isActive =
+    payload.isActive !== undefined
+      ? payload.isActive
+      : payload.status !== undefined
+      ? payload.status === "ACTIVE"
+      : true;
+
+  const body = {
+    name: payload.name.trim(),
+    initial: initial.toLowerCase(),
+    logoUrl: payload.logoUrl ?? null,
+    isActive: isActive,
+    isDeleted: false,
+  };
+
   try {
-    const response = await api.patch(`/bukuflow/companies/${id}`, payload).catch(() =>
-      api.patch(`/bukuflow/office/companies/${id}`, payload)
-    );
-    const item = response.data?.data || response.data;
+    const response = await api.put(`/office/company/${companyId}`, body);
+    const item = response.data?.data || response.data || {};
+
+    saveStoredCompanyMeta(companyId, {
+      initial: body.initial,
+      code: body.initial.toUpperCase(),
+      isActive: body.isActive,
+    });
+
     return {
-      id: String(item.id || id),
-      code: String(item.code || payload.code || "CODE"),
-      name: String(item.name || payload.name || "Perpustakaan"),
-      address: String(item.address || payload.address || ""),
-      status: (item.status || payload.status || "ACTIVE") as any,
-      timezone: item.timezone || payload.timezone || "Asia/Jakarta",
-      createdAt: item.created_at || new Date().toISOString(),
-      updatedAt: new Date().toISOString(),
+      id: String(item._id || item.id || companyId),
+      name: String(item.name || body.name),
+      code: String(item.initial || body.initial).toUpperCase(),
+      address: String(item.address || ""),
+      timezone: String(item.timezone || "Asia/Jakarta"),
+      status: (item.isActive ?? body.isActive) ? "ACTIVE" : "INACTIVE",
+      logo: item.logoUrl ?? undefined,
+      createdAt: item.createdTime || item.createdAt || "",
+      updatedAt: item.updatedTime || item.updatedAt || "",
     };
-  } catch {
-    const { mockCompanies, ensureMockStoreHydrated, persistMockState } = await import("./mock-store");
-    ensureMockStoreHydrated();
-    const idx = mockCompanies.findIndex((c: Company) => c.id === id);
-    if (idx === -1) throw new Error("Instansi / Perusahaan tidak ditemukan.");
-    const existing = mockCompanies[idx];
-    const updated: Company = {
-      ...existing,
-      name: payload.name ?? existing.name,
-      code: payload.code ? payload.code.toUpperCase() : existing.code,
-      address: payload.address ?? existing.address,
-      timezone: payload.timezone ?? existing.timezone,
-      status: (payload.status as any) ?? existing.status,
-      updatedAt: new Date().toISOString(),
-    };
-    mockCompanies[idx] = updated;
-    persistMockState();
-    return updated;
+  } catch (err: any) {
+    throw new Error(formatApiError(err, "Gagal memperbarui data instansi."));
   }
 }
 
-export async function deleteCompanyApi(id: string): Promise<boolean> {
+export async function deleteCompanyApi(_id: string): Promise<boolean> {
+  throw new Error(
+    "MENUNGGU BE: Endpoint penghapusan instansi tidak tersedia di server. Nonaktifkan melalui status isActive."
+  );
+}
+
+export interface OfficeCompanyConfig {
+  default_loan_duration: number;
+  max_active_loans: number;
+  late_fee_per_day: number;
+}
+
+export async function getOfficeCompanyConfigApi(companyId: string): Promise<OfficeCompanyConfig | null> {
+  const compId = companyId?.trim() || "";
+  if (!compId) {
+    throw new Error("Pilih instansi terlebih dahulu.");
+  }
   try {
-    await api.delete(`/bukuflow/companies/${id}`).catch(() =>
-      api.delete(`/bukuflow/office/companies/${id}`)
-    );
-    return true;
-  } catch {
-    const { mockCompanies, ensureMockStoreHydrated, persistMockState } = await import("./mock-store");
-    ensureMockStoreHydrated();
-    const idx = mockCompanies.findIndex((c: Company) => c.id === id);
-    if (idx !== -1) {
-      mockCompanies.splice(idx, 1);
-      persistMockState();
+    const response = await api.get("/office/company/config", {
+      params: { company_id: compId },
+    });
+    const data = response.data?.data || response.data || {};
+    if (
+      data.default_loan_duration == null ||
+      data.max_active_loans == null ||
+      data.late_fee_per_day == null ||
+      !Number.isFinite(Number(data.default_loan_duration)) ||
+      !Number.isFinite(Number(data.max_active_loans)) ||
+      !Number.isFinite(Number(data.late_fee_per_day))
+    ) {
+      throw new Error("Konfigurasi instansi belum tersedia di database backend.");
     }
-    return true;
+    return {
+      default_loan_duration: Number(data.default_loan_duration),
+      max_active_loans: Number(data.max_active_loans),
+      late_fee_per_day: Number(data.late_fee_per_day),
+    };
+  } catch (err: any) {
+    if (err?.response?.status === 404) return null;
+    throw new Error(formatApiError(err, "Gagal memuat konfigurasi peminjaman instansi."));
+  }
+}
+
+export async function updateOfficeCompanyConfigApi(
+  companyId: string,
+  payload: OfficeCompanyConfig
+): Promise<OfficeCompanyConfig> {
+  const compId = companyId?.trim() || "";
+  if (!compId) {
+    throw new Error("Pilih instansi terlebih dahulu.");
+  }
+  if (
+    payload.default_loan_duration === undefined ||
+    payload.max_active_loans === undefined ||
+    payload.late_fee_per_day === undefined
+  ) {
+    throw new Error("Konfigurasi mewajibkan default_loan_duration, max_active_loans, dan late_fee_per_day.");
+  }
+
+  const body = {
+    default_loan_duration: Math.max(1, Math.round(Number(payload.default_loan_duration))),
+    max_active_loans: Math.max(1, Math.round(Number(payload.max_active_loans))),
+    late_fee_per_day: Math.max(0, Math.round(Number(payload.late_fee_per_day))),
+  };
+
+  try {
+    const response = await api.put("/office/company/config", body, {
+      params: { company_id: compId },
+    });
+    const data = response.data?.data || response.data || body;
+    return {
+      default_loan_duration: Number(data.default_loan_duration ?? body.default_loan_duration),
+      max_active_loans: Number(data.max_active_loans ?? body.max_active_loans),
+      late_fee_per_day: Number(data.late_fee_per_day ?? body.late_fee_per_day),
+    };
+  } catch (err: any) {
+    throw new Error(formatApiError(err, "Gagal menyimpan konfigurasi kebijakan instansi."));
   }
 }
 
@@ -3439,7 +3425,13 @@ export async function getCompanyUsersApi(
 ): Promise<ListCompanyUsersResponse> {
   const page = params.page || 1;
   const size = params.size || 10;
-  const targetCompanyId = params.companyId || (typeof window !== "undefined" ? getAuthData()?.user.companyId : "company-001") || "company-001";
+  const auth = typeof window !== "undefined" ? getAuthData() : null;
+  const isSuperAdmin = auth?.user?.role === "SUPER_ADMIN";
+  const targetCompanyId = params.companyId
+    ? resolveCompanyId(params.companyId)
+    : isSuperAdmin
+    ? ""
+    : resolveCompanyId();
 
   try {
     const response = await api.get("/user", {
@@ -3448,7 +3440,7 @@ export async function getCompanyUsersApi(
         size,
         search: params.search || undefined,
         role: params.role && params.role !== "ALL" ? params.role : undefined,
-        company_id: targetCompanyId,
+        company_id: targetCompanyId || undefined,
         is_active:
           params.status === "ACTIVE"
             ? true
@@ -3456,23 +3448,7 @@ export async function getCompanyUsersApi(
             ? false
             : undefined,
       },
-    }).catch(() =>
-      api.get("/bukuflow/user", {
-        params: {
-          page,
-          size,
-          search: params.search || undefined,
-          role: params.role && params.role !== "ALL" ? params.role : undefined,
-          company_id: targetCompanyId,
-          is_active:
-            params.status === "ACTIVE"
-              ? true
-              : params.status === "INACTIVE"
-              ? false
-              : undefined,
-        },
-      })
-    );
+    });
 
     const raw = response.data;
     const rawItems = Array.isArray(raw?.items)
@@ -3483,10 +3459,11 @@ export async function getCompanyUsersApi(
       ? raw
       : [];
 
-    let mappedItems = rawItems
+    const mappedItems = rawItems
       // FILTER: Only include users within the same company and NEVER include SUPER_ADMIN
       .filter((u: any) => u.role !== "SUPER_ADMIN")
       .filter((u: any) => {
+        if (!targetCompanyId) return true;
         const uCompId = u.company_id || u.companyId;
         return !uCompId || uCompId === targetCompanyId;
       })
@@ -3498,21 +3475,18 @@ export async function getCompanyUsersApi(
 
         return {
           id: String(u.id || u._id || u.user_id),
-          companyId: String(u.company_id || u.companyId || targetCompanyId),
+          companyId: String(u.company_id || u.companyId || targetCompanyId || ""),
           name: String(u.name || "-"),
           email: u.email ? String(u.email) : "",
           username: String(u.username || (u.email ? u.email.split("@")[0] : u.name || "-")),
           role: u.role || "STAFF",
           status: isActive ? "ACTIVE" : "INACTIVE",
           is_active: isActive,
-          createdAt: u.created_at || u.createdAt || new Date().toISOString(),
+          createdAt: u.created_at || u.createdAt || "",
         };
       });
 
     const total = Number(raw?.total || mappedItems.length);
-    const totalPages = Number(
-      raw?.total_pages || raw?.totalPages || Math.ceil(total / size) || 1
-    );
 
     // If server returned unpaginated list, paginate on client
     const paginatedItems =
@@ -3528,81 +3502,26 @@ export async function getCompanyUsersApi(
       totalPages: Math.max(1, Math.ceil(total / size)),
     };
   } catch (error: any) {
-    const token = getAccessToken();
-    const isMock = !token || token.startsWith("mock-");
-
-    if (!isMock && error.response?.status >= 500) {
-      throw new Error(formatApiError(error, "Gagal memuat daftar pengguna dari server."));
-    }
-    if (!isMock && error.response?.status >= 400 && error.response?.status !== 404) {
-      throw new Error(formatApiError(error, "Gagal memuat daftar pengguna."));
-    }
-
-    // Fallback Mock Store (strictly filtered by companyId and excluding SUPER_ADMIN)
-    const { mockUsers, ensureMockStoreHydrated } = await import("./mock-store");
-    ensureMockStoreHydrated();
-
-    let list = mockUsers
-      .filter((u: any) => u.role !== "SUPER_ADMIN" && (!u.companyId || u.companyId === targetCompanyId))
-      .map((u: any) => ({
-        id: String(u.id),
-        companyId: String(u.companyId || targetCompanyId),
-        name: String(u.name || "-"),
-        email: u.email ? String(u.email) : "",
-        username: String(u.username || (u.email ? u.email.split("@")[0] : u.name || "-")),
-        role: u.role || "STAFF",
-        status: u.status || "ACTIVE",
-        is_active: u.status === "ACTIVE",
-        createdAt: u.createdAt || new Date().toISOString(),
-      }));
-
-    if (params.search?.trim()) {
-      const q = params.search.toLowerCase().trim();
-      list = list.filter(
-        (u) =>
-          u.name.toLowerCase().includes(q) ||
-          u.username.toLowerCase().includes(q) ||
-          u.email.toLowerCase().includes(q)
-      );
-    }
-
-    if (params.role && params.role !== "ALL") {
-      list = list.filter((u) => u.role === params.role);
-    }
-
-    if (params.status && params.status !== "ALL") {
-      list = list.filter((u) => u.status === params.status);
-    }
-
-    const total = list.length;
-    const totalPages = Math.max(1, Math.ceil(total / size));
-    const start = (page - 1) * size;
-    const paginated = list.slice(start, start + size);
-
-    return {
-      items: paginated,
-      total,
-      page,
-      size,
-      totalPages,
-    };
+    throw new Error(formatApiError(error, "Gagal memuat daftar pengguna dari server."));
   }
 }
 
 export async function createCompanyUserApi(
   payload: CreateCompanyUserPayload
 ): Promise<any> {
+  if (!payload.password || payload.password.trim().length < 8) {
+    throw new Error("Password minimal 8 karakter sesuai spesifikasi server.");
+  }
+
   const body = {
     name: payload.name.trim(),
     email: payload.email.trim(),
-    password: payload.password || "admin123",
+    password: payload.password.trim(),
     role: payload.role,
   };
 
   try {
-    const response = await api.post("/user", body).catch(() =>
-      api.post("/bukuflow/user", body)
-    );
+    const response = await api.post("/user", body);
 
     const item = response.data?.data || response.data?.user || response.data;
     const isActive =
@@ -3611,44 +3530,18 @@ export async function createCompanyUserApi(
         : item?.status === "ACTIVE" || item?.status === undefined;
 
     return {
-      id: String(item?.id || item?._id || item?.user_id || `usr-${Date.now()}`),
-      companyId: String(item?.company_id || item?.companyId || "company-001"),
+      id: String(item?.id || item?._id || item?.user_id || ""),
+      companyId: String(item?.company_id || item?.companyId || ""),
       name: String(item?.name || body.name),
       email: String(item?.email || body.email),
       username: String(item?.username || body.email.split("@")[0]),
       role: item?.role || body.role,
       status: isActive ? "ACTIVE" : "INACTIVE",
       is_active: isActive,
-      createdAt: new Date().toISOString(),
+      createdAt: item?.created_at || item?.createdAt || "",
     };
   } catch (error: any) {
-    const token = getAccessToken();
-    const isMock = !token || token.startsWith("mock-");
-
-    if (!isMock && error.response?.status >= 400) {
-      throw new Error(formatApiError(error, "Gagal membuat pengguna baru."));
-    }
-    if (error.response?.status >= 500) {
-      throw new Error(formatApiError(error, "Server Backend bermasalah saat membuat pengguna."));
-    }
-
-    // Fallback Mock create & persist
-    const { mockUsers, ensureMockStoreHydrated, persistMockState } = await import("./mock-store");
-    ensureMockStoreHydrated();
-    const newUser: any = {
-      id: `user-${Date.now().toString().slice(-4)}`,
-      companyId: "company-001",
-      name: body.name,
-      email: body.email,
-      username: body.email.split("@")[0],
-      role: body.role,
-      status: "ACTIVE",
-      createdAt: new Date().toISOString(),
-      updatedAt: new Date().toISOString(),
-    };
-    mockUsers.unshift(newUser);
-    persistMockState();
-    return newUser;
+    throw new Error(formatApiError(error, "Gagal membuat pengguna baru."));
   }
 }
 
@@ -3664,9 +3557,7 @@ export async function updateCompanyUserApi(
   if (payload.password !== undefined && payload.password.trim() !== "") body.password = payload.password.trim();
 
   try {
-    const response = await api.patch(`/user/${userId}`, body).catch(() =>
-      api.patch(`/bukuflow/user/${userId}`, body)
-    );
+    const response = await api.patch(`/user/${userId}`, body);
 
     const item = response.data?.data || response.data?.user || response.data;
     const isActive =
@@ -3684,208 +3575,818 @@ export async function updateCompanyUserApi(
       role: item?.role || payload.role || "STAFF",
       status: isActive ? "ACTIVE" : "INACTIVE",
       is_active: isActive,
-      updatedAt: new Date().toISOString(),
+      updatedAt: item?.updated_at || item?.updatedAt || "",
     };
   } catch (error: any) {
-    const token = getAccessToken();
-    const isMock = !token || token.startsWith("mock-");
-
-    if (!isMock && error.response?.status >= 400) {
-      throw new Error(formatApiError(error, "Gagal memperbarui pengguna."));
-    }
-    if (error.response?.status >= 500) {
-      throw new Error(formatApiError(error, "Server Backend bermasalah saat memperbarui pengguna."));
-    }
-
-    // Fallback Mock update
-    const { mockUsers, ensureMockStoreHydrated, persistMockState } = await import("./mock-store");
-    ensureMockStoreHydrated();
-    const idx = mockUsers.findIndex((u: any) => u.id === userId);
-    if (idx !== -1) {
-      const nextStatus = payload.is_active !== undefined ? (payload.is_active ? "ACTIVE" : "INACTIVE") : mockUsers[idx].status;
-      mockUsers[idx] = {
-        ...mockUsers[idx],
-        name: payload.name !== undefined ? payload.name : mockUsers[idx].name,
-        email: payload.email !== undefined ? payload.email : mockUsers[idx].email,
-        username: payload.email ? payload.email.split("@")[0] : mockUsers[idx].username,
-        role: payload.role !== undefined ? payload.role : mockUsers[idx].role,
-        status: nextStatus as any,
-        updatedAt: new Date().toISOString(),
-      };
-      persistMockState();
-      return mockUsers[idx];
-    }
-    throw new Error("User tidak ditemukan.");
+    throw new Error(formatApiError(error, "Gagal memperbarui pengguna."));
   }
 }
 
 export async function deleteCompanyUserApi(userId: string): Promise<boolean> {
   try {
-    await api.delete(`/user/${userId}`).catch(() =>
-      api.delete(`/bukuflow/user/${userId}`)
-    );
+    await api.delete(`/user/${userId}`);
     return true;
-  } catch {
-    const { mockUsers, ensureMockStoreHydrated, persistMockState } = await import("./mock-store");
-    ensureMockStoreHydrated();
-    const idx = mockUsers.findIndex((u: any) => u.id === userId);
-    if (idx !== -1) {
-      mockUsers.splice(idx, 1);
-      persistMockState();
-    }
-    return true;
+  } catch (error: any) {
+    throw new Error(formatApiError(error, "Gagal menghapus pengguna."));
   }
 }
 
-export interface OfficeUserPayload {
+export interface OfficeUserItem {
+  id: string;
+  companyId: string;
   name: string;
-  username?: string;
-  email?: string;
-  password?: string;
-  role: "COMPANY_ADMIN" | "STAFF" | "SUPER_ADMIN";
-  status?: "ACTIVE" | "INACTIVE";
-  companyId?: string;
+  email: string;
+  username: string;
+  role: "COMPANY_ADMIN" | "STAFF" | "SUPER_ADMIN" | "MEMBER";
+  is_active: boolean;
+  status: "ACTIVE" | "INACTIVE";
+  createdAt: string;
+  updatedAt?: string;
 }
 
-export async function getOfficeUsersApi(companyId?: string): Promise<any[]> {
-  const res = await getCompanyUsersApi({ size: 10 });
-  if (companyId) {
-    return res.items.filter((u) => u.companyId === companyId);
+export interface OfficeUsersListResponse {
+  items: OfficeUserItem[];
+  total: number;
+  page: number;
+  size: number;
+  totalPages: number;
+}
+
+export async function getOfficeUsersApi(
+  companyId: string,
+  params: {
+    page?: number;
+    size?: number;
+    search?: string;
+    role?: string;
+    sortby?: string;
+    order?: string;
+  } = {}
+): Promise<OfficeUsersListResponse> {
+  const compId = companyId?.trim() || "";
+  if (!compId) {
+    throw new Error("Pilih instansi terlebih dahulu.");
   }
-  return res.items;
+  const page = params.page || 1;
+  const size = Math.min(100, Math.max(1, params.size || 10));
+  const sortby = params.sortby;
+  const order = params.order || "asc";
+
+  try {
+    const response = await api.get("/office/user", {
+      params: {
+        company_id: compId,
+        page,
+        size,
+        search: params.search || undefined,
+        role: params.role && params.role !== "ALL" ? params.role : undefined,
+        sortby,
+        order,
+      },
+    });
+
+    const raw = response.data;
+    const items = Array.isArray(raw?.items) ? raw.items : Array.isArray(raw) ? raw : [];
+    const mappedItems: OfficeUserItem[] = items.map((u: any) => ({
+      id: String(u._id || u.id || ""),
+      companyId: String(u.company_id || compId),
+      name: String(u.name || "-"),
+      email: String(u.email || "-"),
+      username: String(u.email ? u.email.split("@")[0] : u.name || "-"),
+      role: (u.role || "STAFF") as any,
+      is_active: Boolean(u.is_active),
+      status: u.is_active ? "ACTIVE" : "INACTIVE",
+      createdAt: u.created_at || "",
+      updatedAt: u.updated_at || undefined,
+    }));
+
+    const total = Number(raw?.total !== undefined ? raw.total : mappedItems.length);
+    const totalPages = total > 0 ? Math.ceil(total / size) : 1;
+
+    return {
+      items: mappedItems,
+      total,
+      page,
+      size,
+      totalPages,
+    };
+  } catch (error: any) {
+    throw new Error(formatApiError(error, "Gagal memuat daftar pengguna office."));
+  }
 }
 
 export async function createOfficeUserApi(
   companyId: string,
-  payload: OfficeUserPayload
-): Promise<any> {
-  return createCompanyUserApi({
-    name: payload.name,
-    email: payload.email || `${payload.username || "user"}@bukuflow.id`,
-    password: payload.password,
-    role: payload.role === "COMPANY_ADMIN" ? "COMPANY_ADMIN" : "STAFF",
-  });
+  payload: {
+    name: string;
+    email: string;
+    password?: string;
+    role?: "COMPANY_ADMIN" | "STAFF";
+  }
+): Promise<OfficeUserItem> {
+  const compId = companyId?.trim() || "";
+  if (!compId) {
+    throw new Error("Pilih instansi terlebih dahulu.");
+  }
+  if (!payload.name?.trim()) {
+    throw new Error("Nama pengguna wajib diisi.");
+  }
+  if (!payload.email?.trim()) {
+    throw new Error("Email pengguna wajib diisi.");
+  }
+  if (!payload.password || payload.password.trim().length < 8) {
+    throw new Error("Password minimal 8 karakter sesuai spesifikasi server.");
+  }
+
+  const body = {
+    name: payload.name.trim(),
+    email: payload.email.trim(),
+    password: payload.password.trim(),
+    role: payload.role || "STAFF",
+  };
+
+  try {
+    const response = await api.post("/office/user", body, {
+      params: { company_id: compId },
+    });
+
+    const u = response.data?.data || response.data;
+    return {
+      id: String(u._id || u.id || ""),
+      companyId: compId,
+      name: u.name || body.name,
+      email: u.email || body.email,
+      username: body.email.split("@")[0],
+      role: (u.role || body.role) as any,
+      is_active: Boolean(u.is_active !== undefined ? u.is_active : true),
+      status: (u.is_active !== undefined ? u.is_active : true) ? "ACTIVE" : "INACTIVE",
+      createdAt: u.created_at || "",
+    };
+  } catch (error: any) {
+    throw new Error(formatApiError(error, "Gagal membuat pengguna baru."));
+  }
 }
 
 export async function updateOfficeUserApi(
+  companyId: string,
   userId: string,
-  payload: Partial<OfficeUserPayload>,
-  companyId?: string
-): Promise<any> {
-  return updateCompanyUserApi(userId, {
-    name: payload.name,
-    role: payload.role === "COMPANY_ADMIN" ? "COMPANY_ADMIN" : payload.role === "STAFF" ? "STAFF" : undefined,
-    is_active: payload.status !== undefined ? payload.status === "ACTIVE" : undefined,
-  });
+  payload: {
+    name?: string;
+    is_active?: boolean;
+    role?: "COMPANY_ADMIN" | "STAFF";
+  }
+): Promise<OfficeUserItem> {
+  const compId = companyId?.trim() || "";
+  if (!compId) {
+    throw new Error("Pilih instansi terlebih dahulu.");
+  }
+  const body: Record<string, any> = {};
+  if (payload.name !== undefined) body.name = payload.name.trim();
+  if (payload.is_active !== undefined) body.is_active = payload.is_active;
+  if (payload.role !== undefined) body.role = payload.role;
+
+  try {
+    const response = await api.patch(`/office/user/${userId}`, body, {
+      params: { company_id: compId },
+    });
+
+    const u = response.data?.data || response.data;
+    return {
+      id: String(u._id || u.id || userId),
+      companyId: compId,
+      name: u.name || payload.name || "-",
+      email: u.email || "-",
+      username: (u.email || "").split("@")[0] || "-",
+      role: (u.role || payload.role || "STAFF") as any,
+      is_active: Boolean(u.is_active),
+      status: u.is_active ? "ACTIVE" : "INACTIVE",
+      createdAt: u.created_at || "",
+      updatedAt: u.updated_at || u.created_at || "",
+    };
+  } catch (error: any) {
+    throw new Error(formatApiError(error, "Gagal memperbarui pengguna."));
+  }
 }
 
 export async function deleteOfficeUserApi(
-  userId: string,
-  companyId?: string
+  _userId: string,
+  _companyId?: string
 ): Promise<boolean> {
-  return deleteCompanyUserApi(userId);
+  throw new Error(
+    "MENUNGGU BE: Endpoint penghapusan akun pengguna tidak tersedia di server. Nonaktifkan melalui status isActive."
+  );
+}
+
+// =========================================================
+// OFFICE CATALOG BOOKS API
+// =========================================================
+
+export interface OfficeBookItem {
+  id: string;
+  companyId: string;
+  code: string;
+  title: string;
+  isbn?: string;
+  author?: string;
+  category?: string;
+  publisher?: string;
+  publishedYear?: number;
+  status: BookStatus;
+  totalCopies: number;
+  availableCopies: number;
+  createdAt: string;
+  updatedAt?: string;
+}
+
+export interface OfficeBooksListResponse {
+  items: OfficeBookItem[];
+  total: number;
+  page: number;
+  size: number;
+  totalPages: number;
+}
+
+export async function getOfficeBooksApi(
+  companyId: string,
+  params: {
+    page?: number;
+    size?: number;
+    sortby?: string;
+    order?: string;
+    search?: string;
+  } = {}
+): Promise<OfficeBooksListResponse> {
+  const compId = companyId?.trim() || "";
+  if (!compId) {
+    throw new Error("Pilih instansi terlebih dahulu.");
+  }
+  const page = params.page || 1;
+  const size = Math.min(100, Math.max(1, params.size || 10));
+  const sortby = params.sortby;
+  const order = params.order || "asc";
+  const search = params.search?.trim();
+
+  try {
+    if (search) {
+      const response = await api.get("/office/catalog/books/search", {
+        params: { q: search, company_id: compId },
+      });
+      const raw = response.data;
+      const rawItems = Array.isArray(raw?.items) ? raw.items : Array.isArray(raw?.data) ? raw.data : Array.isArray(raw) ? raw : [];
+      const mapped = rawItems.map((b: any) => ({
+        id: String(b._id || b.id || ""),
+        companyId: String(b.company_id || compId),
+        code: String(b.code || "-"),
+        title: String(b.title || "-"),
+        isbn: b.isbn || undefined,
+        author: b.author || undefined,
+        category: b.category || undefined,
+        publisher: b.publisher || undefined,
+        publishedYear: b.published_year !== undefined ? Number(b.published_year) : undefined,
+        status: parseBookStatus(
+          b.status,
+          Number(b.total_copies ?? 0),
+          Number(b.available_copies ?? 0)
+        ),
+        totalCopies: Number(b.total_copies ?? 0),
+        availableCopies: Number(b.available_copies ?? 0),
+        createdAt: b.created_at || "",
+        updatedAt: b.updated_at || undefined,
+      }));
+      return {
+        items: mapped,
+        total: mapped.length,
+        page: 1,
+        size: mapped.length || 10,
+        totalPages: 1,
+      };
+    }
+
+    const response = await api.get("/office/catalog/books", {
+      params: {
+        company_id: compId,
+        page,
+        size,
+        sortby,
+        order,
+      },
+    });
+
+    const raw = response.data;
+    const rawItems = Array.isArray(raw?.items) ? raw.items : Array.isArray(raw?.data) ? raw.data : Array.isArray(raw) ? raw : [];
+    const mapped = rawItems.map((b: any) => ({
+      id: String(b._id || b.id || ""),
+      companyId: String(b.company_id || compId),
+      code: String(b.code || "-"),
+      title: String(b.title || "-"),
+      isbn: b.isbn || undefined,
+      author: b.author || undefined,
+      category: b.category || undefined,
+      publisher: b.publisher || undefined,
+      publishedYear: b.published_year !== undefined ? Number(b.published_year) : undefined,
+      status: parseBookStatus(
+        b.status,
+        Number(b.total_copies ?? 0),
+        Number(b.available_copies ?? 0)
+      ),
+      totalCopies: Number(b.total_copies ?? 0),
+      availableCopies: Number(b.available_copies ?? 0),
+      createdAt: b.created_at || "",
+      updatedAt: b.updated_at || undefined,
+    }));
+
+    const total = Number(raw?.total !== undefined ? raw.total : mapped.length);
+    const totalPages = total > 0 ? Math.ceil(total / size) : 1;
+
+    return {
+      items: mapped,
+      total,
+      page,
+      size,
+      totalPages,
+    };
+  } catch (err: any) {
+    throw new Error(formatApiError(err, "Gagal memuat katalog buku office."));
+  }
+}
+
+// =========================================================
+// OFFICE LOANS API
+// =========================================================
+
+export interface OfficeLoanBookItem {
+  id?: string;
+  bookId?: string;
+  bookTitle?: string;
+  bookCode?: string;
+  copyCode?: string;
+  status?: string;
+}
+
+export interface OfficeLoanItem {
+  id: string;
+  companyId: string;
+  loanNumber: string;
+  rawLoanNumber?: string;
+  memberId: string;
+  borrowedBy: string;
+  memberName?: string;
+  memberNumber?: string;
+  officerName?: string;
+  borrowedAt: string;
+  dueAt: string;
+  returnedAt?: string;
+  status: "ACTIVE" | "OVERDUE" | "COMPLETED";
+  notes?: string;
+  createdAt: string;
+  updatedAt?: string;
+  copyIds: string[];
+  items?: OfficeLoanBookItem[];
+}
+
+export interface OfficeLoansListResponse {
+  items: OfficeLoanItem[];
+  total: number;
+  page: number;
+  size: number;
+  totalPages: number;
+}
+
+// In-memory cache for office members per company to avoid refetching on every page turn
+const officeMemberCache = new Map<string, { timestamp: number; map: Map<string, Member> }>();
+// In-memory cache for office users (officers) per company
+const officeUserCache = new Map<string, { timestamp: number; map: Map<string, string> }>();
+// Negative cache for member IDs that returned 404 or are missing to prevent repeated failed requests
+const officeInvalidMemberIds = new Set<string>();
+
+async function enrichOfficeLoansWithMembers(
+  companyId: string,
+  loans: OfficeLoanItem[]
+): Promise<OfficeLoanItem[]> {
+  if (!companyId || loans.length === 0) return loans;
+
+  try {
+    const cached = officeMemberCache.get(companyId);
+    let memberMap: Map<string, Member>;
+
+    if (cached && Date.now() - cached.timestamp < 60_000) {
+      memberMap = cached.map;
+    } else {
+      memberMap = new Map<string, Member>();
+      try {
+        const membersRes = await getOfficeMembersApi(companyId, { size: 10 });
+        for (const m of membersRes.items) {
+          if (m.id) {
+            memberMap.set(m.id, m);
+            memberMap.set(m.id.toLowerCase(), m);
+          }
+          if (m.memberNumber) {
+            memberMap.set(m.memberNumber, m);
+            memberMap.set(m.memberNumber.toLowerCase(), m);
+          }
+        }
+        officeMemberCache.set(companyId, { timestamp: Date.now(), map: memberMap });
+      } catch {
+        // Abaikan jika pemuatan daftar anggota gagal
+      }
+    }
+
+    // Load office user cache (untuk memetakan borrowed_by / officer)
+    const cachedUsers = officeUserCache.get(companyId);
+    let userMap: Map<string, string>;
+
+    if (cachedUsers && Date.now() - cachedUsers.timestamp < 60_000) {
+      userMap = cachedUsers.map;
+    } else {
+      userMap = new Map<string, string>();
+      try {
+        const usersRes = await getOfficeUsersApi(companyId, { size: 10 });
+        for (const u of usersRes.items) {
+          if (u.id && u.name) {
+            userMap.set(u.id, u.name);
+            userMap.set(u.id.toLowerCase(), u.name);
+          }
+        }
+        officeUserCache.set(companyId, { timestamp: Date.now(), map: userMap });
+      } catch {
+        // Abaikan jika pemuatan daftar user gagal
+      }
+    }
+
+    // Identifikasi ID member yang belum ada di map
+    // CATATAN PENTING: `l.borrowedBy` adalah ID User/Petugas yang melayani peminjaman,
+    // BUKAN ID Member! Jangan pernah meminta detail member untuk borrowedBy.
+    const missingMemberIds = new Set<string>();
+    for (const l of loans) {
+      if (!l.memberName && l.memberId && l.memberId !== "-") {
+        const cleanMid = l.memberId.trim();
+        const cacheKey = `${companyId}:${cleanMid.toLowerCase()}`;
+        if (
+          !memberMap.has(cleanMid) &&
+          !memberMap.has(cleanMid.toLowerCase()) &&
+          !officeInvalidMemberIds.has(cacheKey)
+        ) {
+          if (/^[0-9a-fA-F]{24}$/.test(cleanMid)) {
+            missingMemberIds.add(cleanMid);
+          }
+        }
+      }
+    }
+
+    // Fetch missing member details in parallel (maksimal 10 panggilan)
+    if (missingMemberIds.size > 0) {
+      const idsToFetch = Array.from(missingMemberIds).slice(0, 10);
+      await Promise.allSettled(
+        idsToFetch.map(async (mId) => {
+          const cacheKey = `${companyId}:${mId.toLowerCase()}`;
+          try {
+            const m = await getOfficeMemberDetailApi(companyId, mId);
+            if (m && m.name) {
+              memberMap.set(mId, m);
+              memberMap.set(mId.toLowerCase(), m);
+              if (m.id) {
+                memberMap.set(m.id, m);
+                memberMap.set(m.id.toLowerCase(), m);
+              }
+            } else {
+              officeInvalidMemberIds.add(cacheKey);
+            }
+          } catch {
+            // Member detail 404 (misal data dummy atau member terhapus)
+            // Catat ke cache negatif agar tidak melakukan request 404 berulang kali
+            officeInvalidMemberIds.add(cacheKey);
+          }
+        })
+      );
+    }
+
+    // Pasangkan data member dan nama petugas ke setiap loan
+    for (const l of loans) {
+      const foundMember =
+        memberMap.get(l.memberId) ||
+        memberMap.get(l.memberId?.toLowerCase());
+
+      if (foundMember) {
+        if (!l.memberName) {
+          l.memberName = foundMember.name;
+        }
+        if (!l.memberNumber) {
+          l.memberNumber = foundMember.memberNumber;
+        }
+      }
+
+      // Pasangkan nama petugas jika tersedia di userMap
+      if (l.borrowedBy && userMap.has(l.borrowedBy)) {
+        l.officerName = userMap.get(l.borrowedBy) || l.officerName || "Petugas";
+      } else if (l.borrowedBy && userMap.has(l.borrowedBy.toLowerCase())) {
+        l.officerName = userMap.get(l.borrowedBy.toLowerCase()) || l.officerName || "Petugas";
+      }
+    }
+  } catch {
+    // Best-effort data augmentation, jangan throw jika gagal enrich
+  }
+
+  return loans;
+}
+
+export async function searchOfficeLoansApi(
+  companyId: string,
+  params: {
+    status?: "ACTIVE" | "OVERDUE" | "COMPLETED";
+    q?: string;
+    loan_id?: string;
+    member_id?: string;
+    page?: number;
+    size?: number;
+    sortby?: string;
+    order?: string;
+    skipEnrich?: boolean;
+    startDate?: string;
+    endDate?: string;
+    borrowed_from?: string;
+    borrowed_to?: string;
+    due_from?: string;
+    due_to?: string;
+    returned_from?: string;
+    returned_to?: string;
+  } = {}
+): Promise<OfficeLoansListResponse> {
+  const compId = companyId?.trim() || "";
+  if (!compId) {
+    throw new Error("Pilih instansi terlebih dahulu.");
+  }
+  const page = params.page || 1;
+  const size = Math.min(100, Math.max(1, params.size || 10));
+  const sortby = params.sortby;
+  const order = params.order || "desc";
+
+  // Hanya status ACTIVE, OVERDUE, COMPLETED yang didukung server
+  let validStatus = params.status;
+  if (validStatus && !["ACTIVE", "OVERDUE", "COMPLETED"].includes(validStatus)) {
+    validStatus = undefined;
+  }
+
+  const rawQ = params.q?.trim() || "";
+  const cleanQ = rawQ.toUpperCase().startsWith("TRX-")
+    ? rawQ.replace(/^TRX-/i, "").trim()
+    : rawQ;
+
+  try {
+    const response = await api.get("/office/loan/search", {
+      params: {
+        company_id: compId,
+        status: validStatus || undefined,
+        q: cleanQ || undefined,
+        loan_id: params.loan_id?.trim() || undefined,
+        member_id: params.member_id?.trim() || undefined,
+        page,
+        size,
+        sortby,
+        order,
+        borrowed_from: params.borrowed_from || params.startDate || undefined,
+        borrowed_to: params.borrowed_to || params.endDate || undefined,
+        due_from: params.due_from || undefined,
+        due_to: params.due_to || undefined,
+        returned_from: params.returned_from || undefined,
+        returned_to: params.returned_to || undefined,
+      },
+    });
+
+    const raw = response.data;
+    const rawItems = Array.isArray(raw?.items) ? raw.items : Array.isArray(raw?.data) ? raw.data : Array.isArray(raw) ? raw : [];
+    const mapped: OfficeLoanItem[] = rawItems.map((l: any) => {
+      const rawLoanItems = Array.isArray(l.items)
+        ? l.items
+        : Array.isArray(l.loan_items)
+        ? l.loan_items
+        : Array.isArray(l.details)
+        ? l.details
+        : [];
+
+      const bookItems: OfficeLoanBookItem[] = rawLoanItems.map((it: any) => ({
+        id: String(it._id || it.id || it.copy_id || it.book_copy_id || ""),
+        bookId: String(it.book_id || it.bookId || it.book?._id || it.book?.id || ""),
+        bookTitle: String(
+          it.book_title ||
+          it.bookTitle ||
+          it.book?.title ||
+          it.title ||
+          "Buku Perpustakaan"
+        ),
+        bookCode: it.book_code || it.bookCode || it.book?.code || undefined,
+        copyCode:
+          it.copy_code ||
+          it.copyCode ||
+          it.book_copy?.code ||
+          it.copy?.code ||
+          it.code ||
+          undefined,
+        status: String(it.status || "BORROWED"),
+      }));
+
+      const finalCopyIds: string[] = Array.isArray(l.copy_id)
+        ? l.copy_id.map(String)
+        : Array.isArray(l.copy_ids)
+        ? l.copy_ids.map(String)
+        : [];
+      if (finalCopyIds.length === 0 && bookItems.length > 0) {
+        bookItems.forEach((b) => {
+          if (b.id) finalCopyIds.push(b.id);
+        });
+      }
+      if (bookItems.length === 0 && finalCopyIds.length > 0) {
+        finalCopyIds.forEach((cid, idx) => {
+          bookItems.push({
+            id: cid,
+            copyCode: cid.length > 12 ? `CP-${cid.slice(-6).toUpperCase()}` : cid,
+            bookTitle: `Salinan Buku #${idx + 1}`,
+          });
+        });
+      }
+
+      return {
+        id: String(l._id || l.id || ""),
+        companyId: String(l.company_id || compId),
+        loanNumber: formatCleanLoanNumber(l),
+        rawLoanNumber: String(l.loan_number || l.code || l._id || l.id || ""),
+        memberId: String(l.member_id || "-"),
+        borrowedBy: String(l.borrowed_by || "-"),
+        memberName:
+          l.member?.name ||
+          l.member_name ||
+          l.memberName ||
+          l.borrower_name ||
+          undefined,
+        memberNumber:
+          l.member?.member_number ||
+          l.member?.memberNumber ||
+          l.member_number ||
+          undefined,
+        officerName:
+          l.officer?.name ||
+          l.officer_name ||
+          l.officerName ||
+          l.borrowed_by_name ||
+          l.user?.name ||
+          l.user_name ||
+          l.userName ||
+          l.created_by_name ||
+          "-",
+        borrowedAt: l.borrowed_at || "",
+        dueAt: l.due_at || "",
+        returnedAt: l.returned_at || undefined,
+        status: (l.status || "ACTIVE") as "ACTIVE" | "OVERDUE" | "COMPLETED",
+        notes: l.notes || undefined,
+        createdAt: l.created_at || "",
+        updatedAt: l.updated_at || undefined,
+        copyIds: finalCopyIds,
+        items: bookItems,
+      };
+    });
+
+    const filterFromDate = (params?.startDate || params?.borrowed_from || "").slice(0, 10);
+    const filterToDate = (params?.endDate || params?.borrowed_to || "").slice(0, 10);
+    const filterDueFrom = (params?.due_from || "").slice(0, 10);
+    const filterDueTo = (params?.due_to || "").slice(0, 10);
+    const filterRetFrom = (params?.returned_from || "").slice(0, 10);
+    const filterRetTo = (params?.returned_to || "").slice(0, 10);
+
+    let filteredItems = mapped;
+    if (filterFromDate || filterToDate || filterDueFrom || filterDueTo || filterRetFrom || filterRetTo) {
+      filteredItems = filteredItems.filter((item) => {
+        const itemBorrowed = (item.borrowedAt || item.createdAt || "").slice(0, 10);
+        if (filterFromDate && itemBorrowed && itemBorrowed < filterFromDate) return false;
+        if (filterToDate && itemBorrowed && itemBorrowed > filterToDate) return false;
+        const itemDue = (item.dueAt || "").slice(0, 10);
+        if (filterDueFrom && itemDue && itemDue < filterDueFrom) return false;
+        if (filterDueTo && itemDue && itemDue > filterDueTo) return false;
+        const itemRet = (item.returnedAt || "").slice(0, 10);
+        if (filterRetFrom && itemRet && itemRet < filterRetFrom) return false;
+        if (filterRetTo && itemRet && itemRet > filterRetTo) return false;
+        return true;
+      });
+    }
+
+    const enrichedItems = params.skipEnrich
+      ? filteredItems
+      : await enrichOfficeLoansWithMembers(compId, filteredItems);
+
+    const total = Number(raw?.total !== undefined ? raw.total : enrichedItems.length);
+    const totalPages = total > 0 ? Math.ceil(total / size) : 1;
+
+    return {
+      items: enrichedItems,
+      total,
+      page,
+      size,
+      totalPages,
+    };
+  } catch (err: any) {
+    throw new Error(formatApiError(err, "Gagal memuat daftar peminjaman office."));
+  }
 }
 
 // =========================================================
 // COMPANY SETTINGS & POLICIES API
 // =========================================================
 
-export async function getCompanySettingsApi(companyId?: string): Promise<CompanySettings> {
-  const targetCompanyId = companyId || "company-001";
+export async function getCompanySettingsApi(
+  companyId?: string
+): Promise<(CompanySettings & { isConfigured: true }) | null> {
+  const auth = getAuthData();
+  const isSuperAdmin = auth?.user?.role === "SUPER_ADMIN";
+
+  let response;
   try {
-    const response = await api.get(`/bukuflow/company/settings`, {
-      params: { company_id: targetCompanyId },
-    }).catch(() => api.get(`/bukuflow/companies/${targetCompanyId}/settings`));
-
-    const item = response.data?.data || response.data;
-    if (item && (item.defaultLoanDuration || item.default_loan_duration || item.maxActiveLoans)) {
-      return {
-        id: String(item.id || `settings-${targetCompanyId}`),
-        companyId: String(item.company_id || item.companyId || targetCompanyId),
-        defaultLoanDuration: Number(item.default_loan_duration || item.defaultLoanDuration || 7),
-        maxActiveLoans: Number(item.max_active_loans || item.maxActiveLoans || 3),
-        dailyFineRate: Number(item.daily_fine_rate || item.dailyFineRate || 1000),
-        allowRenewal: item.allow_renewal !== undefined ? Boolean(item.allow_renewal) : (item.allowRenewal !== undefined ? Boolean(item.allowRenewal) : true),
-        maxRenewals: Number(item.max_renewals || item.maxRenewals || 1),
-        dateFormat: String(item.date_format || item.dateFormat || "DD/MM/YYYY"),
-        timezone: String(item.timezone || "Asia/Jakarta"),
-        createdAt: String(item.created_at || item.createdAt || new Date().toISOString()),
-        updatedAt: String(item.updated_at || item.updatedAt || new Date().toISOString()),
-      };
+    if (isSuperAdmin && companyId) {
+      response = await api.get("/office/company/config", { params: { company_id: companyId } });
+    } else {
+      response = await api.get("/company/config");
     }
-    throw new Error("No settings in response");
-  } catch {
-    const { mockCompanySettingsStore, ensureMockStoreHydrated } = await import("./mock-store");
-    ensureMockStoreHydrated();
-    const existing = mockCompanySettingsStore[targetCompanyId];
-    if (existing) return existing;
-
-    const fallback: CompanySettings = {
-      id: `settings-${targetCompanyId}`,
-      companyId: targetCompanyId,
-      defaultLoanDuration: 7,
-      maxActiveLoans: 3,
-      dailyFineRate: 1000,
-      allowRenewal: true,
-      maxRenewals: 1,
-      dateFormat: "DD/MM/YYYY",
-      timezone: "Asia/Jakarta",
-      createdAt: new Date().toISOString(),
-      updatedAt: new Date().toISOString(),
-    };
-    mockCompanySettingsStore[targetCompanyId] = fallback;
-    return fallback;
+  } catch (err: unknown) {
+    const error = err as { response?: { status?: number; data?: { detail?: string } } };
+    if (error.response?.status === 404) {
+      return null;
+    }
+    throw err;
   }
+
+  const raw = response.data;
+  const data = raw?.data || raw || {};
+  const defaultLoanDuration = data.default_loan_duration ?? data.defaultLoanDuration;
+  const maxActiveLoans = data.max_active_loans ?? data.maxActiveLoans;
+  const dailyFineRate = data.late_fee_per_day ?? data.dailyFineRate;
+  if (
+    defaultLoanDuration == null ||
+    maxActiveLoans == null ||
+    dailyFineRate == null ||
+    !Number.isFinite(Number(defaultLoanDuration)) ||
+    !Number.isFinite(Number(maxActiveLoans)) ||
+    !Number.isFinite(Number(dailyFineRate))
+  ) {
+    throw new Error("Konfigurasi kebijakan peminjaman dari server tidak lengkap.");
+  }
+
+  return {
+    id: String(data.id || companyId || ""),
+    companyId: String(data.company_id || data.companyId || companyId || ""),
+    defaultLoanDuration: Number(defaultLoanDuration),
+    maxActiveLoans: Number(maxActiveLoans),
+    dailyFineRate: Number(dailyFineRate),
+    allowRenewal: true,
+    maxRenewals: 1,
+    dateFormat: "YYYY-MM-DD",
+    timezone: "Asia/Jakarta",
+    createdAt: data.created_at || "",
+    updatedAt: data.updated_at || data.created_at || "",
+    isConfigured: true,
+  };
 }
 
 export async function updateCompanySettingsApi(
   companyId: string,
   payload: Partial<CompanySettings>
 ): Promise<CompanySettings> {
-  const targetCompanyId = companyId || "company-001";
-  try {
-    const response = await api.patch(`/bukuflow/company/settings`, payload, {
-      params: { company_id: targetCompanyId },
-    }).catch(() => api.patch(`/bukuflow/companies/${targetCompanyId}/settings`, payload));
+  const auth = getAuthData();
+  const isSuperAdmin = auth?.user?.role === "SUPER_ADMIN";
 
-    const item = response.data?.data || response.data;
-    return {
-      id: String(item.id || `settings-${targetCompanyId}`),
-      companyId: String(item.company_id || targetCompanyId),
-      defaultLoanDuration: Number(item.default_loan_duration || payload.defaultLoanDuration || 7),
-      maxActiveLoans: Number(item.max_active_loans || payload.maxActiveLoans || 3),
-      dailyFineRate: Number(item.daily_fine_rate || payload.dailyFineRate || 1000),
-      allowRenewal: payload.allowRenewal !== undefined ? payload.allowRenewal : true,
-      maxRenewals: Number(payload.maxRenewals || 1),
-      dateFormat: String(payload.dateFormat || "DD/MM/YYYY"),
-      timezone: String(payload.timezone || "Asia/Jakarta"),
-      createdAt: new Date().toISOString(),
-      updatedAt: new Date().toISOString(),
-    };
-  } catch {
-    const { mockCompanySettingsStore, ensureMockStoreHydrated, persistMockState } = await import("./mock-store");
-    ensureMockStoreHydrated();
-    const current = mockCompanySettingsStore[targetCompanyId] || {
-      id: `settings-${targetCompanyId}`,
-      companyId: targetCompanyId,
-      defaultLoanDuration: 7,
-      maxActiveLoans: 3,
-      dailyFineRate: 1000,
-      allowRenewal: true,
-      maxRenewals: 1,
-      dateFormat: "DD/MM/YYYY",
-      timezone: "Asia/Jakarta",
-      createdAt: new Date().toISOString(),
-      updatedAt: new Date().toISOString(),
-    };
-
-    const updated: CompanySettings = {
-      ...current,
-      ...payload,
-      updatedAt: new Date().toISOString(),
-    };
-    mockCompanySettingsStore[targetCompanyId] = updated;
-    persistMockState();
-    return updated;
+  if (payload.defaultLoanDuration === undefined || payload.maxActiveLoans === undefined || payload.dailyFineRate === undefined) {
+    throw new Error("Durasi peminjaman, batas pinjaman aktif, dan denda harian wajib diisi lengkap.");
   }
+
+  const body = {
+    default_loan_duration: Number(payload.defaultLoanDuration),
+    max_active_loans: Number(payload.maxActiveLoans),
+    late_fee_per_day: Number(payload.dailyFineRate),
+  };
+
+  let response;
+  try {
+    if (isSuperAdmin && companyId) {
+      response = await api.put("/office/company/config", body, { params: { company_id: companyId } });
+    } else {
+      response = await api.put("/company/config", body);
+    }
+  } catch (err: unknown) {
+    const error = err as { response?: { data?: { detail?: string; message?: string } }; message?: string };
+    const detailMsg = error.response?.data?.detail || error.response?.data?.message;
+    throw new Error(detailMsg || formatApiError(err, "Gagal menyimpan konfigurasi kebijakan."));
+  }
+
+  const raw = response.data;
+  const data = raw?.data || raw || {};
+
+  return {
+    id: String(data.id || companyId || ""),
+    companyId: String(data.company_id || data.companyId || companyId || ""),
+    defaultLoanDuration: Number(data.default_loan_duration ?? body.default_loan_duration),
+    maxActiveLoans: Number(data.max_active_loans ?? body.max_active_loans),
+    dailyFineRate: Number(data.late_fee_per_day ?? body.late_fee_per_day),
+    allowRenewal: true,
+    maxRenewals: 1,
+    dateFormat: "YYYY-MM-DD",
+    timezone: "Asia/Jakarta",
+    createdAt: data.created_at || "",
+    updatedAt: data.updated_at || data.created_at || "",
+  };
 }

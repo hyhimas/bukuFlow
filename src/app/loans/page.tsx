@@ -1,36 +1,76 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
-import { useRouter } from "next/navigation";
+import { Suspense, useCallback, useEffect, useRef, useState } from "react";
+import Link from "next/link";
+import { useRouter, useSearchParams } from "next/navigation";
 
-import { getSession } from "@/lib/auth";
+import { getSession, isStoredSessionExpired, hasStoredAuth } from "@/lib/auth";
 import { canAccessLoans } from "@/lib/authorization";
-import { listLoansApi } from "@/lib/api";
+import { listLoansApi, getErrorMessage } from "@/lib/api";
 
 import type { Loan, TransactionData } from "@/lib/types";
 
 import Badge from "@/components/ui/Badge";
-import BackLink from "@/components/ui/BackLink";
+import Button from "@/components/ui/Button";
 import Card from "@/components/ui/Card";
 import EmptyState from "@/components/ui/EmptyState";
-import FeedbackPanel from "@/components/ui/FeedbackPanel";
+import ErrorState from "@/components/ui/ErrorState";
 import Input from "@/components/ui/Input";
 import LoadingState from "@/components/ui/LoadingState";
 import Pagination from "@/components/ui/Pagination";
+import PageHeader from "@/components/ui/PageHeader";
+import Skeleton from "@/components/ui/Skeleton";
+import { useSearchHotkey } from "@/hooks/useHotkeys";
 
-export default function LoansPage() {
+function LoansContent() {
   const router = useRouter();
+  const searchParams = useSearchParams();
+  const urlSearch = searchParams?.get("search") || "";
+  const urlLoanId = searchParams?.get("loanId") || "";
 
   const [transactions, setTransactions] = useState<TransactionData[]>([]);
   const [selectedLoan, setSelectedLoan] = useState<TransactionData | null>(
-    null,
+    null
   );
 
-  const [search, setSearch] = useState("");
+  const searchInputRef = useRef<HTMLInputElement>(null);
+  useSearchHotkey(searchInputRef);
+
+  const [search, setSearch] = useState(() => urlSearch);
+  const [debouncedSearch, setDebouncedSearch] = useState(() => urlSearch);
   const [loading, setLoading] = useState(true);
   const [page, setPage] = useState(1);
   const [pageSize, setPageSize] = useState(10);
+  const [totalItems, setTotalItems] = useState(0);
+  const [totalPages, setTotalPages] = useState(1);
+  const savedTotalRef = useRef(0);
   const [error, setError] = useState("");
+
+  /*
+   * =========================================================
+   * DEBOUNCE SEARCH
+   * =========================================================
+   */
+
+  useEffect(() => {
+    const timer = window.setTimeout(() => {
+      setDebouncedSearch(search);
+    }, 350);
+
+    return () => {
+      window.clearTimeout(timer);
+    };
+  }, [search]);
+
+  useEffect(() => {
+    const s = searchParams?.get("search");
+    if (s !== null && s !== undefined && s !== search) {
+      // eslint-disable-next-line react-hooks/set-state-in-effect -- Sinkronisasi kata kunci pencarian dari URL searchParams
+      setSearch(s);
+      setDebouncedSearch(s);
+      setPage(1);
+    }
+  }, [searchParams]);
 
   /*
    * =========================================================
@@ -42,7 +82,9 @@ export default function LoansPage() {
     const session = getSession();
 
     if (!session) {
-      router.replace("/login");
+      if (!isStoredSessionExpired() && !hasStoredAuth()) {
+        router.replace("/login");
+      }
       return;
     }
 
@@ -59,77 +101,48 @@ export default function LoansPage() {
 
   /*
    * =========================================================
-   * LOAD DATA
+   * LOAD DATA (SERVER-SIDE)
    * =========================================================
    */
+
+  const loadTransactions = useCallback(async () => {
+    setLoading(true);
+    setError("");
+
+    try {
+      const result = await listLoansApi({
+        page,
+        size: pageSize,
+        search: debouncedSearch.trim() || undefined,
+        loan_id: (urlLoanId && !debouncedSearch ? urlLoanId : undefined),
+        status: ["ACTIVE", "OVERDUE"],
+      });
+
+      setTransactions(result.items);
+      if (result.items.length > 0 && (urlLoanId || debouncedSearch.trim())) {
+        setSelectedLoan(result.items[0]);
+      }
+      if (result.total !== -1) {
+        savedTotalRef.current = result.total;
+        setTotalItems(result.total);
+        setTotalPages(result.totalPages);
+      } else {
+        setTotalItems(savedTotalRef.current);
+        setTotalPages(Math.max(1, Math.ceil(savedTotalRef.current / pageSize)));
+      }
+    } catch (err: unknown) {
+      setError(
+        getErrorMessage(err, "Daftar peminjaman gagal dimuat.")
+      );
+    } finally {
+      setLoading(false);
+    }
+  }, [page, pageSize, debouncedSearch]);
 
   useEffect(() => {
-    async function loadTransactions() {
-      setLoading(true);
-      setError("");
-
-      try {
-        const result = await listLoansApi({
-          page,
-          size: pageSize,
-        });
-
-        const activeLoans = result.filter(
-          ({ loan }) => loan.status === "ACTIVE" || loan.status === "OVERDUE",
-        );
-
-        setTransactions(activeLoans);
-      } catch (err: any) {
-        setError(
-          err instanceof Error ? err.message : "Daftar peminjaman gagal dimuat."
-        );
-      } finally {
-        setLoading(false);
-      }
-    }
-
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- Fetch data transaksi peminjaman saat mount dan parameter berubah
     void loadTransactions();
-  }, [page, pageSize]);
-
-  /*
-   * =========================================================
-   * SEARCH
-   * =========================================================
-   */
-
-  const filteredTransactions = useMemo(() => {
-    const keyword = search.trim().toLowerCase();
-
-    if (!keyword) {
-      return transactions;
-    }
-
-    return transactions.filter(({ loan, member, items }) => {
-      const matchesLoanNumber = loan.loanNumber.toLowerCase().includes(keyword);
-
-      const matchesMember = member?.name.toLowerCase().includes(keyword);
-
-      const matchesBook = items.some(
-        ({ book, bookCopy }) =>
-          book?.title.toLowerCase().includes(keyword) ||
-          bookCopy?.code.toLowerCase().includes(keyword),
-      );
-
-      return matchesLoanNumber || matchesMember || matchesBook;
-    });
-  }, [transactions, search]);
-
-  const totalPages = Math.max(
-    1,
-    Math.ceil(filteredTransactions.length / pageSize),
-  );
-
-  const currentPage = Math.min(page, totalPages);
-
-  const paginatedTransactions = filteredTransactions.slice(
-    (currentPage - 1) * pageSize,
-    currentPage * pageSize,
-  );
+  }, [loadTransactions]);
 
   /*
    * =========================================================
@@ -174,6 +187,10 @@ export default function LoansPage() {
       return "Selesai";
     }
 
+    if (status === "CANCELLED") {
+      return "Dibatalkan";
+    }
+
     return status;
   }
 
@@ -186,7 +203,11 @@ export default function LoansPage() {
       return "success" as const;
     }
 
-    return "warning" as const;
+    if (status === "CANCELLED") {
+      return "neutral" as const;
+    }
+
+    return "neutral" as const;
   }
 
   /*
@@ -197,8 +218,6 @@ export default function LoansPage() {
 
   function selectLoan(transaction: TransactionData) {
     setSelectedLoan(transaction);
-
-    // Setelah transaksi dipilih, kosongkan pencarian.
     setSearch("");
   }
 
@@ -208,13 +227,7 @@ export default function LoansPage() {
    * =========================================================
    */
 
-  if (loading) {
-    return (
-      <main className="min-h-screen bg-slate-50">
-        <LoadingState label="Memuat daftar peminjaman..." />
-      </main>
-    );
-  }
+
 
   /*
    * =========================================================
@@ -223,56 +236,43 @@ export default function LoansPage() {
    */
 
   return (
-    <main className="min-h-screen bg-slate-50">
+    <div className="min-h-screen bg-slate-50">
       <div className="page-container py-5 sm:py-6">
         {/* HEADER */}
-
         <div className="mb-5 sm:mb-6">
-          <BackLink href="/dashboard" />
-
-          <h1 className="mt-3 text-2xl font-bold tracking-tight text-slate-900 sm:text-3xl">
-            Peminjaman Buku
-          </h1>
-
-          <p className="mt-1 text-sm leading-6 text-slate-500 sm:text-base">
-            Lihat daftar dan detail transaksi peminjaman buku.
-          </p>
+          <PageHeader
+            backLink="/dashboard"
+            title="Peminjaman Buku"
+            description="Lihat daftar dan detail peminjaman buku aktif."
+          />
         </div>
 
-        {/* ERROR */}
-
-        {error && (
-          <FeedbackPanel tone="error" className="mb-5">
-            <div>
-              <p>{error}</p>
-
-              <button
-                type="button"
-                onClick={() => window.location.reload()}
-                className="mt-3 min-h-10 rounded-lg border border-red-300 px-4 py-2 text-sm font-semibold transition hover:bg-red-50 focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 focus-visible:ring-offset-2"
-              >
-                Coba lagi
-              </button>
-            </div>
-          </FeedbackPanel>
-        )}
-
-        {/* SEARCH */}
-
-        <Card className="relative z-20 p-4 sm:p-5">
+        {/* ERROR vs CONTENT */}
+        {error ? (
+          <ErrorState
+            title="Gagal Memuat Peminjaman"
+            message={error}
+            onRetry={() => void loadTransactions()}
+            className="mb-5"
+          />
+        ) : (
+          <>
+            {/* SEARCH */}
+        <Card className="p-4 sm:p-5">
           <div className="flex flex-col gap-1">
             <h2 className="text-base font-semibold text-slate-900 sm:text-lg">
               Daftar Peminjaman
             </h2>
 
             <p className="text-sm leading-5 text-slate-500">
-              Cari berdasarkan nomor transaksi, anggota, judul buku, atau kode
-              copy.
+              Cari berdasarkan nomor peminjaman, anggota, judul buku, atau kode
+              eksemplar.
             </p>
           </div>
 
           <div className="relative mt-4">
             <Input
+              ref={searchInputRef}
               id="loan-search"
               label="Pencarian"
               value={search}
@@ -280,28 +280,22 @@ export default function LoansPage() {
                 setSearch(event.target.value);
                 setPage(1);
               }}
-              placeholder="Contoh: TRX-001, Budi, Laskar Pelangi..."
+              placeholder="Contoh: TRX-001, Budi, Laskar Pelangi... (tekan /)"
             />
 
-            {/* =================================================
-                MOBILE SEARCH DROPDOWN
-                Hanya muncul:
-                1. Pada mobile
-                2. Setelah transaksi dipilih
-                3. Ketika user mengetik pencarian baru
-            ================================================== */}
-
-            {selectedLoan && search.trim() && (
+            {/* MOBILE SEARCH DROPDOWN (Tampil saat user mencari di mobile) */}
+            {search.trim() && (
               <div className="md:hidden">
                 <div className="absolute left-0 right-0 top-full z-30 mt-2 overflow-hidden rounded-xl border border-slate-200 bg-white shadow-lg">
-                  {filteredTransactions.length > 0 ? (
+                  {transactions.length > 0 ? (
                     <div className="max-h-80 overflow-y-auto p-2">
-                      {filteredTransactions.map((transaction) => (
-                        <button
+                      {transactions.map((transaction) => (
+                        <Button
                           key={transaction.loan.id}
                           type="button"
+                          variant="ghost"
                           onClick={() => selectLoan(transaction)}
-                          className="w-full rounded-lg p-3 text-left transition hover:bg-slate-50 focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-500"
+                          className="w-full h-auto rounded-lg p-3 justify-start text-left font-normal hover:bg-slate-50"
                         >
                           <div className="flex items-start justify-between gap-3">
                             <div className="min-w-0">
@@ -315,22 +309,22 @@ export default function LoansPage() {
 
                               <p className="mt-1 text-xs text-slate-500">
                                 {transaction.items.length} buku
-                                <span className="mx-1">·</span>
+                                <span className="mx-1 select-none text-slate-300" aria-hidden="true">&bull;</span>
                                 {formatDate(transaction.loan.borrowedAt)}
-                                <span className="mx-1">→</span>
+                                <span className="mx-1 select-none text-slate-300" aria-hidden="true">&rarr;</span>
                                 {formatDate(transaction.loan.dueAt)}
                               </p>
                             </div>
 
                             <Badge
                               variant={getStatusVariant(
-                                transaction.loan.status,
+                                transaction.loan.status
                               )}
                             >
                               {getStatusLabel(transaction.loan.status)}
                             </Badge>
                           </div>
-                        </button>
+                        </Button>
                       ))}
                     </div>
                   ) : (
@@ -340,8 +334,7 @@ export default function LoansPage() {
                       </p>
 
                       <p className="mt-1 text-sm text-slate-500">
-                        Tidak ada transaksi yang sesuai dengan "{search.trim()}
-                        ".
+                        Tidak ada peminjaman yang sesuai dengan &ldquo;{search.trim()}&rdquo;.
                       </p>
                     </div>
                   )}
@@ -351,11 +344,27 @@ export default function LoansPage() {
           </div>
         </Card>
 
-        {/* =====================================================
-            EMPTY STATE
-        ====================================================== */}
-
-        {!error && filteredTransactions.length === 0 && !selectedLoan ? (
+        {/* SKELETON LOADING / EMPTY STATE */}
+        {loading && transactions.length === 0 ? (
+          <div className="mt-5 grid min-w-0 gap-5 md:grid-cols-[minmax(0,1fr)_minmax(340px,0.85fr)]">
+            <Card className="p-4 sm:p-5 space-y-3">
+              <Skeleton className="h-6 w-32" />
+              {Array.from({ length: 4 }).map((_, i) => (
+                <div key={i} className="rounded-xl border border-slate-200 bg-white p-4 space-y-2">
+                  <Skeleton className="h-4 w-40" />
+                  <Skeleton className="h-3 w-56" />
+                </div>
+              ))}
+            </Card>
+            <div className="hidden md:block">
+              <Card className="p-5 space-y-4">
+                <Skeleton className="h-6 w-36" />
+                <Skeleton className="h-24 w-full" />
+                <Skeleton className="h-24 w-full" />
+              </Card>
+            </div>
+          </div>
+        ) : transactions.length === 0 && !selectedLoan ? (
           <Card className="mt-5 p-4 sm:p-5">
             <EmptyState
               title={
@@ -365,28 +374,26 @@ export default function LoansPage() {
               }
               description={
                 search.trim()
-                  ? `Tidak ada transaksi yang sesuai dengan "${search.trim()}".`
-                  : "Belum ada data peminjaman yang dapat ditampilkan."
+                  ? `Tidak ada peminjaman yang sesuai dengan "${search.trim()}".`
+                  : "Belum ada data peminjaman aktif yang dapat ditampilkan."
               }
             />
           </Card>
         ) : (
           <div className="mt-5">
-            {/* =================================================
-                MOBILE DETAIL
-                Hanya muncul di mobile ketika transaksi dipilih.
-            ================================================== */}
-
+            {/* MOBILE DETAIL */}
             {selectedLoan && (
               <div className="md:hidden">
-                <button
+                <Button
                   type="button"
+                  variant="secondary"
+                  size="sm"
                   onClick={() => setSelectedLoan(null)}
-                  className="mb-4 inline-flex min-h-10 items-center gap-2 rounded-lg border border-slate-200 bg-white px-3.5 py-2 text-sm font-semibold text-slate-700 shadow-sm transition hover:bg-slate-50 focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 focus-visible:ring-offset-2"
+                  className="mb-4"
                 >
-                  <span aria-hidden="true">←</span>
+                  <svg className="h-4 w-4 shrink-0 mr-1.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" aria-hidden="true"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 19l-7-7m0 0l7-7m-7 7h18" /></svg>
                   <span>Kembali ke daftar</span>
-                </button>
+                </Button>
 
                 <LoanDetail
                   transaction={selectedLoan}
@@ -397,12 +404,7 @@ export default function LoansPage() {
               </div>
             )}
 
-            {/* =================================================
-                TABLET + DESKTOP
-                List kiri + detail kanan.
-                Tidak menggunakan dropdown search.
-            ================================================== */}
-
+            {/* TABLET + DESKTOP (Split view) */}
             <div
               className={[
                 "grid min-w-0 gap-5 md:grid-cols-[minmax(0,1fr)_minmax(340px,0.85fr)]",
@@ -411,7 +413,6 @@ export default function LoansPage() {
               ].join(" ")}
             >
               {/* LIST */}
-
               <section className="min-w-0">
                 <Card className="p-4 sm:p-5">
                   <div className="flex items-center justify-between gap-3">
@@ -421,47 +422,59 @@ export default function LoansPage() {
                       </h2>
 
                       <p className="mt-1 text-sm text-slate-500">
-                        Pilih transaksi untuk melihat detail.
+                        Pilih peminjaman untuk melihat detail.
                       </p>
                     </div>
 
                     <span className="shrink-0 text-xs text-slate-500 sm:text-sm">
-                      {filteredTransactions.length} transaksi
+                      {totalItems > 0 ? `${totalItems} peminjaman` : `${transactions.length} peminjaman`}
                     </span>
                   </div>
 
-                  {filteredTransactions.length > 0 ? (
+                  {transactions.length > 0 ? (
                     <div className="mt-4 space-y-2.5">
-                      {paginatedTransactions.map((transaction) => {
+                      {transactions.map((transaction) => {
                         const isSelected =
                           selectedLoan?.loan.id === transaction.loan.id;
 
                         return (
-                          <button
+                          <div
                             key={transaction.loan.id}
-                            type="button"
-                            onClick={() => selectLoan(transaction)}
-                            aria-pressed={isSelected}
                             className={[
-                              "w-full rounded-xl border p-3 text-left transition",
-                              "focus:outline-none focus-visible:ring-2",
-                              "focus-visible:ring-blue-500 focus-visible:ring-offset-2",
+                              "rounded-xl border transition",
                               isSelected
-                                ? "border-blue-500 bg-blue-50 ring-1 ring-blue-200"
-                                : "border-slate-200 bg-white hover:border-blue-300 hover:bg-blue-50",
+                                ? "border-blue-500 bg-blue-50/60 ring-1 ring-blue-200"
+                                : "border-slate-200 bg-white hover:border-blue-300 hover:bg-blue-50/40",
                             ].join(" ")}
                           >
-                            <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
-                              <div className="min-w-0 flex-1">
-                                <p
-                                  className="truncate font-semibold text-slate-900"
-                                  title={transaction.loan.loanNumber}
-                                >
-                                  {transaction.loan.loanNumber}
-                                </p>
+                            <Button
+                              type="button"
+                              variant="ghost"
+                              onClick={() => selectLoan(transaction)}
+                              aria-pressed={isSelected}
+                              className="w-full h-auto p-3.5 justify-start text-left font-normal"
+                            >
+                              <div className="w-full">
+                                <div className="flex items-start justify-between gap-3">
+                                  <p
+                                    className="truncate font-mono font-semibold text-slate-900"
+                                    title={transaction.loan.loanNumber}
+                                  >
+                                    {transaction.loan.loanNumber}
+                                  </p>
+
+                                  <Badge
+                                    variant={getStatusVariant(
+                                      transaction.loan.status
+                                    )}
+                                    className="shrink-0"
+                                  >
+                                    {getStatusLabel(transaction.loan.status)}
+                                  </Badge>
+                                </div>
 
                                 <p
-                                  className="mt-1 truncate text-sm text-slate-600"
+                                  className="mt-1 truncate text-sm font-medium text-slate-700"
                                   title={transaction.member?.name ?? "-"}
                                 >
                                   {transaction.member?.name ?? "-"}
@@ -469,24 +482,25 @@ export default function LoansPage() {
 
                                 <p className="mt-1 text-xs text-slate-500 sm:text-sm">
                                   {transaction.items.length} buku
-                                  <span className="mx-1">·</span>
+                                  <span className="mx-1 select-none text-slate-300" aria-hidden="true">&bull;</span>
                                   {formatDate(transaction.loan.borrowedAt)}
-                                  <span className="mx-1">→</span>
+                                  <span className="mx-1 select-none text-slate-300" aria-hidden="true">&rarr;</span>
                                   {formatDate(transaction.loan.dueAt)}
                                 </p>
                               </div>
+                            </Button>
 
-                              <span className="w-fit max-w-full shrink-0">
-                                <Badge
-                                  variant={getStatusVariant(
-                                    transaction.loan.status,
-                                  )}
-                                >
-                                  {getStatusLabel(transaction.loan.status)}
-                                </Badge>
-                              </span>
+                            {/* AKSI BARIS: LIHAT ANGGOTA */}
+                            <div className="flex items-center justify-end gap-2 border-t border-slate-100 bg-slate-50/40 px-3 py-2 text-xs">
+                              <Link
+                                href="/master/members"
+                                className="font-medium text-slate-600 hover:text-slate-900 transition flex items-center gap-1"
+                              >
+                                Lihat Anggota
+                                <span aria-hidden="true">→</span>
+                              </Link>
                             </div>
-                          </button>
+                          </div>
                         );
                       })}
                     </div>
@@ -496,31 +510,31 @@ export default function LoansPage() {
                         title="Peminjaman tidak ditemukan"
                         description={
                           search.trim()
-                            ? `Tidak ada transaksi yang sesuai dengan "${search.trim()}".`
+                            ? `Tidak ada peminjaman yang sesuai dengan "${search.trim()}".`
                             : "Belum ada data peminjaman yang dapat ditampilkan."
                         }
                       />
                     </div>
                   )}
 
-                  {/* PAGINATION (MOBILE, TABLET & DESKTOP) */}
-
-                  <Pagination
-                    currentPage={currentPage}
-                    totalPages={totalPages}
-                    onPageChange={(nextPage) => setPage(nextPage)}
-                    totalItems={filteredTransactions.length}
-                    pageSize={pageSize}
-                    onPageSizeChange={(newSize) => {
-                      setPageSize(newSize);
-                      setPage(1);
-                    }}
-                  />
+                  {/* PAGINATION */}
+                  <div className="-mx-4 -mb-4 sm:-mx-5 sm:-mb-5 mt-4">
+                    <Pagination
+                      currentPage={page}
+                      totalPages={totalPages}
+                      onPageChange={(nextPage) => setPage(nextPage)}
+                      totalItems={totalItems}
+                      pageSize={pageSize}
+                      onPageSizeChange={(newSize) => {
+                        setPageSize(newSize);
+                        setPage(1);
+                      }}
+                    />
+                  </div>
                 </Card>
               </section>
 
               {/* DETAIL */}
-
               <section className="min-w-0 md:sticky md:top-20 md:self-start">
                 {selectedLoan ? (
                   <LoanDetail
@@ -534,7 +548,7 @@ export default function LoansPage() {
                     <div className="flex min-h-[240px] items-center justify-center">
                       <EmptyState
                         title="Pilih peminjaman"
-                        description="Pilih salah satu transaksi di sebelah kiri untuk melihat detail peminjaman."
+                        description="Pilih salah satu peminjaman di sebelah kiri untuk melihat detail."
                       />
                     </div>
                   </Card>
@@ -543,8 +557,10 @@ export default function LoansPage() {
             </div>
           </div>
         )}
+          </>
+        )}
       </div>
-    </main>
+    </div>
   );
 }
 
@@ -559,8 +575,8 @@ interface LoanDetailProps {
   formatDate: (value?: string) => string;
   getStatusLabel: (status: Loan["status"]) => string;
   getStatusVariant: (
-    status: Loan["status"],
-  ) => "danger" | "success" | "warning";
+    status: Loan["status"]
+  ) => "danger" | "success" | "warning" | "neutral";
 }
 
 function LoanDetail({
@@ -574,7 +590,6 @@ function LoanDetail({
   return (
     <Card className="overflow-hidden p-4 sm:p-5">
       {/* DETAIL HEADER */}
-
       <div className="border-b border-slate-200 pb-4">
         <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
           <div className="min-w-0">
@@ -594,7 +609,6 @@ function LoanDetail({
       </div>
 
       {/* MEMBER */}
-
       <div className="border-b border-slate-200 py-4">
         <h3 className="text-sm font-semibold text-slate-900">
           Informasi Anggota
@@ -602,20 +616,16 @@ function LoanDetail({
 
         <div className="mt-3 grid gap-3 sm:grid-cols-2">
           <DetailItem label="Nama" value={member?.name ?? "-"} />
-
           <DetailItem label="Email" value={member?.email ?? "-"} />
-
           <DetailItem
             label="Nomor Anggota"
             value={member?.memberNumber ?? "-"}
           />
-
           <DetailItem label="Dicatat oleh" value={user?.name ?? "-"} />
         </div>
       </div>
 
       {/* LOAN INFO */}
-
       <div className="border-b border-slate-200 py-4">
         <h3 className="text-sm font-semibold text-slate-900">
           Informasi Peminjaman
@@ -626,13 +636,11 @@ function LoanDetail({
             label="Tanggal Pinjam"
             value={formatDate(loan.borrowedAt)}
           />
-
           <DetailItem label="Jatuh Tempo" value={formatDate(loan.dueAt)} />
         </div>
       </div>
 
       {/* BOOKS */}
-
       <div className="pt-4">
         <div className="flex items-center justify-between gap-3">
           <h3 className="text-sm font-semibold text-slate-900">
@@ -656,12 +664,22 @@ function LoanDetail({
 
               <div className="mt-2 grid gap-2 sm:grid-cols-2">
                 <DetailItem label="Kode Buku" value={book?.code ?? "-"} />
-
-                <DetailItem label="Kode Copy" value={bookCopy?.code ?? "-"} />
+                <DetailItem label="Kode Eksemplar" value={bookCopy?.code ?? "-"} />
               </div>
             </div>
           ))}
         </div>
+      </div>
+
+      {/* ACTION FOOTER */}
+      <div className="mt-5 flex flex-wrap items-center justify-end gap-3 border-t border-slate-200 pt-4">
+        <Link
+          href="/master/members"
+          className="text-xs font-semibold text-slate-600 hover:text-slate-900 transition flex items-center gap-1"
+        >
+          Lihat Profil Anggota
+          <span aria-hidden="true">→</span>
+        </Link>
       </div>
     </Card>
   );
@@ -687,5 +705,20 @@ function DetailItem({ label, value }: DetailItemProps) {
         {value}
       </p>
     </div>
+  );
+}
+
+
+export default function LoansPage() {
+  return (
+    <Suspense
+      fallback={
+        <div className="min-h-screen bg-slate-50">
+          <LoadingState label="Memuat peminjaman..." />
+        </div>
+      }
+    >
+      <LoansContent />
+    </Suspense>
   );
 }

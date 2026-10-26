@@ -77,6 +77,24 @@ function formatDisplayDate(str?: string): string {
   return `${d}/${m}/${y}`;
 }
 
+function getFullDateLabel(
+  dateStr: string,
+  isToday: boolean,
+  isSelected: boolean,
+  isDisabled: boolean,
+): string {
+  const date = parseYYYYMMDD(dateStr);
+  if (!date) return dateStr;
+  const d = date.getDate();
+  const m = MONTHS_ID[date.getMonth()];
+  const y = date.getFullYear();
+  const parts = [`${d} ${m} ${y}`];
+  if (isSelected) parts.push("terpilih");
+  if (isToday) parts.push("hari ini");
+  if (isDisabled) parts.push("tidak tersedia");
+  return parts.join(", ");
+}
+
 export default function DatePicker({
   id,
   label,
@@ -103,25 +121,34 @@ export default function DatePicker({
   const selectedDate = parseYYYYMMDD(value);
   const today = new Date();
   const todayStr = formatYYYYMMDD(today);
+  const initialDate = constrainDate(selectedDate || today);
 
   // View state for month/year navigation inside calendar
   const [viewDate, setViewDate] = useState<Date>(() => {
-    return selectedDate || today;
+    return initialDate;
   });
 
-  useEffect(() => {
-    if (selectedDate) {
-      setViewDate(selectedDate);
-    }
-  }, [value]);
+  const [focusedDate, setFocusedDate] = useState<string>(() => {
+    return formatYYYYMMDD(initialDate);
+  });
+
+  const [prevValue, setPrevValue] = useState(value);
+  if (value !== prevValue) {
+    setPrevValue(value);
+    const nextDate = constrainDate(selectedDate || today);
+    setViewDate(nextDate);
+    setFocusedDate(formatYYYYMMDD(nextDate));
+  }
 
   const triggerRef = useRef<HTMLButtonElement>(null);
   const popoverRef = useRef<HTMLDivElement>(null);
+  const focusedDateButtonRef = useRef<HTMLButtonElement>(null);
+  const shouldFocusDateRef = useRef(false);
 
   const [popoverPos, setPopoverPos] = useState({
     top: 0,
     left: 0,
-    width: 280,
+    width: 336,
     placement: "bottom" as "bottom" | "top",
   });
 
@@ -129,7 +156,7 @@ export default function DatePicker({
   const updatePosition = () => {
     if (!triggerRef.current) return;
     const rect = triggerRef.current.getBoundingClientRect();
-    const popoverHeight = 340;
+    const popoverHeight = 400;
     const spaceBelow = window.innerHeight - rect.bottom;
     const spaceAbove = rect.top;
 
@@ -142,7 +169,8 @@ export default function DatePicker({
     }
 
     let left = rect.left;
-    const width = Math.max(rect.width, 280);
+    const maxAvailable = Math.max(280, window.innerWidth - 24);
+    const width = Math.min(Math.max(rect.width, 336), maxAvailable);
 
     if (left + width > window.innerWidth - 12) {
       left = window.innerWidth - width - 12;
@@ -183,6 +211,7 @@ export default function DatePicker({
       if (!isOpen) return;
       if (event.key === "Escape") {
         setIsOpen(false);
+        triggerRef.current?.focus();
       }
     }
 
@@ -197,10 +226,19 @@ export default function DatePicker({
     };
   }, [isOpen]);
 
+  useEffect(() => {
+    if (!isOpen || !shouldFocusDateRef.current) return;
+    shouldFocusDateRef.current = false;
+    focusedDateButtonRef.current?.focus();
+  }, [isOpen, focusedDate]);
+
   function toggleOpen() {
     if (disabled) return;
-    if (!isOpen && selectedDate) {
-      setViewDate(selectedDate);
+    if (!isOpen) {
+      const availableDate = constrainDate(selectedDate || today);
+      setViewDate(availableDate);
+      setFocusedDate(formatYYYYMMDD(availableDate));
+      shouldFocusDateRef.current = true;
     }
     setIsOpen((prev) => !prev);
   }
@@ -209,30 +247,137 @@ export default function DatePicker({
     if (disabled) return;
     onChange?.(dateStr);
     setIsOpen(false);
+    triggerRef.current?.focus();
   }
 
   function handleClear(e: ReactMouseEvent | ReactKeyboardEvent) {
     e.stopPropagation();
     onChange?.("");
     setIsOpen(false);
+    triggerRef.current?.focus();
   }
 
   function handlePrevMonth() {
-    setViewDate(
-      (prev) => new Date(prev.getFullYear(), prev.getMonth() - 1, 1),
-    );
+    setViewDate((prev) => {
+      const next = new Date(prev.getFullYear(), prev.getMonth() - 1, 1);
+      const availableDate = constrainDate(next);
+      setFocusedDate(formatYYYYMMDD(availableDate));
+      return new Date(availableDate.getFullYear(), availableDate.getMonth(), 1);
+    });
   }
 
   function handleNextMonth() {
-    setViewDate(
-      (prev) => new Date(prev.getFullYear(), prev.getMonth() + 1, 1),
-    );
+    setViewDate((prev) => {
+      const next = new Date(prev.getFullYear(), prev.getMonth() + 1, 1);
+      const availableDate = constrainDate(next);
+      setFocusedDate(formatYYYYMMDD(availableDate));
+      return new Date(availableDate.getFullYear(), availableDate.getMonth(), 1);
+    });
   }
 
   function isDateDisabled(dateStr: string): boolean {
     if (effectiveMin && dateStr < effectiveMin) return true;
     if (effectiveMax && dateStr > effectiveMax) return true;
     return false;
+  }
+
+  function constrainDate(date: Date): Date {
+    const dateStr = formatYYYYMMDD(date);
+    if (effectiveMin && dateStr < effectiveMin) {
+      return parseYYYYMMDD(effectiveMin) || date;
+    }
+    if (effectiveMax && dateStr > effectiveMax) {
+      return parseYYYYMMDD(effectiveMax) || date;
+    }
+    return date;
+  }
+
+  function shiftMonth(date: Date, amount: number): Date {
+    const monthStart = new Date(
+      date.getFullYear(),
+      date.getMonth() + amount,
+      1,
+    );
+    const lastDay = new Date(
+      monthStart.getFullYear(),
+      monthStart.getMonth() + 1,
+      0,
+    ).getDate();
+    return new Date(
+      monthStart.getFullYear(),
+      monthStart.getMonth(),
+      Math.min(date.getDate(), lastDay),
+    );
+  }
+
+  function handleGridKeyDown(
+    e: ReactKeyboardEvent<HTMLButtonElement>,
+    cellDateStr: string,
+  ) {
+    let targetDate = parseYYYYMMDD(cellDateStr);
+    if (!targetDate) return;
+
+    let handled = false;
+
+    switch (e.key) {
+      case "ArrowLeft":
+        targetDate.setDate(targetDate.getDate() - 1);
+        handled = true;
+        break;
+      case "ArrowRight":
+        targetDate.setDate(targetDate.getDate() + 1);
+        handled = true;
+        break;
+      case "ArrowUp":
+        targetDate.setDate(targetDate.getDate() - 7);
+        handled = true;
+        break;
+      case "ArrowDown":
+        targetDate.setDate(targetDate.getDate() + 7);
+        handled = true;
+        break;
+      case "PageUp":
+        targetDate = shiftMonth(targetDate, e.shiftKey ? -12 : -1);
+        handled = true;
+        break;
+      case "PageDown":
+        targetDate = shiftMonth(targetDate, e.shiftKey ? 12 : 1);
+        handled = true;
+        break;
+      case "Home":
+        targetDate.setDate(targetDate.getDate() - targetDate.getDay());
+        handled = true;
+        break;
+      case "End":
+        targetDate.setDate(targetDate.getDate() + (6 - targetDate.getDay()));
+        handled = true;
+        break;
+      case "Enter":
+      case " ":
+        e.preventDefault();
+        if (!isDateDisabled(cellDateStr)) {
+          handleSelectDate(cellDateStr);
+        }
+        return;
+      default:
+        break;
+    }
+
+    if (handled) {
+      e.preventDefault();
+      targetDate = constrainDate(targetDate);
+      const nextStr = formatYYYYMMDD(targetDate);
+      shouldFocusDateRef.current = true;
+      setFocusedDate(nextStr);
+      if (
+        targetDate.getFullYear() !== viewDate.getFullYear() ||
+        targetDate.getMonth() !== viewDate.getMonth()
+      ) {
+        setViewDate(
+          new Date(targetDate.getFullYear(), targetDate.getMonth(), 1),
+        );
+      }
+    }
   }
 
   // Calendar Grid Builder
@@ -297,23 +442,28 @@ export default function DatePicker({
     });
   }
 
-  const descriptionId = error
-    ? `${id}-error`
-    : helperText
-      ? `${id}-help`
-      : undefined;
+  const descriptionId = id
+    ? error
+      ? `${id}-error`
+      : helperText
+        ? `${id}-help`
+        : undefined
+    : undefined;
 
   const displayString = formatDisplayDate(value);
 
   const popoverContent = isOpen && mounted && (
     <div
       ref={popoverRef}
+      role="dialog"
+      aria-modal="true"
+      aria-label={label ? `Pilih tanggal, ${label}` : "Pilih tanggal"}
       style={{
         position: "fixed",
         top: `${popoverPos.top}px`,
         left: `${popoverPos.left}px`,
         width: `${popoverPos.width}px`,
-        zIndex: 100000,
+        zIndex: 9000,
       }}
       className="rounded-xl border border-slate-200 bg-white p-4 shadow-xl ring-1 ring-slate-900/5 animate-in fade-in-50 zoom-in-95"
     >
@@ -323,7 +473,7 @@ export default function DatePicker({
           type="button"
           onClick={handlePrevMonth}
           aria-label="Bulan sebelumnya"
-          className="flex h-8 w-8 items-center justify-center rounded-lg text-slate-500 hover:bg-slate-100 hover:text-slate-800 transition"
+          className="flex h-10 w-10 min-h-[40px] min-w-[40px] items-center justify-center rounded-lg text-slate-500 hover:bg-slate-100 hover:text-slate-800 transition focus:outline-none focus-visible:ring-2 focus-visible:ring-brand"
         >
           <svg
             className="h-4 w-4"
@@ -331,6 +481,7 @@ export default function DatePicker({
             viewBox="0 0 24 24"
             stroke="currentColor"
             strokeWidth={2}
+            aria-hidden="true"
           >
             <path strokeLinecap="round" strokeLinejoin="round" d="M15 19l-7-7 7-7" />
           </svg>
@@ -344,7 +495,7 @@ export default function DatePicker({
           type="button"
           onClick={handleNextMonth}
           aria-label="Bulan berikutnya"
-          className="flex h-8 w-8 items-center justify-center rounded-lg text-slate-500 hover:bg-slate-100 hover:text-slate-800 transition"
+          className="flex h-10 w-10 min-h-[40px] min-w-[40px] items-center justify-center rounded-lg text-slate-500 hover:bg-slate-100 hover:text-slate-800 transition focus:outline-none focus-visible:ring-2 focus-visible:ring-brand"
         >
           <svg
             className="h-4 w-4"
@@ -352,6 +503,7 @@ export default function DatePicker({
             viewBox="0 0 24 24"
             stroke="currentColor"
             strokeWidth={2}
+            aria-hidden="true"
           >
             <path strokeLinecap="round" strokeLinejoin="round" d="M9 5l7 7-7 7" />
           </svg>
@@ -360,13 +512,14 @@ export default function DatePicker({
 
       {/* Weekdays Header */}
       <div
+        aria-hidden="true"
         className="mt-3 grid text-center"
         style={{ gridTemplateColumns: "repeat(7, minmax(0, 1fr))" }}
       >
         {WEEKDAYS_ID.map((day) => (
           <span
             key={day}
-            className="py-1 text-xs font-semibold text-slate-400"
+            className="py-1 text-xs font-semibold text-slate-500"
           >
             {day}
           </span>
@@ -375,26 +528,41 @@ export default function DatePicker({
 
       {/* Days Grid */}
       <div
+        role="grid"
+        aria-label="Kalender hari"
         className="mt-1 grid gap-1 text-center"
         style={{ gridTemplateColumns: "repeat(7, minmax(0, 1fr))" }}
       >
         {calendarDays.map((cell, idx) => {
+          const isFocused = cell.dateStr === focusedDate;
           return (
             <button
               key={`${cell.dateStr}-${idx}`}
+              ref={isFocused ? focusedDateButtonRef : undefined}
               type="button"
+              data-date={cell.dateStr}
+              tabIndex={isFocused ? 0 : -1}
               disabled={cell.isDisabled}
+              aria-label={getFullDateLabel(
+                cell.dateStr,
+                cell.isToday,
+                cell.isSelected,
+                cell.isDisabled,
+              )}
+              aria-pressed={cell.isSelected}
+              aria-current={cell.isToday ? "date" : undefined}
               onClick={() => handleSelectDate(cell.dateStr)}
-              className={`flex h-8 w-8 mx-auto items-center justify-center rounded-lg text-xs font-medium transition ${
+              onKeyDown={(e) => handleGridKeyDown(e, cell.dateStr)}
+              className={`flex h-10 w-10 min-h-[40px] min-w-[40px] mx-auto items-center justify-center rounded-lg text-xs font-medium transition outline-none focus-visible:ring-2 focus-visible:ring-brand focus-visible:ring-offset-1 ${
                 cell.isSelected
-                  ? "bg-brand text-white font-semibold shadow-sm"
+                  ? "bg-brand text-white font-semibold shadow-sm focus:ring-2 focus:ring-brand/30"
                   : cell.isToday
-                    ? "border border-brand text-brand font-semibold hover:bg-blue-50"
+                    ? "border border-brand text-brand font-semibold hover:bg-info-surface focus:bg-info-surface focus:ring-2 focus:ring-brand/20"
                     : cell.isDisabled
                       ? "text-slate-300 cursor-not-allowed opacity-40"
                       : cell.isCurrentMonth
-                        ? "text-slate-700 hover:bg-slate-100"
-                        : "text-slate-300 hover:bg-slate-50"
+                        ? "text-slate-700 hover:bg-slate-100 focus:bg-slate-100"
+                        : "text-slate-300 hover:bg-slate-50 focus:bg-slate-50"
               }`}
             >
               {cell.dayNum}
@@ -413,7 +581,7 @@ export default function DatePicker({
             }
           }}
           disabled={isDateDisabled(todayStr)}
-          className="text-brand hover:text-blue-700 disabled:opacity-40 disabled:cursor-not-allowed"
+          className="text-brand hover:text-brand-strong disabled:opacity-40 disabled:cursor-not-allowed rounded px-2 py-1 focus:outline-none focus-visible:ring-2 focus-visible:ring-brand"
         >
           Hari Ini
         </button>
@@ -422,7 +590,7 @@ export default function DatePicker({
           <button
             type="button"
             onClick={handleClear}
-            className="text-slate-500 hover:text-slate-700"
+            className="text-slate-500 hover:text-slate-700 rounded px-2 py-1 focus:outline-none focus-visible:ring-2 focus-visible:ring-brand"
           >
             Bersihkan
           </button>
@@ -453,7 +621,8 @@ export default function DatePicker({
           aria-expanded={isOpen}
           aria-haspopup="dialog"
           aria-describedby={descriptionId}
-          className={`w-full flex items-center justify-between rounded-app border px-4 py-3 text-sm outline-none transition text-left bg-white
+          className={`w-full flex items-center justify-between rounded-lg border px-4 py-3 text-sm outline-none transition text-left bg-white
+            ${showClearButton && value && !disabled ? "pr-16" : "pr-10"}
             ${
               disabled
                 ? "bg-slate-100 cursor-not-allowed opacity-60 text-slate-400"
@@ -461,59 +630,54 @@ export default function DatePicker({
             }
             ${
               isOpen
-                ? "border-brand ring-2 ring-blue-100"
+                ? "border-brand ring-2 ring-brand/20"
                 : error
                   ? "border-danger"
                   : "border-app-border"
             }
-            focus:border-brand focus:ring-2 focus:ring-blue-100`}
+            focus:border-brand focus:ring-2 focus:ring-brand/20 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand`}
         >
           <span className={displayString ? "font-medium text-app-text" : "text-slate-400"}>
             {displayString || placeholder}
           </span>
-
-          <div className="flex items-center gap-1.5 ml-2 text-slate-400">
-            {showClearButton && value && !disabled && (
-              <span
-                role="button"
-                tabIndex={0}
-                aria-label="Bersihkan tanggal"
-                onClick={handleClear}
-                onKeyDown={(e) => {
-                  if (e.key === "Enter" || e.key === " ") {
-                    e.preventDefault();
-                    handleClear(e);
-                  }
-                }}
-                className="p-0.5 hover:text-slate-600 rounded transition"
-              >
-                <svg
-                  className="h-4 w-4"
-                  fill="none"
-                  viewBox="0 0 24 24"
-                  stroke="currentColor"
-                  strokeWidth={2}
-                >
-                  <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
-                </svg>
-              </span>
-            )}
-
-            <svg
-              className="h-5 w-5 text-slate-400 shrink-0"
-              fill="none"
-              viewBox="0 0 24 24"
-              stroke="currentColor"
-              strokeWidth={1.75}
-            >
-              <path
-                strokeLinecap="round"
-                strokeLinejoin="round"
-                d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 002-2H5a2 2 0 00-2 2v12a2 2 0 002 2z"
-              />
-            </svg>
-          </div>
         </button>
+
+        <div className="absolute right-3 top-1/2 -translate-y-1/2 flex items-center gap-1.5 text-slate-400">
+          {showClearButton && value && !disabled && (
+            <button
+              type="button"
+              aria-label="Bersihkan tanggal"
+              onClick={handleClear}
+              className="p-1 text-slate-400 hover:text-slate-600 rounded transition focus:outline-none focus-visible:ring-2 focus-visible:ring-brand"
+            >
+              <svg
+                className="h-4 w-4"
+                fill="none"
+                viewBox="0 0 24 24"
+                stroke="currentColor"
+                strokeWidth={2}
+                aria-hidden="true"
+              >
+                <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
+              </svg>
+            </button>
+          )}
+
+          <svg
+            className="h-5 w-5 pointer-events-none text-slate-400 shrink-0"
+            fill="none"
+            viewBox="0 0 24 24"
+            stroke="currentColor"
+            aria-hidden="true"
+            strokeWidth={1.75}
+          >
+            <path
+              strokeLinecap="round"
+              strokeLinejoin="round"
+              d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 002-2H5a2 2 0 00-2 2v12a2 2 0 002 2z"
+            />
+          </svg>
+        </div>
       </div>
 
       {error && (

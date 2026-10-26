@@ -40,3 +40,20 @@ yarn-error.log*
 # typescript
 *.tsbuildinfo
 next-env.d.ts
+
+
+# Antigravity & AI scratch
+.antigravity/
+scratch/
+
+# Test & Debug artifacts
+test-results/
+playwright-report/
+
+*.log
+debug.log
+tests/
+
+# Audit & temporary tracking (jika tidak ingin di-commit)
+AUDIT-*.md
+PROGRESS.md

@@ -27,8 +27,30 @@ export interface Session {
 const subscribers = new Set<() => void>();
 let isStorageListenerAttached = false;
 
+// Snapshot caching to satisfy useSyncExternalStore referential stability
+let cachedAuthData: AuthSession | null = null;
+let lastAccessToken: string | null = null;
+let lastTokenType: string | null = null;
+let lastRawUser: string | null = null;
+let lastLoginAt: string | null = null;
+let lastExpiresAt: string | null = null;
+
+let cachedSession: Session | null = null;
+let cachedSessionAuthRef: AuthSession | null = null;
+
 function notifySubscribers() {
   subscribers.forEach((subscriber) => subscriber());
+}
+
+function invalidateCache() {
+  cachedAuthData = null;
+  lastAccessToken = null;
+  lastTokenType = null;
+  lastRawUser = null;
+  lastLoginAt = null;
+  lastExpiresAt = null;
+  cachedSession = null;
+  cachedSessionAuthRef = null;
 }
 
 function handleStorageEvent(event: StorageEvent) {
@@ -36,8 +58,11 @@ function handleStorageEvent(event: StorageEvent) {
     event.key === AUTH_KEYS.ACCESS_TOKEN ||
     event.key === AUTH_KEYS.AUTH_EXPIRES_AT ||
     event.key === AUTH_KEYS.AUTH_USER ||
+    event.key === AUTH_KEYS.AUTH_LOGIN_AT ||
+    event.key === AUTH_KEYS.TOKEN_TYPE ||
     event.key === null
   ) {
+    invalidateCache();
     notifySubscribers();
   }
 }
@@ -69,6 +94,9 @@ export function saveAuthData(params: {
   // Bersihkan data legacy jika ada
   localStorage.removeItem(AUTH_KEYS.LEGACY_SESSION);
 
+  // Invalidate cache agar snapshot baru tercipta
+  invalidateCache();
+
   // Cookie 1 jam untuk Next.js middleware
   document.cookie = `bukuflow_session=true; path=/; max-age=3600; SameSite=Lax`;
 
@@ -86,10 +114,31 @@ export function getAuthData(): AuthSession | null {
 
   // Validasi kelengkapan data
   if (!accessToken || !rawUser || !expiresAt) {
-    if (accessToken || rawUser || expiresAt) {
-      clearAuthData(); // Data tidak lengkap/rusak
+    if (cachedAuthData !== null) {
+      invalidateCache();
     }
     return null;
+  }
+
+  // Validasi expiry
+  const expireTimestamp = new Date(expiresAt).getTime();
+  if (isNaN(expireTimestamp) || Date.now() >= expireTimestamp) {
+    if (cachedAuthData !== null) {
+      invalidateCache();
+    }
+    return null;
+  }
+
+  // Jika nilai raw dari localStorage tidak berubah dan cache sudah ada, kembalikan objek cache yang sama
+  if (
+    cachedAuthData !== null &&
+    accessToken === lastAccessToken &&
+    tokenType === lastTokenType &&
+    rawUser === lastRawUser &&
+    loginAt === lastLoginAt &&
+    expiresAt === lastExpiresAt
+  ) {
+    return cachedAuthData;
   }
 
   // Validasi parse user
@@ -97,16 +146,15 @@ export function getAuthData(): AuthSession | null {
   try {
     user = JSON.parse(rawUser) as User;
   } catch {
-    clearAuthData();
+    invalidateCache();
     return null;
   }
 
-  // Validasi expiry
-  const expireTimestamp = new Date(expiresAt).getTime();
-  if (isNaN(expireTimestamp) || Date.now() >= expireTimestamp) {
-    clearAuthData();
-    return null;
-  }
+  lastAccessToken = accessToken;
+  lastTokenType = tokenType;
+  lastRawUser = rawUser;
+  lastLoginAt = loginAt;
+  lastExpiresAt = expiresAt;
 
   // Pastikan cookie middleware selalu sinkron dengan token localStorage
   if (
@@ -116,17 +164,21 @@ export function getAuthData(): AuthSession | null {
     document.cookie = `bukuflow_session=true; path=/; max-age=3600; SameSite=Lax`;
   }
 
-  return {
+  cachedAuthData = {
     accessToken,
     tokenType,
     user,
     loginAt: loginAt || new Date().toISOString(),
     expiresAt,
   };
+
+  return cachedAuthData;
 }
 
 export function clearAuthData(): void {
   if (typeof window === "undefined") return;
+
+  invalidateCache();
 
   localStorage.removeItem(AUTH_KEYS.ACCESS_TOKEN);
   localStorage.removeItem(AUTH_KEYS.TOKEN_TYPE);
@@ -134,6 +186,7 @@ export function clearAuthData(): void {
   localStorage.removeItem(AUTH_KEYS.AUTH_LOGIN_AT);
   localStorage.removeItem(AUTH_KEYS.AUTH_EXPIRES_AT);
   localStorage.removeItem(AUTH_KEYS.LEGACY_SESSION);
+  localStorage.removeItem("bukuflow_office_selected_company_id");
 
   document.cookie = "bukuflow_session=; path=/; max-age=0";
 
@@ -158,14 +211,66 @@ export function getAuthExpiresAt(): string | null {
   return localStorage.getItem(AUTH_KEYS.AUTH_EXPIRES_AT);
 }
 
+export function isStoredSessionExpired(): boolean {
+  if (typeof window === "undefined") return false;
+  const expiresAt = localStorage.getItem(AUTH_KEYS.AUTH_EXPIRES_AT);
+  const accessToken = localStorage.getItem(AUTH_KEYS.ACCESS_TOKEN);
+  if (!accessToken || !expiresAt) return false;
+  const expireTimestamp = new Date(expiresAt).getTime();
+  return !isNaN(expireTimestamp) && Date.now() >= expireTimestamp;
+}
+
+export function markSessionExpired(): void {
+  if (typeof window === "undefined") return;
+  try {
+    localStorage.setItem(AUTH_KEYS.AUTH_EXPIRES_AT, new Date(0).toISOString());
+    invalidateCache();
+    notifySubscribers();
+  } catch {}
+}
+
+export function hasStoredAuth(): boolean {
+  if (typeof window === "undefined") return false;
+  return Boolean(
+    localStorage.getItem(AUTH_KEYS.ACCESS_TOKEN) &&
+      localStorage.getItem(AUTH_KEYS.AUTH_USER)
+  );
+}
+
+export function getStoredUser(): User | null {
+  if (typeof window === "undefined") return null;
+  const rawUser = localStorage.getItem(AUTH_KEYS.AUTH_USER);
+  if (!rawUser) return null;
+  try {
+    return JSON.parse(rawUser) as User;
+  } catch {
+    return null;
+  }
+}
+
 export function getSession(): Session | null {
   const auth = getAuthData();
-  if (!auth) return null;
-  return {
+  if (!auth) {
+    if (cachedSession !== null) {
+      cachedSession = null;
+      cachedSessionAuthRef = null;
+    }
+    return null;
+  }
+
+  // Jika referensi auth tidak berubah, kembalikan session cache yang sama
+  if (cachedSession !== null && cachedSessionAuthRef === auth) {
+    return cachedSession;
+  }
+
+  cachedSessionAuthRef = auth;
+  cachedSession = {
     user: auth.user,
     token: auth.accessToken,
     expiresAt: new Date(auth.expiresAt).getTime(),
   };
+
+  return cachedSession;
 }
 
 export function setSession(

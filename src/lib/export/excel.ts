@@ -46,7 +46,7 @@ export function getExportDateRange(
   const start = new Date(today);
 
   if (period === "7_DAYS") {
-    start.setDate(start.getDate() - 6);
+    start.setDate(start.getDate() - 7);
   }
 
   if (period === "1_MONTH") {
@@ -105,7 +105,7 @@ export function exportToExcel<T extends Record<string, unknown>>(
   sheetName = "Data",
 ) {
   if (data.length === 0) {
-    throw new Error("Tidak ada data untuk diexport.");
+    throw new Error("Tidak ada data untuk diekspor.");
   }
 
   const worksheet = XLSX.utils.json_to_sheet(data);
@@ -117,5 +117,30 @@ export function exportToExcel<T extends Record<string, unknown>>(
     sheetName,
   );
 
-  XLSX.writeFile(workbook, filename);
+  const cleanFilename = filename.endsWith(".xlsx") ? filename : `${filename}.xlsx`;
+
+  if (typeof window !== "undefined" && typeof document !== "undefined") {
+    try {
+      XLSX.writeFile(workbook, cleanFilename);
+    } catch {
+      const excelBuffer = XLSX.write(workbook, { bookType: "xlsx", type: "array" });
+      const blob = new Blob([excelBuffer], {
+        type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet;charset=UTF-8",
+      });
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement("a");
+      link.href = url;
+      link.setAttribute("download", cleanFilename);
+      document.body.appendChild(link);
+      link.click();
+      setTimeout(() => {
+        if (link.parentNode) {
+          link.parentNode.removeChild(link);
+        }
+        URL.revokeObjectURL(url);
+      }, 1000);
+    }
+  } else {
+    XLSX.writeFile(workbook, cleanFilename);
+  }
 }

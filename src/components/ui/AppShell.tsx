@@ -2,20 +2,83 @@
 
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
-import { useEffect, useState } from "react";
-import { loginApi, logoutApi } from "@/lib/api";
+import {
+  useCallback,
+  useEffect,
+  useRef,
+  useState,
+  useSyncExternalStore,
+} from "react";
+import { loginApi, logoutApi, getErrorMessage } from "@/lib/api";
 import {
   clearAuthData,
   getAuthData,
+  getStoredUser,
+  hasStoredAuth,
+  isStoredSessionExpired,
   saveAuthData,
   subscribeSession,
   type AuthSession,
 } from "@/lib/auth";
 
 import Sidebar from "@/components/ui/Sidebar";
+import ConfirmationDialog from "@/components/ui/ConfirmationDialog";
+import LoadingState from "@/components/ui/LoadingState";
+import Button from "@/components/ui/Button";
+import Modal from "@/components/ui/Modal";
+import { getRouteAccess } from "@/lib/authorization";
 
 interface AppShellProps {
   children: React.ReactNode;
+}
+
+function subscribeMobile(callback: () => void) {
+  if (typeof window === "undefined") return () => {};
+  const mql = window.matchMedia("(max-width: 1023px)");
+  mql.addEventListener("change", callback);
+  return () => mql.removeEventListener("change", callback);
+}
+
+function getIsMobileSnapshot() {
+  return typeof window !== "undefined"
+    ? window.matchMedia("(max-width: 1023px)").matches
+    : false;
+}
+
+function getServerIsMobileSnapshot() {
+  return false;
+}
+
+function useIsMobile() {
+  return useSyncExternalStore(
+    subscribeMobile,
+    getIsMobileSnapshot,
+    getServerIsMobileSnapshot,
+  );
+}
+
+const emptySubscribe = () => () => {};
+const getTrueSnapshot = () => true;
+const getFalseSnapshot = () => false;
+
+function getPageTitle(pathname: string): string {
+  if (pathname === "/dashboard") return "Dashboard";
+  if (pathname === "/office/dashboard") return "Dashboard Office";
+  if (pathname === "/office/companies") return "Manajemen Instansi";
+  if (pathname === "/office/users") return "Pengguna Platform";
+  if (pathname.startsWith("/office/books")) return "Inspeksi Katalog";
+  if (pathname.startsWith("/office/loans")) return "Inspeksi Transaksi";
+  if (pathname.startsWith("/office/members")) return "Inspeksi Anggota";
+  if (pathname === "/loans/new") return "Peminjaman Buku";
+  if (pathname.startsWith("/loans")) return "Peminjaman";
+  if (pathname.startsWith("/returns")) return "Pengembalian";
+  if (pathname.startsWith("/transactions")) return "Riwayat Transaksi";
+  if (pathname.startsWith("/master/members")) return "Data Anggota";
+  if (pathname.startsWith("/master/books")) return "Data Buku";
+  if (pathname.startsWith("/settings/company")) return "Konfigurasi Instansi";
+  if (pathname.startsWith("/settings/users")) return "Kelola Pengguna";
+  if (pathname === "/profile") return "Profil Akun";
+  return "BukuFlow";
 }
 
 export default function AppShell({ children }: AppShellProps) {
@@ -23,89 +86,213 @@ export default function AppShell({ children }: AppShellProps) {
   const router = useRouter();
   const isLoginPage = pathname === "/login";
 
-  const [sidebarOpen, setSidebarOpen] = useState(false);
-  const [authSession, setAuthSession] = useState<AuthSession | null>(null);
-  const [isReady, setIsReady] = useState(false);
+  const isMobile = useIsMobile();
+  const [sidebarOpenDesktop, setSidebarOpenDesktop] = useState(() => {
+    if (typeof window !== "undefined") {
+      const stored = localStorage.getItem("bukuflow_sidebar_desktop");
+      if (stored !== null) return stored === "true";
+    }
+    return true;
+  });
+  const [sidebarOpenMobile, setSidebarOpenMobile] = useState(false);
+  const menuButtonRef = useRef<HTMLButtonElement>(null);
 
-  // State Timer & Modals
-  const [remainingSeconds, setRemainingSeconds] = useState(3600);
-  const [showExpiredModal, setShowExpiredModal] = useState(false);
+  const sidebarOpen = isMobile ? sidebarOpenMobile : sidebarOpenDesktop;
+  const setSidebarOpen = useCallback((val: boolean | ((prev: boolean) => boolean)) => {
+    if (isMobile) {
+      setSidebarOpenMobile(val);
+    } else {
+      setSidebarOpenDesktop((prev) => {
+        const next = typeof val === "function" ? val(prev) : val;
+        try {
+          localStorage.setItem("bukuflow_sidebar_desktop", String(next));
+        } catch {
+          // ignore
+        }
+        return next;
+      });
+    }
+  }, [isMobile]);
+
+  const [userMenuOpen, setUserMenuOpen] = useState(false);
+  const [showHeaderLogoutConfirm, setShowHeaderLogoutConfirm] = useState(false);
+  const userMenuRef = useRef<HTMLDivElement>(null);
+  const [now, setNow] = useState(() => Date.now());
+
+  const authSession = useSyncExternalStore(
+    subscribeSession,
+    getAuthData,
+    () => null,
+  );
+
+  const [cachedSession, setCachedSession] = useState<AuthSession | null>(null);
+  const [prevAuth, setPrevAuth] = useState<AuthSession | null>(null);
+  if (authSession !== prevAuth) {
+    setPrevAuth(authSession);
+    if (authSession) {
+      setCachedSession(authSession);
+    }
+  }
+  const currentSession = authSession || cachedSession;
+
+  const mounted = useSyncExternalStore(
+    emptySubscribe,
+    getTrueSnapshot,
+    getFalseSnapshot,
+  );
+
+  const [prevPathname, setPrevPathname] = useState(pathname);
+  if (pathname !== prevPathname) {
+    setPrevPathname(pathname);
+    setSidebarOpenMobile(false);
+    setUserMenuOpen(false);
+  }
+
+  // Click outside and Escape for user menu
+  useEffect(() => {
+    if (!userMenuOpen) return;
+
+    function handleClickOutside(event: MouseEvent) {
+      if (
+        userMenuRef.current &&
+        !userMenuRef.current.contains(event.target as Node)
+      ) {
+        setUserMenuOpen(false);
+      }
+    }
+
+    function handleKeyDown(event: KeyboardEvent) {
+      if (event.key === "Escape") {
+        setUserMenuOpen(false);
+      }
+    }
+
+    document.addEventListener("mousedown", handleClickOutside);
+    document.addEventListener("keydown", handleKeyDown);
+    return () => {
+      document.removeEventListener("mousedown", handleClickOutside);
+      document.removeEventListener("keydown", handleKeyDown);
+    };
+  }, [userMenuOpen]);
+
+  // Session Expired State
+  const [isSessionExpired, setIsSessionExpired] = useState(() =>
+    typeof window !== "undefined" ? isStoredSessionExpired() : false
+  );
+  const [expiredModalDismissed, setExpiredModalDismissed] = useState(false);
+
+  // Sinkronisasi status sesi: Ketika user berhasil login / memperbarui sesi,
+  // reset seluruh status expired agar modal tertutup dan timer berjalan normal
+  useEffect(() => {
+    if (authSession) {
+      const exp = new Date(authSession.expiresAt).getTime();
+      if (exp > Date.now()) {
+        // eslint-disable-next-line react-hooks/set-state-in-effect -- Sinkronisasi reset modal expired saat sesi auth diperbarui
+        setIsSessionExpired(false);
+        setExpiredModalDismissed(false);
+        setNow(Date.now());
+      }
+    }
+  }, [authSession]);
+
+  // Jika sedang di halaman login, pastikan status expired direset
+  useEffect(() => {
+    if (isLoginPage) {
+      // eslint-disable-next-line react-hooks/set-state-in-effect -- Reset status sesi expired ketika membuka halaman login
+      setIsSessionExpired(false);
+      setExpiredModalDismissed(false);
+      setCachedSession(null);
+    }
+  }, [isLoginPage]);
+
+  // Centralized Route Access Guard
+  const activeUser = currentSession?.user || (typeof window !== "undefined" ? getStoredUser() : null);
+  const userRole = activeUser?.role;
+  const routeAccess = !isLoginPage && userRole ? getRouteAccess(pathname, userRole) : { allowed: true, redirect: "" };
+
+  // Auth Guard: Memastikan hanya user tanpa riwayat auth yang langsung diredirect ke login.
+  // Jika sesi expired, modal sesi berakhir ditampilkan dan BUKAN force redirect mendadak!
+  useEffect(() => {
+    if (!mounted || isLoginPage) return;
+
+    if (isSessionExpired || isStoredSessionExpired()) {
+      if (!isSessionExpired && !expiredModalDismissed) {
+        // eslint-disable-next-line react-hooks/set-state-in-effect -- Tandai status expired saat token autentikasi di storage kedaluwarsa
+        setIsSessionExpired(true);
+      }
+      return;
+    }
+
+    if (!authSession && !hasStoredAuth()) {
+      router.replace("/login");
+      return;
+    }
+
+    // Role-based route guard: jika role tidak diizinkan, arahkan ke target redirect
+    if (userRole && !routeAccess.allowed && routeAccess.redirect) {
+      router.replace(routeAccess.redirect);
+    }
+  }, [
+    mounted,
+    isLoginPage,
+    authSession,
+    isSessionExpired,
+    expiredModalDismissed,
+    userRole,
+    routeAccess.allowed,
+    routeAccess.redirect,
+    router,
+  ]);
+
+  // Countdown Timer Logic
+  useEffect(() => {
+    if (isLoginPage || !currentSession) return;
+    const interval = setInterval(() => {
+      setNow(Date.now());
+    }, 1000);
+    return () => clearInterval(interval);
+  }, [isLoginPage, currentSession]);
+
+  const expireTime = currentSession
+    ? new Date(currentSession.expiresAt).getTime()
+    : 0;
+  const remainingSeconds = expireTime
+    ? Math.max(0, Math.floor((expireTime - now) / 1000))
+    : 0;
+
+  // 1. Deteksi waktu sesi habis dari countdown (00:00) atau timestamp expired
+  useEffect(() => {
+    if (isLoginPage) return;
+    if (isStoredSessionExpired() && !isSessionExpired && !expiredModalDismissed) {
+      // eslint-disable-next-line react-hooks/set-state-in-effect -- Deteksi dan tandai sesi kedaluwarsa berdasarkan interval timer sekarang
+      setIsSessionExpired(true);
+    }
+  }, [now, isLoginPage, isSessionExpired, expiredModalDismissed]);
+
+  // 2. Deteksi event 401 dari backend API (Sesi dibatalkan / token expired)
+  useEffect(() => {
+    if (isLoginPage) return;
+
+    const handleExpiredEvent = () => {
+      if (!expiredModalDismissed) {
+        setIsSessionExpired(true);
+      }
+    };
+
+    window.addEventListener("bukuflow:session_expired", handleExpiredEvent);
+    return () => {
+      window.removeEventListener("bukuflow:session_expired", handleExpiredEvent);
+    };
+  }, [isLoginPage, expiredModalDismissed]);
+
+  const showExpiredModal =
+    !isLoginPage && (isSessionExpired || isStoredSessionExpired()) && !expiredModalDismissed;
 
   // State Relogin Modal (Perpanjang Sesi)
   const [showReloginModal, setShowReloginModal] = useState(false);
   const [reloginPassword, setReloginPassword] = useState("");
   const [reloginLoading, setReloginLoading] = useState(false);
   const [reloginError, setReloginError] = useState("");
-
-  // 1. Guard & Auth Initialization
-  useEffect(() => {
-    if (isLoginPage) {
-      setAuthSession(null);
-      setShowExpiredModal(false);
-      setIsReady(true);
-      return;
-    }
-
-    const session = getAuthData();
-    if (!session) {
-      setAuthSession(null);
-      setIsReady(true);
-      router.replace("/login");
-      return;
-    }
-
-    setAuthSession(session);
-    setIsReady(true);
-
-    // Multi-tab listener
-    const unsubscribe = subscribeSession(() => {
-      if (isLoginPage) return;
-      const current = getAuthData();
-      if (!current) {
-        setShowExpiredModal((isModalOpen) => {
-          if (!isModalOpen) {
-            setAuthSession(null);
-            router.replace("/login");
-          }
-          return isModalOpen;
-        });
-      } else {
-        setAuthSession(current);
-        setShowExpiredModal(false);
-      }
-    });
-
-    return () => unsubscribe();
-  }, [isLoginPage, router]);
-
-  // 2. Countdown Timer Logic (MM:SS)
-  useEffect(() => {
-    if (isLoginPage || !authSession) return;
-
-    const expireTime = new Date(authSession.expiresAt).getTime();
-    if (isNaN(expireTime)) return;
-
-    const initialDiff = Math.max(0, Math.floor((expireTime - Date.now()) / 1000));
-    setRemainingSeconds(initialDiff);
-
-    if (initialDiff <= 0) {
-      setShowExpiredModal(true);
-      return;
-    }
-
-    const interval = setInterval(() => {
-      const diff = Math.max(0, Math.floor((expireTime - Date.now()) / 1000));
-      setRemainingSeconds(diff);
-
-      // Munculkan modal ketika sesi habis (00:00)
-      if (diff <= 0) {
-        clearInterval(interval);
-        setShowExpiredModal(true);
-      }
-    }, 1000);
-
-    return () => clearInterval(interval);
-  }, [isLoginPage, authSession]);
 
   // Format detik menjadi MM:SS
   const formatTimer = (seconds: number) => {
@@ -114,7 +301,7 @@ export default function AppShell({ children }: AppShellProps) {
     return `${String(mins).padStart(2, "0")}:${String(secs).padStart(2, "0")}`;
   };
 
-  // 3. Handle Relogin (Perpanjang Sesi)
+  // Handle Relogin (Perpanjang Sesi)
   async function handleReloginSubmit(e: React.FormEvent) {
     e.preventDefault();
     if (!authSession) return;
@@ -125,11 +312,20 @@ export default function AppShell({ children }: AppShellProps) {
     try {
       const response = await loginApi(
         authSession.user.email || "",
-        reloginPassword
+        reloginPassword,
       );
       const user = response.data;
+      const companyId = user.companyId || "";
+      const role = user.role || "STAFF";
+
+      if (role !== "SUPER_ADMIN" && !companyId) {
+        setReloginError("Akun belum terhubung ke instansi.");
+        setReloginLoading(false);
+        return;
+      }
 
       // Update session dengan token baru & reset 60 menit
+      const u = user as unknown as Record<string, unknown>;
       saveAuthData({
         accessToken: response.access_token,
         tokenType: response.token_type,
@@ -139,31 +335,33 @@ export default function AppShell({ children }: AppShellProps) {
           email: user.email,
           username: user.email,
           role: user.role,
-          companyId: user.companyId || "company-001",
+          companyId,
           status: "ACTIVE",
-          createdAt: new Date().toISOString(),
-          updatedAt: new Date().toISOString(),
+          createdAt: (typeof u.created_at === "string" ? u.created_at : typeof u.createdAt === "string" ? u.createdAt : ""),
+          updatedAt: (typeof u.updated_at === "string" ? u.updated_at : typeof u.updatedAt === "string" ? u.updatedAt : ""),
         },
       });
 
+      setIsSessionExpired(false);
+      setExpiredModalDismissed(false);
+      setNow(Date.now());
       setShowReloginModal(false);
       setReloginPassword("");
-    } catch (err: any) {
-      setReloginError(
-        err.response?.data?.detail || err.message || "Password salah."
-      );
+    } catch (err: unknown) {
+      setReloginError(getErrorMessage(err, "Password salah. Silakan periksa kembali akun Anda."));
     } finally {
       setReloginLoading(false);
     }
   }
 
   // Handle Pengalihan ke Login saat Expired
-  function handleGoToLogin() {
-    setShowExpiredModal(false);
-    setAuthSession(null);
+  const handleGoToLogin = useCallback(() => {
+    setExpiredModalDismissed(true);
+    setIsSessionExpired(false);
+    setCachedSession(null);
     clearAuthData();
     router.replace("/login?reason=expired");
-  }
+  }, [router]);
 
   // Handle Keyboard Escape saat Expired Modal Muncul
   useEffect(() => {
@@ -177,222 +375,397 @@ export default function AppShell({ children }: AppShellProps) {
 
     window.addEventListener("keydown", handleKeyDown);
     return () => window.removeEventListener("keydown", handleKeyDown);
-  }, [showExpiredModal]);
+  }, [showExpiredModal, handleGoToLogin]);
 
   // Jika halaman login atau belum siap
   if (isLoginPage) {
     return <>{children}</>;
   }
 
-  if (!isReady) {
-    return (
-      <div className="flex min-h-screen items-center justify-center bg-slate-50">
-        <div className="flex flex-col items-center">
-          <div className="relative flex h-16 w-16 items-center justify-center">
-            <div
-              className="absolute inset-0 animate-spin rounded-full border-2 border-blue-100 border-t-blue-600"
-              aria-hidden="true"
-            />
-            <div className="animate-pulse">
-              <img
-                src="/logo-icon.png"
-                alt="BukuFlow Loading"
-                className="h-8 w-8 object-contain"
-              />
-            </div>
-          </div>
-          <p className="mt-3 text-xs font-medium text-slate-500">Memuat BukuFlow...</p>
-        </div>
-      </div>
-    );
+  if (!mounted || (!currentSession && !isSessionExpired && !isStoredSessionExpired())) {
+    return <LoadingState label="Memuat BukuFlow..." />;
+  }
+
+  // Jika hak akses rute belum diizinkan, render LoadingState untuk mencegah kilatan konten
+  if (userRole && !routeAccess.allowed) {
+    return <LoadingState label="Memverifikasi hak akses..." />;
   }
 
   // Visual State indicator berdasarkan sisa waktu
   const isCritical = remainingSeconds <= 60; // <= 1 menit
-  const isWarning = remainingSeconds <= 300 && !isCritical; // <= 5 menit
+
+  const pageTitle = getPageTitle(pathname);
+  const userInitials = activeUser?.name
+    ? activeUser.name
+        .split(" ")
+        .map((n) => n[0])
+        .slice(0, 2)
+        .join("")
+        .toUpperCase()
+    : "U";
+
+  const roleLabel =
+    activeUser?.role === "SUPER_ADMIN"
+      ? "Super Admin"
+      : activeUser?.role === "COMPANY_ADMIN"
+      ? "Admin Perpustakaan"
+      : "Staf";
 
   return (
-    <div className="min-h-screen bg-slate-50 flex flex-col">
-      {/* HEADER UTAMA */}
-      <div className = "print:hidden sticky top-0 z-30 flex h-16 items-center justify-between border-b border-slate-200 bg-white/95 backdrop-blur-sm px-4 sm:px-6">
-        {/* Sisi Kiri: Menu & Logo */}
-        <div className="flex items-center">
-          <button
-            type="button"
-            onClick={() => setSidebarOpen(true)}
-            aria-label="Buka menu navigasi"
-            className="flex h-10 w-10 items-center justify-center rounded-lg border border-slate-200 bg-white text-slate-700 shadow-sm transition hover:bg-slate-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-slate-400"
-          >
-            <MenuIcon />
-          </button>
-          <Link
-            href={authSession?.user?.role === "SUPER_ADMIN" ? "/office/dashboard" : "/dashboard"}
-            className="ml-3 flex items-center focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 rounded"
-          >
-            <img
-              src="/logo.png"
-              alt="BukuFlow Logo"
-              className="h-8 w-auto object-contain"
-            />
-          </Link>
-        </div>
+    <div className="min-h-screen bg-slate-50 flex">
+      {/* SIDEBAR: Di desktop (lg+) full-height di kiri; di mobile (<lg) berupa drawer overlay */}
+      <Sidebar
+        open={sidebarOpen}
+        mobile={isMobile}
+        onToggle={() => setSidebarOpen((current) => !current)}
+        onClose={() => setSidebarOpen(false)}
+        triggerRef={menuButtonRef}
+      />
 
-        {/* Sisi Kanan: Modern Clean Session Indicator */}
-        <div className="flex items-center gap-1.5 sm:gap-3 shrink-0">
-          {/* Badge / Pill Sesi */}
-          <div
-            className={`inline-flex items-center gap-1.5 shrink-0 whitespace-nowrap rounded-full px-2.5 sm:px-3 py-1 sm:py-1.5 text-xs font-medium transition-all ${
-              isCritical
-                ? "border border-rose-200 bg-rose-50 text-rose-700 animate-pulse"
-                : isWarning
-                ? "border border-amber-200 bg-amber-50 text-amber-800"
-                : "border border-blue-100 bg-blue-50/70 text-blue-700"
-            }`}
-          >
-            {isCritical || isWarning ? (
-              <WarningIcon />
-            ) : (
-              <ClockIcon />
+      {/* SISI KANAN: HEADER & KONTEN UTAMA */}
+      <div className="flex-1 flex flex-col min-w-0">
+        {/* HEADER UTAMA */}
+        <header className="print:hidden sticky top-0 z-30 flex h-16 items-center justify-between border-b border-slate-200 bg-white/95 backdrop-blur-sm px-4 sm:px-6">
+          {/* Sisi Kiri: Menu Hamburger (hanya di mobile) & Judul Halaman */}
+          <div className="flex items-center gap-2.5 sm:gap-3 min-w-0">
+            {isMobile && (
+              <>
+                <button
+                  ref={menuButtonRef}
+                  type="button"
+                  onClick={() => setSidebarOpen((prev) => !prev)}
+                  aria-label="Buka menu navigasi"
+                  aria-expanded={sidebarOpen}
+                  aria-controls="app-sidebar"
+                  className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg border border-slate-200 bg-white text-slate-700 shadow-xs transition hover:bg-slate-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-slate-400"
+                >
+                  <MenuIcon />
+                </button>
+
+                <Link
+                  href={currentSession?.user?.role === "SUPER_ADMIN" ? "/office/dashboard" : "/dashboard"}
+                  className="flex items-center focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 rounded shrink-0"
+                >
+                  <img
+                    src="/logo-icon.png"
+                    alt="BukuFlow Logo"
+                    className="h-7 w-7 object-contain sm:hidden"
+                  />
+                  <img
+                    src="/logo.png"
+                    alt="BukuFlow Logo"
+                    className="h-8 w-auto object-contain hidden sm:block"
+                  />
+                </Link>
+
+                <div className="h-5 w-px bg-slate-200 mx-0.5 sm:mx-1" />
+              </>
             )}
-            <span className="tabular-nums whitespace-nowrap inline-flex items-center gap-1 leading-none">
-              {isCritical || isWarning ? (
-                <>
-                  <span className="hidden sm:inline">Sesi berakhir dalam</span>
-                  <span className="sm:hidden">Sisa</span>
-                  <strong className="font-semibold font-mono">{formatTimer(remainingSeconds)}</strong>
-                </>
-              ) : (
-                <>
-                  <span className="hidden sm:inline">Sesi aktif ·</span>
-                  <strong className="font-semibold font-mono">{formatTimer(remainingSeconds)}</strong>
-                </>
-              )}
-            </span>
+
+            <h1 className="text-base sm:text-lg font-bold text-slate-900 tracking-tight truncate">
+              {pageTitle}
+            </h1>
           </div>
 
-          {/* Tombol Perpanjang (Clean Outline) */}
+        {/* Sisi Kanan: Warning Timer Sesi (<= 5 menit) & Menu User */}
+        <div className="flex items-center gap-2 sm:gap-4 shrink-0">
+          {/* Badge / Pill Sesi: Disembunyikan sampai <= 5 menit (hanya tampil di desktop sm+) */}
+          {remainingSeconds <= 300 && (
+            <div className="hidden sm:flex items-center gap-1.5 sm:gap-2 shrink-0">
+              <div
+                role="status"
+                aria-live="polite"
+                className={`inline-flex items-center gap-1.5 shrink-0 whitespace-nowrap rounded-full px-2.5 sm:px-3 py-1 sm:py-1.5 text-xs font-medium transition-all ${
+                  isCritical
+                    ? "border border-red-200 bg-red-50 text-red-700 animate-pulse"
+                    : "border border-amber-200 bg-amber-50 text-amber-800"
+                }`}
+              >
+                <WarningIcon />
+                <span className="tabular-nums whitespace-nowrap inline-flex items-center gap-1 leading-none">
+                  <span>Sesi berakhir dalam</span>
+                  <strong className="font-semibold font-mono">{formatTimer(remainingSeconds)}</strong>
+                </span>
+              </div>
+
+              <button
+                type="button"
+                onClick={() => setShowReloginModal(true)}
+                className="shrink-0 whitespace-nowrap rounded-lg border border-amber-300 bg-amber-50 px-2.5 sm:px-3 py-1 sm:py-1.5 text-xs font-medium text-amber-900 shadow-xs transition hover:bg-amber-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-amber-500"
+              >
+                Perpanjang
+              </button>
+            </div>
+          )}
+
+          {/* Menu User (Profil, Keluar) */}
+          {currentSession?.user && (
+            <div className="relative" ref={userMenuRef}>
+              <button
+                type="button"
+                onClick={() => setUserMenuOpen((prev) => !prev)}
+                aria-expanded={userMenuOpen}
+                aria-haspopup="menu"
+                aria-label={`${userInitials} ${currentSession.user.name} ${roleLabel}, Menu pengguna`}
+                className="flex items-center gap-2 rounded-xl border border-slate-200 bg-white p-1.5 sm:px-2.5 sm:py-1.5 text-left text-xs font-medium text-slate-700 shadow-xs transition hover:bg-slate-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500"
+              >
+                <div className="flex h-7 w-7 shrink-0 items-center justify-center rounded-lg bg-blue-600 font-bold text-white text-xs shadow-xs">
+                  {userInitials}
+                </div>
+                {" "}
+                <div className="hidden md:block max-w-[120px] truncate text-left">
+                  <p className="truncate font-semibold text-slate-800 leading-tight">
+                    {currentSession?.user.name}
+                    {" "}
+                  </p>
+                  <p className="truncate text-xs text-slate-500 font-normal">
+                    {roleLabel}
+                  </p>
+                </div>
+                <svg
+                  className={`h-4 w-4 text-slate-400 transition-transform ${
+                    userMenuOpen ? "rotate-180" : ""
+                  }`}
+                  viewBox="0 0 20 20"
+                  fill="currentColor"
+                  aria-hidden="true"
+                >
+                  <path
+                    fillRule="evenodd"
+                    d="M5.23 7.21a.75.75 0 011.06.02L10 11.168l3.71-3.938a.75.75 0 111.08 1.04l-4.25 4.5a.75.75 0 01-1.08 0l-4.25-4.5a.75.75 0 01.02-1.06z"
+                    clipRule="evenodd"
+                  />
+                </svg>
+              </button>
+
+              {userMenuOpen && (
+                <div
+                  role="menu"
+                  aria-label="Pilihan pengguna"
+                  className="absolute right-0 mt-1.5 w-56 rounded-xl border border-slate-200 bg-white p-1.5 shadow-xl ring-1 ring-black/5 z-50 animate-in fade-in-50 zoom-in-95"
+                >
+                  <div className="px-3 py-2 border-b border-slate-100">
+                    <p className="text-xs font-semibold text-slate-900 truncate">
+                      {currentSession?.user.name}
+                    </p>
+                    <p className="text-xs text-slate-500 truncate">
+                      {currentSession?.user.email}
+                    </p>
+                    <p className="mt-1 inline-block text-xs font-medium text-blue-700 bg-blue-50 px-2 py-0.5 rounded">
+                      {roleLabel}
+                    </p>
+                  </div>
+
+                  <div className="py-1">
+                    <Link
+                      href="/profile"
+                      role="menuitem"
+                      onClick={() => setUserMenuOpen(false)}
+                      className="flex w-full items-center gap-2 rounded-lg px-3 py-2 text-xs font-medium text-slate-700 hover:bg-slate-50 hover:text-slate-900 transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500"
+                    >
+                      <svg
+                        className="h-4 w-4 text-slate-400"
+                        viewBox="0 0 24 24"
+                        fill="none"
+                        stroke="currentColor"
+                        strokeWidth="2"
+                        aria-hidden="true"
+                      >
+                        <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2" />
+                        <circle cx="12" cy="7" r="4" />
+                      </svg>
+                      Profil Akun
+                    </Link>
+
+                    <button
+                      type="button"
+                      role="menuitem"
+                      onClick={() => {
+                        setUserMenuOpen(false);
+                        setShowHeaderLogoutConfirm(true);
+                      }}
+                      className="flex w-full items-center gap-2 rounded-lg px-3 py-2 text-xs font-medium text-red-600 hover:bg-red-50 transition text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-red-500"
+                    >
+                      <svg
+                        className="h-4 w-4 text-red-500"
+                        viewBox="0 0 24 24"
+                        fill="none"
+                        stroke="currentColor"
+                        strokeWidth="2"
+                        aria-hidden="true"
+                      >
+                        <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4" />
+                        <polyline points="16 17 21 12 16 7" />
+                        <line x1="21" y1="12" x2="9" y2="12" />
+                      </svg>
+                      Keluar
+                    </button>
+                  </div>
+                </div>
+              )}
+            </div>
+          )}
+        </div>
+      </header>
+
+      {/* Warning Timer Sesi di Mobile (<= 5 menit): alert bar di bawah header agar tidak menumpuk di navbar */}
+      {remainingSeconds <= 300 && (
+        <aside
+          role="status"
+          aria-live="polite"
+          className={`print:hidden sm:hidden sticky top-16 z-10 flex items-center justify-between border-b px-4 py-2 transition-all ${
+            isCritical
+              ? "border-red-200 bg-red-50 text-red-700 animate-pulse"
+              : "border-amber-200 bg-amber-50 text-amber-800"
+          }`}
+        >
+          <div className="flex items-center gap-1.5 text-xs font-medium min-w-0">
+            <WarningIcon />
+            <span className="truncate">Sesi berakhir dalam</span>
+            <strong className="font-semibold font-mono tabular-nums shrink-0">
+              {formatTimer(remainingSeconds)}
+            </strong>
+          </div>
+
           <button
             type="button"
             onClick={() => setShowReloginModal(true)}
-            className="shrink-0 whitespace-nowrap rounded-lg border border-slate-200 bg-white px-2.5 sm:px-3 py-1 sm:py-1.5 text-xs font-medium text-slate-700 shadow-sm transition hover:border-slate-300 hover:bg-slate-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500"
+            className={`ml-2 shrink-0 rounded-lg border px-2.5 py-1 text-xs font-semibold shadow-xs transition focus-visible:outline-none focus-visible:ring-2 ${
+              isCritical
+                ? "border-red-300 bg-white text-red-800 hover:bg-red-50 focus-visible:ring-red-500"
+                : "border-amber-300 bg-white text-amber-900 hover:bg-amber-50 focus-visible:ring-amber-500"
+            }`}
           >
             Perpanjang
           </button>
-        </div>
-      </div>
-
-      {/* MODAL 1: SESI TELAH BERAKHIR (Saat 00:00) */}
-      {showExpiredModal && (
-        <div
-          role="dialog"
-          aria-modal="true"
-          onClick={handleGoToLogin}
-          className="fixed inset-0 z-[100] flex items-center justify-center bg-slate-900/60 p-4 backdrop-blur-sm animate-fade-in cursor-pointer"
-        >
-          <div
-            onClick={(e) => e.stopPropagation()}
-            className="w-full max-w-md rounded-2xl bg-white p-6 sm:p-7 shadow-2xl text-center cursor-default"
-          >
-            <div className="mx-auto mb-4 flex h-14 w-14 items-center justify-center rounded-full bg-rose-50 text-rose-600 ring-8 ring-rose-50/50">
-              <LockIcon />
-            </div>
-
-            <h3 className="text-lg font-bold text-slate-900 sm:text-xl">
-              Sesi Anda telah berakhir
-            </h3>
-
-            <p className="mt-2 text-sm text-slate-500 leading-relaxed">
-              Sesi Anda berakhir karena tidak ada aktivitas. Silakan masuk kembali untuk melanjutkan.
-            </p>
-
-            <div className="mt-6">
-              <button
-                type="button"
-                autoFocus
-                onClick={handleGoToLogin}
-                className="w-full rounded-xl bg-blue-600 px-4 py-2.5 text-sm font-semibold text-white shadow-sm transition hover:bg-blue-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 focus-visible:ring-offset-2"
-              >
-                Masuk Kembali
-              </button>
-            </div>
-          </div>
-        </div>
+        </aside>
       )}
-
-      {/* MODAL 2: RELOGIN (INPUT PASSWORD UNTUK PERPANJANG SESI) */}
-      {showReloginModal && (
-        <div
-          role="dialog"
-          aria-modal="true"
-          className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/50 p-4 backdrop-blur-sm"
-        >
-          <div className="w-full max-w-md rounded-2xl bg-white p-6 sm:p-7 shadow-2xl">
-            <h3 className="text-lg font-bold text-slate-900">Perpanjang Sesi Login</h3>
-            <p className="mt-1 text-sm text-slate-500">
-              Masukkan password akun <strong>{authSession?.user.email}</strong> untuk memperpanjang waktu sesi menjadi 60 menit.
-            </p>
-
-            <form onSubmit={handleReloginSubmit} className="mt-5 space-y-4">
-              <div>
-                <label className="block text-xs font-semibold text-slate-700">
-                  Password
-                </label>
-                <input
-                  type="password"
-                  value={reloginPassword}
-                  onChange={(e) => setReloginPassword(e.target.value)}
-                  placeholder="Masukkan password Anda"
-                  required
-                  autoFocus
-                  className="mt-1.5 w-full rounded-lg border border-slate-300 px-3.5 py-2 text-sm outline-none transition focus:border-blue-500 focus:ring-2 focus:ring-blue-100"
-                />
-              </div>
-
-              {reloginError && (
-                <div
-                  role="alert"
-                  className="rounded-lg bg-red-50 p-3 text-xs text-red-700 border border-red-200"
-                >
-                  {reloginError}
-                </div>
-              )}
-
-              <div className="flex justify-end gap-2.5 pt-3">
-                <button
-                  type="button"
-                  disabled={reloginLoading}
-                  onClick={() => {
-                    setShowReloginModal(false);
-                    setReloginError("");
-                    setReloginPassword("");
-                  }}
-                  className="rounded-lg border border-slate-200 px-4 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50"
-                >
-                  Batal
-                </button>
-                <button
-                  type="submit"
-                  disabled={reloginLoading || !reloginPassword}
-                  className="rounded-lg bg-blue-600 px-4 py-2 text-sm font-semibold text-white transition hover:bg-blue-700 disabled:opacity-50"
-                >
-                  {reloginLoading ? "Memverifikasi..." : "Perpanjang Sesi"}
-                </button>
-              </div>
-            </form>
-          </div>
-        </div>
-      )}
-
-      {/* SIDEBAR OVERLAY */}
-      <Sidebar
-        open={sidebarOpen}
-        mobile={true}
-        onToggle={() => setSidebarOpen((current) => !current)}
-        onClose={() => setSidebarOpen(false)}
-      />
 
       {/* KONTEN UTAMA */}
-      <div className="flex-1 flex flex-col min-w-0">{children}</div>
+      <main
+        id="main-content"
+        tabIndex={-1}
+        className="flex-1 flex flex-col min-w-0 outline-none focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand/40"
+      >
+        {children}
+      </main>
+    </div>
+
+      {/* MODAL 1: SESI TELAH BERAKHIR (Saat 00:00) */}
+      <Modal
+        open={showExpiredModal}
+        onClose={handleGoToLogin}
+        closeOnEscape={false}
+        closeOnBackdrop={false}
+        showCloseButton={false}
+        size="md"
+      >
+        <div className="text-center py-2 cursor-default">
+          <div className="mx-auto mb-4 flex h-14 w-14 items-center justify-center rounded-full bg-red-50 text-red-600 ring-8 ring-red-50/50">
+            <LockIcon />
+          </div>
+
+          <h3 className="text-lg font-bold text-slate-900 sm:text-xl">
+            Sesi Anda telah berakhir
+          </h3>
+
+          <p className="mt-2 text-sm text-slate-500 leading-relaxed">
+            Sesi Anda berakhir karena batas waktu. Silakan masuk kembali untuk melanjutkan.
+          </p>
+
+          <div className="mt-6">
+            <Button
+              type="button"
+              autoFocus
+              onClick={handleGoToLogin}
+              className="w-full justify-center"
+            >
+              Masuk Kembali
+            </Button>
+          </div>
+        </div>
+      </Modal>
+
+      {/* MODAL 2: RELOGIN (INPUT PASSWORD UNTUK PERPANJANG SESI) */}
+      <Modal
+        open={showReloginModal}
+        onClose={() => {
+          setShowReloginModal(false);
+          setReloginError("");
+          setReloginPassword("");
+        }}
+        title="Perpanjang Sesi Login"
+        description={
+          <>
+            Masukkan password akun <strong>{currentSession?.user.email}</strong> untuk memperpanjang waktu sesi menjadi 60 menit.
+          </>
+        }
+        size="md"
+      >
+        <form onSubmit={handleReloginSubmit} className="space-y-4">
+          <div>
+            <label htmlFor="relogin-password" className="block text-xs font-semibold text-slate-700">
+              Password
+            </label>
+            <input
+              id="relogin-password"
+              type="password"
+              value={reloginPassword}
+              onChange={(e) => setReloginPassword(e.target.value)}
+              placeholder="Masukkan password Anda"
+              required
+              autoFocus
+              className="mt-1.5 w-full h-11 rounded-lg border border-slate-300 px-3.5 text-sm transition focus:border-blue-500 focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 focus-visible:border-blue-500"
+            />
+          </div>
+
+          {reloginError && (
+            <div
+              role="alert"
+              className="rounded-lg bg-red-50 p-3 text-xs text-red-700 border border-red-200"
+            >
+              {reloginError}
+            </div>
+          )}
+
+          <div className="flex justify-end gap-2.5 pt-3">
+            <Button
+              type="button"
+              variant="secondary"
+              disabled={reloginLoading}
+              onClick={() => {
+                setShowReloginModal(false);
+                setReloginError("");
+                setReloginPassword("");
+              }}
+            >
+              Batal
+            </Button>
+            <Button
+              type="submit"
+              disabled={reloginLoading || !reloginPassword}
+              loading={reloginLoading}
+            >
+              {reloginLoading ? "Memverifikasi..." : "Perpanjang Sesi"}
+            </Button>
+          </div>
+        </form>
+      </Modal>
+
+
+      {/* Confirmation Dialog Logout Header (Konsisten dengan Profil dan Sidebar) */}
+      <ConfirmationDialog
+        open={showHeaderLogoutConfirm}
+        title="Konfirmasi Keluar Akun"
+        description="Apakah Anda yakin ingin keluar dari sistem BukuFlow? Sesi kerja aktif Anda akan ditutup."
+        confirmLabel="Ya, Keluar"
+        tone="destructive"
+        onConfirm={async () => {
+          setShowHeaderLogoutConfirm(false);
+          await logoutApi();
+        }}
+        onClose={() => setShowHeaderLogoutConfirm(false)}
+      />
     </div>
   );
 }
@@ -400,24 +773,6 @@ export default function AppShell({ children }: AppShellProps) {
 // ----------------------------------------------------
 // ICONS
 // ----------------------------------------------------
-
-function ClockIcon() {
-  return (
-    <svg
-      className="h-3.5 w-3.5 shrink-0"
-      viewBox="0 0 24 24"
-      fill="none"
-      stroke="currentColor"
-      strokeWidth="2"
-      strokeLinecap="round"
-      strokeLinejoin="round"
-      aria-hidden="true"
-    >
-      <circle cx="12" cy="12" r="10" />
-      <polyline points="12 6 12 12 16 14" />
-    </svg>
-  );
-}
 
 function WarningIcon() {
   return (
@@ -466,6 +821,7 @@ function MenuIcon() {
       stroke="currentColor"
       strokeWidth="2"
       strokeLinecap="round"
+      aria-hidden="true"
     >
       <line x1="4" y1="6" x2="20" y2="6" />
       <line x1="4" y1="12" x2="20" y2="12" />

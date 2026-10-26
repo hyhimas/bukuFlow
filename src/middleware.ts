@@ -7,6 +7,12 @@ export function middleware(request: NextRequest) {
 
   const { pathname } = request.nextUrl;
 
+  // /test-api tidak diizinkan di production dan harus diredirect
+  if (pathname === "/test-api" || pathname.startsWith("/test-api/")) {
+    const targetUrl = new URL(isAuthenticated ? "/dashboard" : "/login", request.url);
+    return NextResponse.redirect(targetUrl);
+  }
+
   const isProtectedPath =
     pathname.startsWith("/dashboard") ||
     pathname.startsWith("/office") ||
@@ -14,7 +20,8 @@ export function middleware(request: NextRequest) {
     pathname.startsWith("/returns") ||
     pathname.startsWith("/transactions") ||
     pathname.startsWith("/master") ||
-    pathname.startsWith("/profile");
+    pathname.startsWith("/profile") ||
+    pathname.startsWith("/settings");
 
   const isAuthPath = pathname.startsWith("/login");
 
@@ -40,6 +47,9 @@ export const config = {
     "/transactions/:path*",
     "/master/:path*",
     "/profile/:path*",
+    "/settings/:path*",
+    "/test-api",
+    "/test-api/:path*",
     "/login",
   ],
 };

@@ -1,42 +1,81 @@
 "use client";
 
 import Link from "next/link";
-import { usePathname, useRouter } from "next/navigation";
-import { useEffect, useRef, useState } from "react";
-import { mockCompanies } from "@/lib/mock-data";
-import { clearSession, getSession, type Session } from "@/lib/auth";
+import { usePathname } from "next/navigation";
+import {
+  useEffect,
+  useRef,
+  useState,
+  useSyncExternalStore,
+  type RefObject,
+} from "react";
+import { getSession, subscribeSession } from "@/lib/auth";
 import { canAccessMasterData, canAccessOffice } from "@/lib/authorization";
 import { logoutApi } from "@/lib/api";
+import ConfirmationDialog from "@/components/ui/ConfirmationDialog";
 
 interface SidebarProps {
   open: boolean;
-  mobile: boolean;
-  onToggle: () => void;
+  mobile?: boolean;
+  onToggle?: () => void;
   onClose: () => void;
+  triggerRef?: RefObject<HTMLElement | null>;
 }
 
 export default function Sidebar({
   open,
-  mobile,
+  mobile = true,
   onToggle,
   onClose,
+  triggerRef,
 }: SidebarProps) {
   const pathname = usePathname();
-  const router = useRouter();
   const sidebarRef = useRef<HTMLElement>(null);
-  const [session, setSession] = useState<Session | null>(null);
+  const closeButtonRef = useRef<HTMLButtonElement>(null);
+  const prevOpenRef = useRef(open);
+  const session = useSyncExternalStore(subscribeSession, getSession, () => null);
+  const [showLogoutConfirm, setShowLogoutConfirm] = useState(false);
 
+  // Fokus masuk saat buka dan kembali ke hamburger saat tutup (pada mobile drawer)
   useEffect(() => {
-    setSession(getSession());
-  }, []);
+    if (mobile) {
+      if (open && !prevOpenRef.current) {
+        // Fokus masuk ke drawer saat dibuka (prioritas tombol tutup, fallback ke elemen interaktif pertama)
+        const targetToFocus =
+          closeButtonRef.current ||
+          sidebarRef.current?.querySelector<HTMLElement>(
+            'button:not([disabled]), [tabindex]:not([tabindex="-1"]), a[href]',
+          );
+        targetToFocus?.focus();
+      } else if (!open && prevOpenRef.current) {
+        // Fokus kembali ke tombol hamburger toggle saat drawer ditutup
+        if (triggerRef?.current) {
+          triggerRef.current.focus();
+        } else {
+          const hamburger = document.querySelector<HTMLElement>(
+            'button[aria-controls="app-sidebar"]',
+          );
+          hamburger?.focus();
+        }
+      }
+    }
+    prevOpenRef.current = open;
+  }, [open, mobile, triggerRef]);
 
+  // Trap focus & Escape menutup (drawer mobile)
   useEffect(() => {
-    if (!open) return;
+    if (!mobile || !open) return;
 
     const sidebar = sidebarRef.current;
     if (!sidebar) return;
 
     const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key === "Escape") {
+        event.preventDefault();
+        onClose();
+        return;
+      }
+
       if (event.key !== "Tab") return;
 
       const focusableElements = sidebar.querySelectorAll<HTMLElement>(
@@ -68,26 +107,27 @@ export default function Sidebar({
     return () => {
       document.removeEventListener("keydown", handleKeyDown);
     };
-  }, [open]);
+  }, [open, mobile, onClose]);
 
   const role = session?.user.role;
 
-  const currentCompany = mockCompanies.find(
-    (company) => company.id === session?.user.companyId,
-  );
-
- const handleLogout = async () => {
-  await logoutApi();
-};
+  const handleConfirmLogout = async () => {
+    setShowLogoutConfirm(false);
+    await logoutApi();
+  };
 
   const isActive = (href: string) => {
     return pathname === href || pathname.startsWith(`${href}/`);
   };
 
+  const handleNavClick = mobile ? onClose : undefined;
+  const isDesktopCollapsed = !mobile && !open;
+  const isFullyHidden = mobile && !open;
+
   return (
     <>
-      {/* Overlay */}
-      {open && (
+      {/* Overlay - Hanya muncul saat drawer mobile terbuka */}
+      {mobile && open && (
         <button
           type="button"
           aria-label="Tutup menu navigasi"
@@ -96,98 +136,170 @@ export default function Sidebar({
         />
       )}
 
-      {/* Sidebar */}
+      {/* Sidebar (drawer pada mobile, mini icon-only collapsible pada desktop lg+) */}
       <aside
         ref={sidebarRef}
-        className={`print:hidden fixed inset-y-0 left-0 z-50 flex w-72 max-w-[85vw] flex-col border-r border-slate-200 bg-white shadow-xl transition-transform duration-200 ${
-          open ? "translate-x-0" : "-translate-x-full"
+        id="app-sidebar"
+        aria-label="Navigasi utama"
+        aria-hidden={isFullyHidden ? true : undefined}
+        inert={isFullyHidden ? true : undefined}
+        className={`print:hidden flex flex-col border-r border-slate-200 bg-white transition-[width] duration-300 ease-in-out ${
+          mobile
+            ? `fixed inset-y-0 left-0 z-50 w-72 max-w-[85vw] shadow-xl transition-transform duration-200 ${
+                open ? "translate-x-0" : "-translate-x-full"
+              }`
+            : `sticky top-0 h-screen z-30 shrink-0 ${
+                open ? "w-72" : "w-20"
+              }`
         }`}
       >
         {/* Header */}
-        <div className="flex h-16 shrink-0 items-center justify-between border-b border-slate-200 px-5">
-          <Link
-            href={canAccessOffice(role) ? "/office/dashboard" : "/dashboard"}
-            onClick={onClose}
-            tabIndex={open ? 0 : -1}
-            className="flex items-center gap-2"
-          >
-            <img
-              src="/logo.png"
-              alt="BukuFlow Logo"
-              className="h-8 w-auto object-contain"
-            />
-          </Link>
+        <div
+          className={`flex h-16 shrink-0 items-center border-b border-slate-200 ${
+            isDesktopCollapsed ? "justify-center px-2" : "justify-between px-4 sm:px-5"
+          }`}
+        >
+          {isDesktopCollapsed ? (
+            /* Saat Collapsed (Mini Sidebar): Klik icon untuk memperluas */
+            <button
+              type="button"
+              onClick={onToggle}
+              title="Perluas menu samping"
+              aria-label="Perluas menu samping"
+              className="group flex h-10 w-10 items-center justify-center rounded-xl transition hover:bg-blue-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500"
+            >
+              <img
+                src="/logo-icon.png"
+                alt="BukuFlow"
+                className="h-8 w-8 object-contain transition-transform group-hover:scale-110"
+              />
+            </button>
+          ) : (
+            /* Saat Terbuka: Logo di kiri, Tombol Collapse di kanan */
+            <>
+              <Link
+                href={canAccessOffice(role) ? "/office/dashboard" : "/dashboard"}
+                onClick={handleNavClick}
+                className="flex items-center gap-2 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 rounded"
+              >
+                <img
+                  src="/logo.png"
+                  alt="BukuFlow Logo"
+                  className="h-8 w-auto object-contain"
+                />
+              </Link>
 
-          <button
-            type="button"
-            onClick={onToggle}
-            tabIndex={open ? 0 : -1}
-            aria-label="Tutup menu"
-            className="flex h-10 w-10 items-center justify-center rounded-lg text-slate-500 transition hover:bg-slate-100 hover:text-slate-900 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-slate-400"
-          >
-            <CloseIcon />
-          </button>
+              {/* Tombol Collapse pada Desktop ATAU Tombol [X] pada Mobile Drawer */}
+              {mobile ? (
+                <button
+                  ref={closeButtonRef}
+                  type="button"
+                  onClick={onClose}
+                  aria-label="Tutup menu"
+                  className="flex h-10 w-10 items-center justify-center rounded-lg text-slate-500 transition hover:bg-slate-100 hover:text-slate-900 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-slate-400"
+                >
+                  <CloseIcon />
+                </button>
+              ) : (
+                <button
+                  type="button"
+                  onClick={onToggle}
+                  title="Tutup menu samping"
+                  aria-label="Tutup menu samping"
+                  className="flex h-9 w-9 items-center justify-center rounded-lg text-slate-400 transition hover:bg-slate-100 hover:text-slate-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500"
+                >
+                  <svg
+                    width="20"
+                    height="20"
+                    viewBox="0 0 24 24"
+                    fill="none"
+                    stroke="currentColor"
+                    strokeWidth="1.8"
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    aria-hidden="true"
+                  >
+                    <rect width="18" height="18" x="3" y="3" rx="2" />
+                    <path d="M9 3v18" />
+                    <path d="m16 15-3-3 3-3" />
+                  </svg>
+                </button>
+              )}
+            </>
+          )}
         </div>
 
         {/* Navigation */}
-        <nav className="min-h-0 flex-1 overflow-y-auto overflow-x-hidden px-3 py-5">
+        <nav className={`min-h-0 flex-1 overflow-y-auto overflow-x-hidden ${isDesktopCollapsed ? "px-2 py-4 space-y-4" : "px-3 py-5"}`}>
           {canAccessOffice(role) ? (
             /* SUPER ADMIN OFFICE PORTAL */
-            <div className="space-y-6">
+            <div className="space-y-4">
               <div>
-                <p className="px-3 pb-2 text-xs font-semibold uppercase tracking-wider text-blue-600">
-                  Office Platform
-                </p>
+                {!isDesktopCollapsed && (
+                  <p className="px-3 pb-2 text-xs font-semibold uppercase tracking-wider text-slate-500">
+                    Office Platform
+                  </p>
+                )}
                 <div className="space-y-1">
                   <NavItem
                     href="/office/dashboard"
                     label="Dashboard Office"
+                    iconKey="dashboard"
                     active={isActive("/office/dashboard")}
-                    onClick={onClose}
-                    disabled={!open}
+                    onClick={handleNavClick}
+                    disabled={isFullyHidden} collapsed={isDesktopCollapsed}
                   />
                   <NavItem
                     href="/office/companies"
                     label="Manajemen Company"
+                    iconKey="companies"
                     active={isActive("/office/companies")}
-                    onClick={onClose}
-                    disabled={!open}
+                    onClick={handleNavClick}
+                    disabled={isFullyHidden} collapsed={isDesktopCollapsed}
                   />
                   <NavItem
                     href="/office/users"
                     label="Pengguna Platform"
+                    iconKey="users"
                     active={isActive("/office/users")}
-                    onClick={onClose}
-                    disabled={!open}
+                    onClick={handleNavClick}
+                    disabled={isFullyHidden} collapsed={isDesktopCollapsed}
                   />
                 </div>
               </div>
 
               <div>
-                <p className="px-3 pb-2 text-xs font-semibold uppercase tracking-wider text-slate-400">
-                  Support & Audit
-                </p>
+                {isDesktopCollapsed ? (
+                  <div className="my-2.5 mx-2 border-t border-slate-200" title="Support & Audit" />
+                ) : (
+                  <p className="px-3 pb-2 text-xs font-semibold uppercase tracking-wider text-slate-500">
+                    Support & Audit
+                  </p>
+                )}
                 <div className="space-y-1">
                   <NavItem
                     href="/office/books"
                     label="Inspeksi Katalog (Buku)"
-                    active={isActive("/office/books") || isActive("/office/catalog")}
-                    onClick={onClose}
-                    disabled={!open}
+                    iconKey="books"
+                    active={isActive("/office/books")}
+                    onClick={handleNavClick}
+                    disabled={isFullyHidden} collapsed={isDesktopCollapsed}
                   />
                   <NavItem
                     href="/office/loans"
                     label="Inspeksi Transaksi"
+                    iconKey="loans"
                     active={isActive("/office/loans")}
-                    onClick={onClose}
-                    disabled={!open}
+                    onClick={handleNavClick}
+                    disabled={isFullyHidden} collapsed={isDesktopCollapsed}
                   />
                   <NavItem
                     href="/office/members"
                     label="Inspeksi Anggota"
+                    iconKey="members"
                     active={isActive("/office/members")}
-                    onClick={onClose}
-                    disabled={!open}
+                    onClick={handleNavClick}
+                    disabled={isFullyHidden} collapsed={isDesktopCollapsed}
                   />
                 </div>
               </div>
@@ -199,9 +311,10 @@ export default function Sidebar({
                 <NavItem
                   href="/dashboard"
                   label="Dashboard"
+                  iconKey="dashboard"
                   active={isActive("/dashboard")}
-                  onClick={onClose}
-                  disabled={!open}
+                  onClick={handleNavClick}
+                  disabled={isFullyHidden} collapsed={isDesktopCollapsed}
                 />
 
                 {role && (
@@ -209,25 +322,32 @@ export default function Sidebar({
                     <NavItem
                       href={role === "COMPANY_ADMIN" ? "/loans" : "/loans/new"}
                       label="Peminjaman"
-                      active={isActive("/loans")}
-                      onClick={onClose}
-                      disabled={!open}
+                      iconKey="loans"
+                      active={
+                        role === "COMPANY_ADMIN"
+                          ? isActive("/loans")
+                          : pathname === "/loans/new"
+                      }
+                      onClick={handleNavClick}
+                      disabled={isFullyHidden} collapsed={isDesktopCollapsed}
                     />
 
                     <NavItem
                       href="/returns"
                       label="Pengembalian"
+                      iconKey="returns"
                       active={isActive("/returns")}
-                      onClick={onClose}
-                      disabled={!open}
+                      onClick={handleNavClick}
+                      disabled={isFullyHidden} collapsed={isDesktopCollapsed}
                     />
 
                     <NavItem
                       href="/transactions"
                       label="Riwayat Transaksi"
+                      iconKey="history"
                       active={isActive("/transactions")}
-                      onClick={onClose}
-                      disabled={!open}
+                      onClick={handleNavClick}
+                      disabled={isFullyHidden} collapsed={isDesktopCollapsed}
                     />
                   </>
                 )}
@@ -236,25 +356,31 @@ export default function Sidebar({
               {/* Master Data */}
               {role && canAccessMasterData(role) && (
                 <div className="mt-7">
-                  <p className="px-3 pb-2 text-xs font-semibold uppercase tracking-wider text-slate-400">
-                    Master Data
-                  </p>
+                  {isDesktopCollapsed ? (
+                    <div className="my-2 border-t border-slate-200" title="Master Data" />
+                  ) : (
+                    <p className="px-3 pb-2 text-xs font-semibold uppercase tracking-wider text-slate-500">
+                      Master Data
+                    </p>
+                  )}
 
                   <div className="space-y-1">
                     <NavItem
                       href="/master/members"
-                      label="Member"
+                      label="Anggota"
+                      iconKey="members"
                       active={isActive("/master/members")}
-                      onClick={onClose}
-                      disabled={!open}
+                      onClick={handleNavClick}
+                      disabled={isFullyHidden} collapsed={isDesktopCollapsed}
                     />
 
                     <NavItem
                       href="/master/books"
                       label="Buku"
+                      iconKey="books"
                       active={isActive("/master/books")}
-                      onClick={onClose}
-                      disabled={!open}
+                      onClick={handleNavClick}
+                      disabled={isFullyHidden} collapsed={isDesktopCollapsed}
                     />
                   </div>
                 </div>
@@ -263,25 +389,31 @@ export default function Sidebar({
               {/* Pengaturan Instansi */}
               {role === "COMPANY_ADMIN" && (
                 <div className="mt-7">
-                  <p className="px-3 pb-2 text-xs font-semibold uppercase tracking-wider text-slate-400">
-                    Pengaturan
-                  </p>
+                  {isDesktopCollapsed ? (
+                    <div className="my-2 border-t border-slate-200" title="Pengaturan" />
+                  ) : (
+                    <p className="px-3 pb-2 text-xs font-semibold uppercase tracking-wider text-slate-500">
+                      Pengaturan
+                    </p>
+                  )}
 
                   <div className="space-y-1">
                     <NavItem
                       href="/settings/company"
                       label="Konfigurasi Instansi"
+                      iconKey="companies"
                       active={isActive("/settings/company")}
-                      onClick={onClose}
-                      disabled={!open}
+                      onClick={handleNavClick}
+                      disabled={isFullyHidden} collapsed={isDesktopCollapsed}
                     />
 
                     <NavItem
                       href="/settings/users"
                       label="Kelola Pengguna"
+                      iconKey="users"
                       active={isActive("/settings/users")}
-                      onClick={onClose}
-                      disabled={!open}
+                      onClick={handleNavClick}
+                      disabled={isFullyHidden} collapsed={isDesktopCollapsed}
                     />
                   </div>
                 </div>
@@ -291,20 +423,25 @@ export default function Sidebar({
         </nav>
 
         {/* User & Logout */}
-        <div className="shrink-0 border-t border-slate-200 bg-white p-4">
+        <div className={`shrink-0 border-t border-slate-200 bg-white ${isDesktopCollapsed ? "p-2.5 space-y-2 pb-6" : "p-4"}`}>
           {session && (
             <Link
               href="/profile"
-              onClick={onClose}
-              tabIndex={open ? 0 : -1}
-              className={`group mb-3 flex items-center justify-between rounded-xl border p-2.5 transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 ${
-                pathname === "/profile"
-                  ? "border-blue-300 bg-blue-50/90 shadow-sm ring-1 ring-blue-200"
-                  : "border-slate-200 bg-slate-50/80 hover:border-blue-200 hover:bg-blue-50/40"
+              onClick={handleNavClick}
+              tabIndex={isFullyHidden ? -1 : 0}
+              title={isDesktopCollapsed ? `${session.user.name} (${session.user.role})` : undefined}
+              className={`group flex items-center transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 ${
+                isDesktopCollapsed
+                  ? "h-11 w-11 mx-auto justify-center rounded-xl hover:bg-slate-100"
+                  : `mb-3 justify-between rounded-xl border p-2.5 ${
+                      pathname === "/profile"
+                        ? "border-blue-300 bg-blue-50/90 shadow-sm ring-1 ring-blue-200"
+                        : "border-slate-200 bg-slate-50/80 hover:border-blue-200 hover:bg-blue-50/40"
+                    }`
               }`}
             >
-              <div className="flex items-center gap-2.5 overflow-hidden">
-                <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-gradient-to-br from-blue-600 to-indigo-600 font-bold text-white text-xs shadow-sm">
+              {isDesktopCollapsed ? (
+                <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-blue-600 font-bold text-white text-xs shadow-sm">
                   {session.user.name
                     ? session.user.name
                         .split(" ")
@@ -314,104 +451,169 @@ export default function Sidebar({
                         .toUpperCase()
                     : "U"}
                 </div>
-                <div className="min-w-0">
-                  <p className="truncate text-sm font-semibold text-slate-900 group-hover:text-blue-600 transition">
-                    {session.user.name}
-                  </p>
-                  <p className="truncate text-xs text-slate-500 font-medium">
-                    {session.user.role === "SUPER_ADMIN"
-                      ? "Super Admin"
-                      : session.user.role === "COMPANY_ADMIN"
-                      ? "Admin Perpustakaan"
-                      : "Staff"}
-                  </p>
-                </div>
-              </div>
-              <span className="shrink-0 text-slate-400 group-hover:text-blue-600 group-hover:translate-x-0.5 transition">
-                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                  <polyline points="9 18 15 12 9 6" />
-                </svg>
-              </span>
+              ) : (
+                <>
+                  <div className="flex items-center gap-2.5 overflow-hidden">
+                    <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-blue-600 font-bold text-white text-xs shadow-sm">
+                      {session.user.name
+                        ? session.user.name
+                            .split(" ")
+                            .map((n) => n[0])
+                            .slice(0, 2)
+                            .join("")
+                            .toUpperCase()
+                        : "U"}
+                    </div>
+                    <div className="min-w-0">
+                      <p className="truncate text-sm font-semibold text-slate-900 group-hover:text-blue-600 transition">
+                        {session.user.name}
+                      </p>
+                      <p className="truncate text-xs text-slate-700 font-medium">
+                        {session.user.role === "SUPER_ADMIN"
+                          ? "Super Admin"
+                          : session.user.role === "COMPANY_ADMIN"
+                          ? "Admin Perpustakaan"
+                          : "Staff"}
+                      </p>
+                    </div>
+                  </div>
+                  <span className="shrink-0 text-slate-400 group-hover:text-blue-600 group-hover:translate-x-0.5 transition">
+                    <svg aria-hidden="true" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                      <polyline points="9 18 15 12 9 6" />
+                    </svg>
+                  </span>
+                </>
+              )}
             </Link>
           )}
 
           <button
             type="button"
-            onClick={handleLogout}
-            tabIndex={open ? 0 : -1}
-            className="flex w-full items-center gap-3 rounded-xl border border-slate-200 px-3 py-3 text-left text-sm font-semibold text-slate-700 transition hover:bg-slate-50 hover:text-slate-900 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-slate-400"
+            onClick={() => setShowLogoutConfirm(true)}
+            tabIndex={isFullyHidden ? -1 : 0}
+            title={isDesktopCollapsed ? "Keluar dari akun" : undefined}
+            className={`flex items-center transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-slate-400 ${
+              isDesktopCollapsed
+                ? "h-11 w-11 mx-auto justify-center rounded-xl border border-slate-200 text-slate-600 hover:bg-red-50 hover:text-red-600 hover:border-red-200"
+                : "w-full gap-3 rounded-xl border border-slate-200 px-3 py-3 text-left text-sm font-semibold text-slate-700 hover:bg-slate-50 hover:text-slate-900"
+            }`}
           >
-            <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-slate-100">
+            <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-slate-100">
               <LogoutIcon />
             </span>
 
-            <span>
-              <span className="block">Keluar</span>
-              <span className="mt-0.5 block text-xs font-normal text-slate-500">
-                Keluar dari akun
+            {!isDesktopCollapsed && (
+              <span>
+                <span className="block">Keluar</span>
+                <span className="mt-0.5 block text-xs font-normal text-slate-500">
+                  Keluar dari akun
+                </span>
               </span>
-            </span>
+            )}
           </button>
         </div>
       </aside>
+
+      {/* Confirmation Dialog Logout (Konsisten dengan halaman Profil) */}
+      <ConfirmationDialog
+        open={showLogoutConfirm}
+        title="Konfirmasi Keluar Akun"
+        description="Apakah Anda yakin ingin keluar dari sistem BukuFlow? Sesi kerja aktif Anda akan ditutup."
+        confirmLabel="Ya, Keluar"
+        tone="destructive"
+        onConfirm={handleConfirmLogout}
+        onClose={() => setShowLogoutConfirm(false)}
+      />
     </>
   );
 }
 
+export type NavIconKey =
+  | "dashboard"
+  | "loans"
+  | "returns"
+  | "history"
+  | "members"
+  | "books"
+  | "companies"
+  | "users";
+
 interface NavItemProps {
   href: string;
   label: string;
+  iconKey?: NavIconKey;
   active: boolean;
-  onClick: () => void;
+  onClick?: () => void;
   disabled?: boolean;
+  collapsed?: boolean;
 }
 
 function NavItem({
   href,
   label,
+  iconKey,
   active,
   onClick,
   disabled = false,
+  collapsed = false,
 }: NavItemProps) {
   return (
     <Link
       href={href}
       onClick={onClick}
       tabIndex={disabled ? -1 : 0}
-      className={`flex items-center gap-3 rounded-xl px-3 py-3 text-sm font-medium transition ${
+      title={collapsed ? label : undefined}
+      aria-label={collapsed ? label : undefined}
+      aria-current={active ? "page" : undefined}
+      className={`group relative flex items-center rounded-xl transition ${
+        collapsed
+          ? "h-11 w-11 mx-auto justify-center"
+          : "gap-3 px-3 py-2.5 text-sm font-medium w-full"
+      } ${
         active
-          ? "bg-slate-100 text-slate-900"
-          : "text-slate-600 hover:bg-slate-50 hover:text-slate-900"
-      } focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-slate-400`}
+          ? "bg-blue-50 text-blue-700 font-semibold ring-1 ring-blue-200/80 shadow-xs"
+          : "text-slate-600 hover:bg-slate-100 hover:text-slate-900"
+      } focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500`}
     >
       <span
-        className={`flex h-5 w-5 shrink-0 items-center justify-center ${
-          active ? "text-slate-900" : "text-slate-500"
+        className={`flex h-5 w-5 shrink-0 items-center justify-center transition-colors ${
+          active ? "text-blue-700" : "text-slate-500 group-hover:text-slate-700"
         }`}
       >
-        <NavIcon label={label} />
+        <NavIcon name={iconKey} />
       </span>
 
-      <span className="truncate">{label}</span>
+      {!collapsed && <span className="truncate">{label}</span>}
     </Link>
   );
 }
 
-function NavIcon({ label }: { label: string }) {
-  if (label === "Dashboard" || label === "Dashboard Office") return <DashboardIcon />;
-  if (label === "Peminjaman" || label === "Inspeksi Transaksi") return <LoanIcon />;
-  if (label === "Pengembalian") return <ReturnIcon />;
-  if (label === "Riwayat Transaksi") return <HistoryIcon />;
-  if (label === "Member" || label === "Inspeksi Anggota") return <MemberIcon />;
-  if (label === "Buku" || label === "Inspeksi Katalog" || label === "Inspeksi Katalog (Buku)") return <BookIcon />;
-  if (label === "Company" || label === "Manajemen Company" || label === "Konfigurasi Instansi") return <CompanyIcon />;
-
-  return <UsersIcon />;
+function NavIcon({ name }: { name?: NavIconKey }) {
+  switch (name) {
+    case "dashboard":
+      return <DashboardIcon />;
+    case "loans":
+      return <LoanIcon />;
+    case "returns":
+      return <ReturnIcon />;
+    case "history":
+      return <HistoryIcon />;
+    case "members":
+      return <MemberIcon />;
+    case "books":
+      return <BookIcon />;
+    case "companies":
+      return <CompanyIcon />;
+    case "users":
+    default:
+      return <UsersIcon />;
+  }
 }
 
 function CloseIcon() {
   return (
     <svg
+      aria-hidden="true"
       width="22"
       height="22"
       viewBox="0 0 24 24"
@@ -429,6 +631,7 @@ function CloseIcon() {
 function DashboardIcon() {
   return (
     <svg
+      aria-hidden="true"
       width="19"
       height="19"
       viewBox="0 0 24 24"
@@ -447,15 +650,19 @@ function DashboardIcon() {
 function LoanIcon() {
   return (
     <svg
+      aria-hidden="true"
       width="19"
       height="19"
       viewBox="0 0 24 24"
       fill="none"
       stroke="currentColor"
       strokeWidth="1.8"
+      strokeLinecap="round"
+      strokeLinejoin="round"
     >
-      <path d="M5 5h14v14H5z" />
-      <path d="M8 9h8M8 13h5" />
+      <path d="M16 3H5a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V8l-5-5z" />
+      <path d="M15 3v5h5" />
+      <path d="M9 13l2 2 4-4" />
     </svg>
   );
 }
@@ -463,6 +670,7 @@ function LoanIcon() {
 function ReturnIcon() {
   return (
     <svg
+      aria-hidden="true"
       width="19"
       height="19"
       viewBox="0 0 24 24"
@@ -481,6 +689,7 @@ function ReturnIcon() {
 function HistoryIcon() {
   return (
     <svg
+      aria-hidden="true"
       width="19"
       height="19"
       viewBox="0 0 24 24"
@@ -497,6 +706,7 @@ function HistoryIcon() {
 function MemberIcon() {
   return (
     <svg
+      aria-hidden="true"
       width="19"
       height="19"
       viewBox="0 0 24 24"
@@ -513,15 +723,18 @@ function MemberIcon() {
 function BookIcon() {
   return (
     <svg
+      aria-hidden="true"
       width="19"
       height="19"
       viewBox="0 0 24 24"
       fill="none"
       stroke="currentColor"
       strokeWidth="1.8"
+      strokeLinecap="round"
+      strokeLinejoin="round"
     >
-      <path d="M5 4h12a2 2 0 0 1 2 2v14H7a2 2 0 0 0-2 2z" />
-      <path d="M5 4v16M9 8h6M9 12h6" />
+      <path d="M2 3h6a4 4 0 0 1 4 4v14a3 3 0 0 0-3-3H2z" />
+      <path d="M22 3h-6a4 4 0 0 0-4 4v14a3 3 0 0 1 3-3h7z" />
     </svg>
   );
 }
@@ -529,6 +742,7 @@ function BookIcon() {
 function CompanyIcon() {
   return (
     <svg
+      aria-hidden="true"
       width="19"
       height="19"
       viewBox="0 0 24 24"
@@ -545,6 +759,7 @@ function CompanyIcon() {
 function UsersIcon() {
   return (
     <svg
+      aria-hidden="true"
       width="19"
       height="19"
       viewBox="0 0 24 24"
@@ -563,6 +778,7 @@ function UsersIcon() {
 function LogoutIcon() {
   return (
     <svg
+      aria-hidden="true"
       width="19"
       height="19"
       viewBox="0 0 24 24"

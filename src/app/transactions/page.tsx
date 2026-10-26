@@ -1,31 +1,40 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState } from "react";
+import { Suspense, useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useRouter, useSearchParams } from "next/navigation";
 
 import Badge from "@/components/ui/Badge";
 import Button from "@/components/ui/Button";
 import Card from "@/components/ui/Card";
 import Input from "@/components/ui/Input";
 import DatePicker from "@/components/ui/DatePicker";
-import BackLink from "@/components/ui/BackLink";
 import EmptyState from "@/components/ui/EmptyState";
+import ErrorState from "@/components/ui/ErrorState";
 import FeedbackPanel from "@/components/ui/FeedbackPanel";
 import LoadingState from "@/components/ui/LoadingState";
 import Pagination from "@/components/ui/Pagination";
+import Modal from "@/components/ui/Modal";
+import PageHeader from "@/components/ui/PageHeader";
+import RowActions from "@/components/ui/RowActions";
+import DataTable, { type DataTableColumn } from "@/components/ui/DataTable";
+import { useSearchHotkey } from "@/hooks/useHotkeys";
 
-import { useRouter } from "next/navigation";
-import { getSession } from "@/lib/auth";
-import { canAccessTransactions } from "@/lib/authorization";
-
-import { listLoansApi } from "@/lib/api";
+import { getSession, isStoredSessionExpired, hasStoredAuth } from "@/lib/auth";
+import {
+  canAccessTransactions,
+  canAccessMasterData,
+  canManageReturns,
+} from "@/lib/authorization";
+import { listLoansApi, getCompanySettingsApi, getErrorMessage } from "@/lib/api";
 import {
   exportToExcel,
   filterByExportDate,
+  getExportDateRange,
   type ExportPeriod,
 } from "@/lib/export/excel";
 
-import type { Loan, TransactionData } from "@/lib/types";
-import { useToast } from "@/context/ToastContext";
+import type { Loan, TransactionData, TransactionLoanItem, UserRole } from "@/lib/types";
+import { useToast } from "@/components/ui/Toast";
 
 type TransactionStatus = "ACTIVE" | "OVERDUE" | "COMPLETED";
 
@@ -51,9 +60,54 @@ const STATUS_OPTIONS: {
   },
 ];
 
-export default function TransactionsPage() {
+type SortField = "borrowedAt" | "dueAt" | "loanNumber";
+
+function getOverdueDays(loan: Loan): number {
+  if (loan.status === "COMPLETED" && loan.returnedAt) {
+    const returnDate = new Date(`${loan.returnedAt.slice(0, 10)}T00:00:00`);
+    const dueDate = new Date(`${loan.dueAt.slice(0, 10)}T00:00:00`);
+    if (isNaN(returnDate.getTime()) || isNaN(dueDate.getTime()) || returnDate <= dueDate) return 0;
+    const diffTime = returnDate.getTime() - dueDate.getTime();
+    return Math.max(1, Math.floor(diffTime / (1000 * 60 * 60 * 24)));
+  }
+  if (loan.status === "COMPLETED") return 0;
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+  const dueDate = new Date(`${loan.dueAt.slice(0, 10)}T00:00:00`);
+  if (isNaN(dueDate.getTime()) || dueDate >= today) return 0;
+  const diffTime = today.getTime() - dueDate.getTime();
+  return Math.max(1, Math.floor(diffTime / (1000 * 60 * 60 * 24)));
+}
+
+function RemoveFilterIcon() {
+  return (
+    <svg
+      className="ml-1 h-3.5 w-3.5 text-slate-400 hover:text-slate-600 shrink-0 inline"
+      viewBox="0 0 20 20"
+      fill="currentColor"
+      aria-hidden="true"
+    >
+      <path
+        fillRule="evenodd"
+        d="M4.293 4.293a1 1 0 011.414 0L10 8.586l4.293-4.293a1 1 0 111.414 1.414L11.414 10l4.293 4.293a1 1 0 01-1.414 1.414L10 11.414l-4.293 4.293a1 1 0 01-1.414-1.414L8.586 10 4.293 5.707a1 1 0 010-1.414z"
+        clipRule="evenodd"
+      />
+    </svg>
+  );
+}
+
+function TransactionsContent() {
   const router = useRouter();
+  const searchParams = useSearchParams();
   const { toast } = useToast();
+
+  const urlStatusParam = searchParams.get("status")?.toUpperCase();
+  const initialStatus: TransactionStatus | "" =
+    urlStatusParam === "ACTIVE" || urlStatusParam === "OVERDUE" || urlStatusParam === "COMPLETED"
+      ? urlStatusParam
+      : "";
+
+  const urlSearchParam = searchParams.get("search") || "";
 
   // =========================================================
   // DATA
@@ -61,41 +115,57 @@ export default function TransactionsPage() {
 
   const [transactions, setTransactions] = useState<TransactionData[]>([]);
   const [pageSize, setPageSize] = useState(10);
+  const [dailyFineRate, setDailyFineRate] = useState<number | null>(null);
+  const [configError, setConfigError] = useState("");
 
-  const [tableLoading, setTableLoading] = useState(false);
   const [loading, setLoading] = useState(true);
-  const [error, setError] = useState("");
+  const [tableLoading, setTableLoading] = useState(false);
   const hasLoadedTransactions = useRef(false);
+  const [error, setError] = useState("");
+
+  function getLoanFine(loan: Loan, itemCount: number = 1): number | null {
+    const overdueDays = getOverdueDays(loan);
+    if (overdueDays <= 0) return 0;
+    if (dailyFineRate === null) return null;
+    return overdueDays * dailyFineRate * Math.max(1, itemCount);
+  }
+
+  // Interactive Sorting
+  const [sortBy, setSortBy] = useState<SortField>("borrowedAt");
+  const [sortOrder, setSortOrder] = useState<"asc" | "desc">("desc");
 
   // =========================================================
   // SEARCH
-  // Search memang langsung diterapkan
   // =========================================================
 
-  const [search, setSearch] = useState("");
-  const [debouncedSearch, setDebouncedSearch] = useState("");
+  const [search, setSearch] = useState(urlSearchParam);
+  const [debouncedSearch, setDebouncedSearch] = useState(urlSearchParam);
+  const searchInputRef = useRef<HTMLInputElement>(null);
+  useSearchHotkey(searchInputRef);
 
   // =========================================================
-  // APPLIED FILTERS
-  // Filter yang benar-benar sedang digunakan tabel
+  // APPLIED FILTERS (Berdasarkan borrowedAt)
   // =========================================================
 
-  const [status, setStatus] = useState<TransactionStatus | "">("");
+  const [status, setStatus] = useState<TransactionStatus | "">(initialStatus);
   const [startDate, setStartDate] = useState("");
   const [endDate, setEndDate] = useState("");
+  const [dueFrom, setDueFrom] = useState("");
+  const [dueTo, setDueTo] = useState("");
+  const [returnedFrom, setReturnedFrom] = useState("");
+  const [returnedTo, setReturnedTo] = useState("");
 
   // =========================================================
-  // TEMPORARY FILTERS
-  // Filter yang sedang diedit di drawer
-  //
-  // TIDAK memengaruhi tabel sampai klik:
-  // "Terapkan Filter"
+  // TEMPORARY FILTERS (Di Drawer)
   // =========================================================
 
-  const [filterStatus, setFilterStatus] = useState<TransactionStatus | "">("");
-
+  const [filterStatus, setFilterStatus] = useState<TransactionStatus | "">(initialStatus);
   const [filterStartDate, setFilterStartDate] = useState("");
   const [filterEndDate, setFilterEndDate] = useState("");
+  const [filterDueFrom, setFilterDueFrom] = useState("");
+  const [filterDueTo, setFilterDueTo] = useState("");
+  const [filterReturnedFrom, setFilterReturnedFrom] = useState("");
+  const [filterReturnedTo, setFilterReturnedTo] = useState("");
 
   const [isFilterOpen, setIsFilterOpen] = useState(false);
   const [isFilterMounted, setIsFilterMounted] = useState(false);
@@ -109,64 +179,85 @@ export default function TransactionsPage() {
   const [exportPeriod, setExportPeriod] = useState<ExportPeriod>("ALL");
   const [exportStartDate, setExportStartDate] = useState("");
   const [exportEndDate, setExportEndDate] = useState("");
+  const [exportLoading, setExportLoading] = useState(false);
 
   // =========================================================
   // PAGINATION
   // =========================================================
 
   const [page, setPage] = useState(1);
+  const [totalItems, setTotalItems] = useState(0);
+  const [totalPages, setTotalPages] = useState(1);
+  const savedTotalRef = useRef(0);
 
   // =========================================================
   // SESSION CHECK
   // =========================================================
 
+  const [userRole, setUserRole] = useState<UserRole | null>(() => {
+    if (typeof window !== "undefined") {
+      return getSession()?.user?.role || null;
+    }
+    return null;
+  });
+
   useEffect(() => {
     const session = getSession();
 
     if (!session) {
-      router.replace("/login");
+      if (!isStoredSessionExpired() && !hasStoredAuth()) {
+        router.replace("/login");
+      }
       return;
     }
 
     if (!canAccessTransactions(session.user.role)) {
       router.replace("/dashboard");
+      return;
+    }
+
+    if (session.user.companyId) {
+      getCompanySettingsApi(session.user.companyId)
+        .then((settings) => {
+          if (settings && typeof settings.dailyFineRate === "number") {
+            setDailyFineRate(settings.dailyFineRate);
+          }
+        })
+        .catch((err: unknown) => {
+          setConfigError(
+            getErrorMessage(
+              err,
+              "Gagal memuat konfigurasi tarif denda. Perhitungan nominal denda dinonaktifkan."
+            )
+          );
+        });
     }
   }, [router]);
 
+  const canViewMember = userRole ? canAccessMasterData(userRole) : false;
+  const canReturn = userRole ? canManageReturns(userRole) : false;
+
   // =========================================================
-  // LOAD TRANSACTIONS
+  // SYNC FROM URL QUERY PARAMS (DEEP LINKING / QUICKCARD)
   // =========================================================
 
   useEffect(() => {
-    async function loadTransactions() {
-      if (!hasLoadedTransactions.current) {
-        setLoading(true);
-      } else {
-        setTableLoading(true);
-      }
-
-      setError("");
-
-      try {
-        const result = await listLoansApi({
-          page,
-          size: pageSize,
-        });
-
-        setTransactions(result);
-        hasLoadedTransactions.current = true;
-      } catch (err: any) {
-        setError(
-          err instanceof Error ? err.message : "Riwayat transaksi gagal dimuat."
-        );
-      } finally {
-        setLoading(false);
-        setTableLoading(false);
-      }
+    const rawStatus = searchParams.get("status")?.toUpperCase();
+    if (rawStatus === "ACTIVE" || rawStatus === "OVERDUE" || rawStatus === "COMPLETED") {
+      // eslint-disable-next-line react-hooks/set-state-in-effect -- Sinkronisasi filter status dan kata kunci pencarian dari URL searchParams
+      setStatus((prev) => (prev !== rawStatus ? rawStatus : prev));
+      setFilterStatus((prev) => (prev !== rawStatus ? rawStatus : prev));
+    } else if (searchParams.has("status") && !rawStatus) {
+      setStatus("");
+      setFilterStatus("");
     }
 
-    void loadTransactions();
-  }, [page, pageSize]);
+    const rawSearch = searchParams.get("search");
+    if (rawSearch !== null && rawSearch !== search) {
+      setSearch(rawSearch);
+      setDebouncedSearch(rawSearch);
+    }
+  }, [searchParams]);
 
   // =========================================================
   // DEBOUNCE SEARCH
@@ -182,96 +273,293 @@ export default function TransactionsPage() {
     };
   }, [search]);
 
-  useEffect(() => {
+  // =========================================================
+  // LOAD TRANSACTIONS (SERVER-SIDE WITH FILTERS & PAGINATION)
+  // =========================================================
+
+  const loadTransactions = useCallback(async () => {
     if (!hasLoadedTransactions.current) {
-      return;
+      setLoading(true);
+    } else {
+      setTableLoading(true);
     }
+    setError("");
 
-    setTableLoading(true);
+    try {
+      const backendSortBy =
+        sortBy === "borrowedAt"
+          ? "borrowed_at"
+          : sortBy === "dueAt"
+          ? "due_at"
+          : sortBy === "loanNumber"
+          ? "loan_number"
+          : undefined;
 
-    const timer = window.setTimeout(() => {
-      setTableLoading(false);
-    }, 150);
+      const result = await listLoansApi({
+        page,
+        size: pageSize,
+        search: debouncedSearch.trim() || undefined,
+        status: status || undefined,
+        startDate: startDate || undefined,
+        endDate: endDate || undefined,
+        due_from: dueFrom || undefined,
+        due_to: dueTo || undefined,
+        returned_from: returnedFrom || undefined,
+        returned_to: returnedTo || undefined,
+        sortby: backendSortBy,
+        order: sortOrder,
+      });
 
-    return () => {
-      window.clearTimeout(timer);
-    };
-  }, [debouncedSearch, status, startDate, endDate, page]);
-
-  // =========================================================
-  // FILTER
-  //
-  // Hanya menggunakan APPLIED FILTERS:
-  // status
-  // startDate
-  // endDate
-  //
-  // filterStatus / filterStartDate / filterEndDate
-  // TIDAK digunakan di sini karena masih temporary.
-  // =========================================================
-
-  const filteredTransactions = useMemo(() => {
-    const keyword = debouncedSearch.trim().toLowerCase();
-
-    return transactions.filter(({ loan, member, items }) => {
-      // -------------------------------------------------------
-      // SEARCH
-      // -------------------------------------------------------
-
-      const matchesSearch =
-        keyword === "" ||
-        loan.loanNumber.toLowerCase().includes(keyword) ||
-        member?.name.toLowerCase().includes(keyword) ||
-        items.some(
-          ({ book, bookCopy }) =>
-            book?.title.toLowerCase().includes(keyword) ||
-            bookCopy?.code.toLowerCase().includes(keyword),
-        );
-
-      // -------------------------------------------------------
-      // STATUS
-      // -------------------------------------------------------
-
-      const matchesStatus = status === "" || loan.status === status;
-
-      // -------------------------------------------------------
-      // DATE
-      // -------------------------------------------------------
-
-      const borrowedDate = getDateOnly(loan.borrowedAt);
-      const dueDate = getDateOnly(loan.dueAt);
-
-      const matchesStartDate =
-        startDate === "" || (borrowedDate !== "" && borrowedDate >= startDate);
-
-      const matchesEndDate =
-        endDate === "" || (dueDate !== "" && dueDate <= endDate);
-
-      return (
-        matchesSearch && matchesStatus && matchesStartDate && matchesEndDate
+      setTransactions(result.items);
+      hasLoadedTransactions.current = true;
+      if (result.total !== -1) {
+        savedTotalRef.current = result.total;
+        setTotalItems(result.total);
+        setTotalPages(result.totalPages);
+      } else {
+        setTotalItems(savedTotalRef.current);
+        setTotalPages(Math.max(1, Math.ceil(savedTotalRef.current / pageSize)));
+      }
+    } catch (err: unknown) {
+      setError(
+        getErrorMessage(err, "Riwayat transaksi gagal dimuat.")
       );
-    });
-  }, [transactions, debouncedSearch, status, startDate, endDate]);
+    } finally {
+      setLoading(false);
+      setTableLoading(false);
+    }
+  }, [page, pageSize, debouncedSearch, status, startDate, endDate, dueFrom, dueTo, returnedFrom, returnedTo, sortBy, sortOrder]);
+
+  useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- Fetch riwayat transaksi saat mount dan parameter filter/paginasi berubah
+    void loadTransactions();
+  }, [loadTransactions]);
 
   // =========================================================
-  // PAGINATION
+  // SORT TOGGLE
   // =========================================================
 
-  function resetPagination() {
+  function toggleSort(field: SortField) {
+    if (sortBy === field) {
+      setSortOrder((prev) => (prev === "asc" ? "desc" : "asc"));
+    } else {
+      setSortBy(field);
+      setSortOrder("desc");
+    }
     setPage(1);
   }
 
-  const totalPages = Math.max(
-    1,
-    Math.ceil(filteredTransactions.length / pageSize),
+  // Column definitions for DataTable
+  const columns = useMemo<DataTableColumn<TransactionData>[]>(
+    () => [
+      {
+        key: "loanNumber",
+        header: "Nomor peminjaman",
+        width: "145px",
+        sortable: true,
+        sortKey: "loanNumber",
+        render: (t) => (
+          <p
+            className="truncate whitespace-nowrap font-semibold tracking-tight text-slate-900 font-mono text-xs tabular-nums"
+            title={t.loan.loanNumber}
+          >
+            {t.loan.loanNumber}
+          </p>
+        ),
+      },
+      {
+        key: "member",
+        header: "Anggota",
+        width: "120px",
+        render: (t) => (
+          <p
+            className="truncate text-slate-800 font-medium text-xs 2xl:text-sm"
+            title={t.member?.name ?? "-"}
+          >
+            {t.member?.name ?? "-"}
+          </p>
+        ),
+      },
+      {
+        key: "books",
+        header: "Buku",
+        render: (t) =>
+          t.items.length === 0 ? (
+            <span className="text-slate-500">-</span>
+          ) : (
+            <ul className="min-w-0 space-y-0.5">
+              {t.items.map(({ book, bookCopy }) => (
+                <li
+                  key={`${t.loan.id}-${book?.id ?? "book"}-${bookCopy?.id ?? "copy"}`}
+                  className="grid min-w-0 grid-cols-[10px_minmax(0,1fr)]"
+                >
+                  <span className="text-slate-600 select-none" aria-hidden="true">
+                    &bull;
+                  </span>
+                  <span
+                    className="min-w-0 leading-5 text-slate-700 text-xs"
+                    title={`${book?.title ?? "-"}${bookCopy?.code ? ` (${bookCopy.code})` : ""}`}
+                  >
+                    <span className="font-medium text-slate-800">
+                      {book?.title ?? "-"}
+                    </span>
+                    {bookCopy?.code && (
+                      <span className="ml-1 text-slate-500 text-xs font-mono">
+                        ({bookCopy.code})
+                      </span>
+                    )}
+                  </span>
+                </li>
+              ))}
+            </ul>
+          ),
+      },
+      {
+        key: "officer",
+        header: "Petugas",
+        width: "90px",
+        render: (t) => (
+          <p
+            className="truncate text-slate-600 text-xs 2xl:text-sm font-medium"
+            title={t.user?.name ?? "-"}
+          >
+            {t.user?.name ?? "-"}
+          </p>
+        ),
+      },
+      {
+        key: "borrowedAt",
+        header: "Peminjaman",
+        width: "105px",
+        sortable: true,
+        sortKey: "borrowedAt",
+        isNumeric: true,
+        render: (t) => (
+          <span className="whitespace-nowrap text-slate-700 tabular-nums text-xs font-medium">
+            {formatDate(t.loan.borrowedAt)}
+          </span>
+        ),
+      },
+      {
+        key: "dueAt",
+        header: "Jatuh tempo",
+        width: "105px",
+        sortable: true,
+        sortKey: "dueAt",
+        isNumeric: true,
+        render: (t) => (
+          <span className="whitespace-nowrap text-slate-700 tabular-nums text-xs font-medium">
+            {formatDate(t.loan.dueAt)}
+          </span>
+        ),
+      },
+      {
+        key: "returnedAt",
+        header: "Pengembalian",
+        width: "105px",
+        isNumeric: true,
+        render: (t) => (
+          <span className="whitespace-nowrap text-slate-700 tabular-nums text-xs font-medium">
+            {formatDate(t.loan.returnedAt)}
+          </span>
+        ),
+      },
+      {
+        key: "status",
+        header: "Status",
+        width: "120px",
+        render: (t) => {
+          const overdueDays = getOverdueDays(t.loan);
+          const isOverdue = t.loan.status === "OVERDUE" || overdueDays > 0;
+          if (isOverdue && overdueDays > 0) {
+            return (
+              <div>
+                <Badge variant="danger">
+                  Terlambat ({overdueDays} hr)
+                </Badge>
+                {getLoanFine(t.loan, t.items.length) === null ? (
+                  <span className="mt-0.5 block text-xs font-semibold text-amber-600 whitespace-nowrap">
+                    Denda: Menunggu konfigurasi
+                  </span>
+                ) : (
+                  <span className="mt-0.5 block text-xs font-semibold text-red-600 tabular-nums whitespace-nowrap">
+                    Denda: Rp {getLoanFine(t.loan, t.items.length)!.toLocaleString("id-ID")}
+                  </span>
+                )}
+              </div>
+            );
+          }
+          return (
+            <div>
+              <Badge variant={getStatusVariant(t.loan.status)}>
+                {getStatusLabel(t.loan.status)}
+              </Badge>
+              {overdueDays > 0 &&
+                (getLoanFine(t.loan, t.items.length) === null ? (
+                  <span className="mt-0.5 block text-xs font-medium text-amber-600 whitespace-nowrap">
+                    Denda: Menunggu konfigurasi
+                  </span>
+                ) : (
+                  <span className="mt-0.5 block text-xs font-medium text-slate-500 tabular-nums whitespace-nowrap">
+                    Denda: Rp {getLoanFine(t.loan, t.items.length)!.toLocaleString("id-ID")}
+                  </span>
+                ))}
+            </div>
+          );
+        },
+      },
+      {
+        key: "actions",
+        header: "Aksi",
+        width: "50px",
+        align: "right",
+        render: (t) => (
+          <RowActions
+            actions={[
+              ...(canReturn && t.loan.status !== "COMPLETED"
+                ? [
+                    {
+                      label: "Kembalikan",
+                      href: `/returns?loanNumber=${encodeURIComponent(t.loan.loanNumber)}&loanId=${encodeURIComponent(t.loan.id)}`,
+                      icon: (
+                        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden="true">
+                          <path d="m9 14-5-5 5-5" />
+                          <path d="M4 9h11a4 4 0 0 1 4 4v2" />
+                        </svg>
+                      ),
+                    },
+                  ]
+                : []),
+              ...(canViewMember && (t.member?.id || t.loan.memberId)
+                ? [
+                    {
+                      label: "Lihat Anggota",
+                      href: `/master/members?memberId=${encodeURIComponent(t.member?.id || t.loan.memberId)}`,
+                      icon: (
+                        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden="true">
+                          <path d="M19 21v-2a4 4 0 0 0-4-4H9a4 4 0 0 0-4 4v2" />
+                          <circle cx="12" cy="7" r="4" />
+                        </svg>
+                      ),
+                    },
+                  ]
+                : []),
+            ]}
+          />
+        ),
+      },
+    ],
+    [canReturn, canViewMember, dailyFineRate]
   );
 
-  const currentPage = Math.min(page, totalPages);
+  // =========================================================
+  // PAGINATION RESET
+  // =========================================================
 
-  const paginatedTransactions = filteredTransactions.slice(
-    (currentPage - 1) * pageSize,
-    currentPage * pageSize,
-  );
+  function resetPagination() {
+    savedTotalRef.current = 0;
+    setPage(1);
+  }
 
   // =========================================================
   // DATE HELPERS
@@ -330,6 +618,10 @@ export default function TransactionsPage() {
       return "Selesai";
     }
 
+    if (loanStatus === "CANCELLED") {
+      return "Dibatalkan";
+    }
+
     return loanStatus;
   }
 
@@ -342,19 +634,30 @@ export default function TransactionsPage() {
       return "success" as const;
     }
 
-    return "warning" as const;
+    if (loanStatus === "CANCELLED") {
+      return "neutral" as const;
+    }
+
+    return "neutral" as const;
   }
 
   // =========================================================
   // ACTIVE FILTER CHECK
   // =========================================================
 
-  const hasActiveFilters = status !== "" || startDate !== "" || endDate !== "";
+  const hasActiveFilters = Boolean(
+    status !== "" ||
+      startDate !== "" ||
+      endDate !== "" ||
+      dueFrom !== "" ||
+      dueTo !== "" ||
+      returnedFrom !== "" ||
+      returnedTo !== ""
+  );
+  const isFiltered = Boolean(search.trim() || hasActiveFilters);
 
   // =========================================================
   // RESET APPLIED FILTERS
-  //
-  // Ini benar-benar mengubah tabel.
   // =========================================================
 
   function resetFilters() {
@@ -362,20 +665,30 @@ export default function TransactionsPage() {
     setStatus("");
     setStartDate("");
     setEndDate("");
+    setDueFrom("");
+    setDueTo("");
+    setReturnedFrom("");
+    setReturnedTo("");
 
     resetPagination();
+
+    if (searchParams.has("status") || searchParams.has("search")) {
+      router.replace("/transactions", { scroll: false });
+    }
   }
 
   // =========================================================
-  // OPEN FILTER DRAWER
-  //
-  // Applied filter disalin ke temporary filter.
+  // FILTER DRAWER CONTROLS
   // =========================================================
 
   function openFilter() {
     setFilterStatus(status);
     setFilterStartDate(startDate);
     setFilterEndDate(endDate);
+    setFilterDueFrom(dueFrom);
+    setFilterDueTo(dueTo);
+    setFilterReturnedFrom(returnedFrom);
+    setFilterReturnedTo(returnedTo);
 
     setIsFilterMounted(true);
     requestAnimationFrame(() => {
@@ -385,13 +698,6 @@ export default function TransactionsPage() {
     });
   }
 
-  // =========================================================
-  // CLOSE FILTER DRAWER
-  //
-  // Temporary changes otomatis dibuang karena tidak pernah
-  // masuk ke applied state.
-  // =========================================================
-
   function closeFilter() {
     setIsFilterOpen(false);
     setTimeout(() => {
@@ -399,42 +705,48 @@ export default function TransactionsPage() {
     }, 200);
   }
 
-  // =========================================================
-  // APPLY FILTER
-  //
-  // Temporary -> Applied
-  // Baru setelah ini tabel berubah.
-  // =========================================================
-
   function applyFilters() {
     setStatus(filterStatus);
     setStartDate(filterStartDate);
     setEndDate(filterEndDate);
+    setDueFrom(filterDueFrom);
+    setDueTo(filterDueTo);
+    setReturnedFrom(filterReturnedFrom);
+    setReturnedTo(filterReturnedTo);
 
     resetPagination();
     closeFilter();
-  }
 
-  // =========================================================
-  // RESET TEMPORARY FILTER
-  //
-  // Hanya mengubah isi drawer.
-  // Tabel BELUM berubah.
-  // =========================================================
+    const nextParams = new URLSearchParams(searchParams.toString());
+    if (filterStatus) {
+      nextParams.set("status", filterStatus);
+    } else {
+      nextParams.delete("status");
+    }
+    const qs = nextParams.toString();
+    router.replace(qs ? `/transactions?${qs}` : "/transactions", { scroll: false });
+  }
 
   function resetDrawerFilters() {
     setFilterStatus("");
     setFilterStartDate("");
     setFilterEndDate("");
+    setFilterDueFrom("");
+    setFilterDueTo("");
+    setFilterReturnedFrom("");
+    setFilterReturnedTo("");
   }
 
-  // =========================================================
-  // REMOVE INDIVIDUAL FILTER CHIP
-  // =========================================================
-
-  function removeSearchFilter() {
+  function _removeSearchFilter() {
     setSearch("");
     resetPagination();
+
+    if (searchParams.has("search")) {
+      const nextParams = new URLSearchParams(searchParams.toString());
+      nextParams.delete("search");
+      const qs = nextParams.toString();
+      router.replace(qs ? `/transactions?${qs}` : "/transactions", { scroll: false });
+    }
   }
 
   function removeStartDateFilter() {
@@ -450,6 +762,13 @@ export default function TransactionsPage() {
   function removeStatusFilter() {
     setStatus("");
     resetPagination();
+
+    if (searchParams.has("status")) {
+      const nextParams = new URLSearchParams(searchParams.toString());
+      nextParams.delete("status");
+      const qs = nextParams.toString();
+      router.replace(qs ? `/transactions?${qs}` : "/transactions", { scroll: false });
+    }
   }
 
   // =========================================================
@@ -472,231 +791,347 @@ export default function TransactionsPage() {
     }, 200);
   }
 
-  function handleExportExcel() {
-    const exportTransactions = filterByExportDate(
-      transactions,
-      ({ loan }) => getDateOnly(loan.borrowedAt),
-      exportPeriod,
-      exportStartDate,
-      exportEndDate,
-    );
-
-    const rows = exportTransactions.map(({ loan, member, items, user }) => ({
-      "Nomor Transaksi": loan.loanNumber,
-      Anggota: member?.name ?? "-",
-      Buku: items
-        .map(
-          ({ book, bookCopy }) =>
-            `${book?.title ?? "-"}${
-              bookCopy?.code ? ` (${bookCopy.code})` : ""
-            }`,
-        )
-        .join(", "),
-      Petugas: user?.name ?? "-",
-      "Tanggal Peminjaman": formatDate(loan.borrowedAt),
-      "Jatuh Tempo": formatDate(loan.dueAt),
-      "Tanggal Pengembalian": formatDate(loan.returnedAt),
-      Status: getStatusLabel(loan.status),
-    }));
-
-    if (rows.length === 0) {
-      toast.warning("Tidak ada transaksi pada periode yang dipilih.");
+  async function handleExportExcel() {
+    if (exportPeriod === "CUSTOM" && (!exportStartDate || !exportEndDate)) {
+      toast.warning("Silakan pilih tanggal mulai dan tanggal selesai untuk periode custom.");
       return;
     }
 
-    exportToExcel(
-      rows,
-      `riwayat-transaksi-${getDateOnly(new Date().toISOString())}.xlsx`,
-      "Riwayat Transaksi",
-    );
+    try {
+      setExportLoading(true);
+      const BATCH_SIZE = 100;
+      let allItems: TransactionData[] = [];
+      const currentPage = 1;
 
-    toast.success("Laporan riwayat transaksi berhasil diunduh.");
-    closeExport();
+      const { startDate: targetStartDate, endDate: targetEndDate } =
+        getExportDateRange(exportPeriod, exportStartDate, exportEndDate);
+
+      const firstRes = await listLoansApi({
+        page: currentPage,
+        size: BATCH_SIZE,
+        search: debouncedSearch.trim() || undefined,
+        status: status || undefined,
+        startDate: targetStartDate || undefined,
+        endDate: targetEndDate || undefined,
+        skipEnrich: true,
+      });
+
+      allItems = [...firstRes.items];
+      const totalCount = firstRes.total > 0 ? firstRes.total : firstRes.items.length;
+      const totalBatches = Math.max(1, Math.ceil(totalCount / BATCH_SIZE));
+
+      if (totalBatches > 1) {
+        toast.info(`Mengunduh seluruh riwayat transaksi (1/${totalBatches})...`);
+        for (let p = 2; p <= totalBatches; p++) {
+          const batchRes = await listLoansApi({
+            page: p,
+            size: BATCH_SIZE,
+            search: debouncedSearch.trim() || undefined,
+            status: status || undefined,
+            startDate: targetStartDate || undefined,
+            endDate: targetEndDate || undefined,
+            skipEnrich: true,
+          });
+          allItems.push(...batchRes.items);
+          if (batchRes.items.length === 0) break;
+        }
+      }
+
+      const rawExportItems = status
+        ? allItems.filter((tx) => {
+            if (status === "ACTIVE") return tx.loan.status === "ACTIVE";
+            if (status === "OVERDUE") return tx.loan.status === "OVERDUE";
+            if (status === "COMPLETED") return tx.loan.status === "COMPLETED" || Boolean(tx.loan.returnedAt);
+            return tx.loan.status === status;
+          })
+        : allItems;
+
+      const exportTransactions = filterByExportDate(
+        rawExportItems,
+        ({ loan }) => getDateOnly(loan.borrowedAt || loan.createdAt),
+        exportPeriod,
+        exportStartDate,
+        exportEndDate
+      );
+
+      const rows = exportTransactions.map(({ loan, member, items, user }) => {
+        const overdueDays = getOverdueDays(loan);
+        const fine = getLoanFine(loan, items.length);
+        return {
+          "Nomor Peminjaman": loan.loanNumber,
+          Anggota: member?.name ?? "-",
+          Buku: items
+            .map(
+              ({ book, bookCopy }: TransactionLoanItem) =>
+                `${book?.title ?? "-"}${
+                  bookCopy?.code ? ` (${bookCopy.code})` : ""
+                }`
+            )
+            .join(", "),
+          Petugas: user?.name ?? "-",
+          "Tanggal Peminjaman": formatDate(loan.borrowedAt || loan.createdAt),
+          "Jatuh Tempo": formatDate(loan.dueAt),
+          "Tanggal Pengembalian": formatDate(loan.returnedAt),
+          Status: getStatusLabel(loan.status),
+          "Hari Terlambat": overdueDays > 0 ? `${overdueDays} hari` : "-",
+          Denda:
+            fine === null
+              ? "Menunggu konfigurasi"
+              : fine > 0
+              ? `Rp ${fine.toLocaleString("id-ID")}`
+              : "Rp 0",
+        };
+      });
+
+      if (rows.length === 0) {
+        toast.warning("Tidak ada transaksi pada periode yang dipilih.");
+        return;
+      }
+
+      exportToExcel(
+        rows,
+        `riwayat-transaksi-${getDateOnly(new Date().toISOString())}.xlsx`,
+        "Riwayat Transaksi"
+      );
+
+      toast.success("Laporan riwayat transaksi berhasil diunduh.");
+      closeExport();
+    } catch (err: unknown) {
+      const msg = getErrorMessage(err, "Gagal mengunduh laporan excel.");
+      toast.error(msg);
+    } finally {
+      setExportLoading(false);
+    }
   }
 
-  // =========================================================
-  // LOADING
-  // =========================================================
 
-  if (loading) {
-    return (
-      <main className="min-h-screen bg-slate-50">
-        <LoadingState label="Memuat riwayat transaksi..." />
-      </main>
-    );
-  }
 
   // =========================================================
-  // PAGE
+  // MAIN RENDER
   // =========================================================
 
   return (
-    <main className="min-h-screen bg-slate-50">
+    <div className="min-h-screen bg-slate-50">
       <div className="page-container py-5 sm:py-6">
-        {/* =====================================================
-            HEADER
-        ====================================================== */}
-
-        <div className="mb-5 sm:mb-6">
-          <BackLink href="/dashboard" />
-
-          <div className="mt-3 flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
-            <div>
-              <h1 className="text-2xl font-bold tracking-tight text-slate-900 sm:text-3xl">
-                Riwayat Transaksi
-              </h1>
-
-              <p className="mt-1 text-sm leading-6 text-slate-500 sm:text-base">
-                Lihat riwayat peminjaman dan pengembalian.
-              </p>
-            </div>
-
+        {/* HEADER */}
+        <PageHeader
+          className="mb-6"
+          title="Riwayat Transaksi"
+          description="Lihat dan filter seluruh riwayat transaksi peminjaman perpustakaan."
+          backLink="/dashboard"
+          actions={
             <Button
               type="button"
+              variant="secondary"
               onClick={openExport}
-              className="w-full sm:w-auto"
+              disabled={Boolean(error) || loading || transactions.length === 0 || exportLoading}
+              className="w-full sm:w-auto text-xs h-9 px-3.5 font-semibold text-center whitespace-nowrap"
             >
-              Export Excel
+              <span className="flex items-center justify-center gap-2">
+                <svg
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  className="h-4 w-4 text-emerald-600"
+                  aria-hidden="true"
+                >
+                  <path
+                    d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8l-6-6Z"
+                    stroke="currentColor"
+                    strokeWidth="1.8"
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                  />
+                  <path
+                    d="M14 2v6h6M8 13h8M8 17h8"
+                    stroke="currentColor"
+                    strokeWidth="1.8"
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                  />
+                </svg>
+                <span>Ekspor Excel</span>
+              </span>
             </Button>
-          </div>
-        </div>
+          }
+        />
 
-        {/* =====================================================
-            ERROR
-        ====================================================== */}
-
-        {error && (
-          <FeedbackPanel tone="error" className="mb-5">
+        {/* CONFIG ERROR PANEL */}
+        {!error && configError && (
+          <FeedbackPanel tone="info" className="mb-6 border-amber-200 bg-amber-50 text-amber-900">
             <div>
-              <p>{error}</p>
-
-              <button
-                type="button"
-                onClick={() => window.location.reload()}
-                className="mt-3 min-h-10 rounded-lg border border-red-300 px-4 py-2 text-sm font-semibold transition hover:bg-red-50 focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 focus-visible:ring-offset-2"
-              >
-                Coba lagi
-              </button>
+              <p className="font-semibold text-amber-900">Perhatian: Konfigurasi Tarif Denda Belum Dimuat</p>
+              <p className="mt-0.5 text-xs text-amber-700">{configError}</p>
+              <p className="mt-1 text-xs text-amber-600">Perhitungan nominal denda dinonaktifkan sampai konfigurasi kebijakan sirkulasi disetel di Pengaturan.</p>
             </div>
           </FeedbackPanel>
         )}
 
-        {/* =====================================================
-            SEARCH + FILTER TOOLBAR
-        ====================================================== */}
-
-        <div className="mb-5">
-          <Card className="mb-3 p-3 sm:p-4">
-            <div className="grid grid-cols-[minmax(0,1fr)_auto] items-end gap-2.5 sm:gap-3">
-              {/* SEARCH */}
-
-              <div className="min-w-0">
+        {/* SEARCH & FILTER BAR */}
+        <div className="relative z-10 mt-6">
+          <Card className="p-4 sm:p-5">
+            <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
+              <div className="flex-1">
                 <Input
+                  ref={searchInputRef}
                   id="transaction-search"
                   label="Pencarian"
                   value={search}
+                  disabled={Boolean(error) && !hasLoadedTransactions.current}
                   onChange={(event) => {
                     setSearch(event.target.value);
                     resetPagination();
                   }}
-                  placeholder="Nomor, anggota, buku, copy..."
+                  onKeyDown={(event) => {
+                    if (event.key === "Enter") {
+                      event.preventDefault();
+                      setDebouncedSearch(search);
+                    }
+                  }}
+                  placeholder="Cari nomor peminjaman, anggota, buku, petugas... (tekan /)"
                 />
               </div>
-
-              {/* FILTER BUTTON */}
 
               <Button
                 type="button"
                 variant="secondary"
                 onClick={openFilter}
-                className="!w-[92px] !shrink-0 !px-3"
+                disabled={Boolean(error) && !hasLoadedTransactions.current}
+                className="shrink-0 self-stretch sm:self-end"
               >
-                <span className="flex items-center justify-center gap-1.5 whitespace-nowrap">
+                <span className="flex items-center gap-2">
                   <svg
                     viewBox="0 0 24 24"
                     fill="none"
-                    className="h-4 w-4 shrink-0"
+                    className="h-4 w-4"
                     aria-hidden="true"
                   >
                     <path
-                      d="M4 6h16M7 12h10M10 18h4"
+                      d="M3 4.5h18M6 9.5h12M9 14.5h6M11 19.5h2"
                       stroke="currentColor"
                       strokeWidth="1.8"
                       strokeLinecap="round"
+                      strokeLinejoin="round"
                     />
                   </svg>
-
                   <span>Filter</span>
                 </span>
               </Button>
             </div>
           </Card>
 
-          {/* ===================================================
-              ACTIVE FILTER CHIPS
-          ==================================================== */}
-
-          {(hasActiveFilters || search.trim() !== "") && (
+          {/* ACTIVE FILTER CHIPS */}
+          {hasActiveFilters && (
             <div className="mt-3 flex flex-wrap items-center gap-2">
-              {search.trim() !== "" && (
-                <button
-                  type="button"
-                  onClick={removeSearchFilter}
-                  className="inline-flex min-h-8 items-center gap-1.5 rounded-full border border-slate-200 bg-white px-3 py-1 text-xs font-medium text-slate-700 transition hover:border-slate-300 hover:bg-slate-50 sm:text-sm"
-                >
-                  <span className="max-w-[220px] truncate">
-                    Pencarian: {search}
-                  </span>
-
-                  <span className="text-slate-400" aria-hidden="true">
-                    ×
-                  </span>
-                </button>
-              )}
 
               {startDate !== "" && (
-                <button
+                <Button
                   type="button"
+                  variant="secondary"
+                  size="sm"
                   onClick={removeStartDateFilter}
-                  className="inline-flex min-h-8 items-center gap-1.5 rounded-full border border-slate-200 bg-white px-3 py-1 text-xs font-medium text-slate-700 transition hover:border-slate-300 hover:bg-slate-50 sm:text-sm"
+                  className="rounded-full px-3 py-1 text-xs"
                 >
-                  Dari: {formatDate(startDate)}
-                  <span className="text-slate-400" aria-hidden="true">
-                    ×
-                  </span>
-                </button>
+                  Pinjam Dari: {formatDate(startDate)}
+                  <RemoveFilterIcon />
+                </Button>
               )}
 
               {endDate !== "" && (
-                <button
+                <Button
                   type="button"
+                  variant="secondary"
+                  size="sm"
                   onClick={removeEndDateFilter}
-                  className="inline-flex min-h-8 items-center gap-1.5 rounded-full border border-slate-200 bg-white px-3 py-1 text-xs font-medium text-slate-700 transition hover:border-slate-300 hover:bg-slate-50 sm:text-sm"
+                  className="rounded-full px-3 py-1 text-xs"
                 >
-                  Sampai: {formatDate(endDate)}
-                  <span className="text-slate-400" aria-hidden="true">
-                    ×
-                  </span>
-                </button>
+                  Pinjam Sampai: {formatDate(endDate)}
+                  <RemoveFilterIcon />
+                </Button>
+              )}
+
+              {dueFrom !== "" && (
+                <Button
+                  type="button"
+                  variant="secondary"
+                  size="sm"
+                  onClick={() => {
+                    setDueFrom("");
+                    resetPagination();
+                  }}
+                  className="rounded-full px-3 py-1 text-xs"
+                >
+                  Jatuh Tempo Dari: {formatDate(dueFrom)}
+                  <RemoveFilterIcon />
+                </Button>
+              )}
+
+              {dueTo !== "" && (
+                <Button
+                  type="button"
+                  variant="secondary"
+                  size="sm"
+                  onClick={() => {
+                    setDueTo("");
+                    resetPagination();
+                  }}
+                  className="rounded-full px-3 py-1 text-xs"
+                >
+                  Jatuh Tempo Sampai: {formatDate(dueTo)}
+                  <RemoveFilterIcon />
+                </Button>
+              )}
+
+              {returnedFrom !== "" && (
+                <Button
+                  type="button"
+                  variant="secondary"
+                  size="sm"
+                  onClick={() => {
+                    setReturnedFrom("");
+                    resetPagination();
+                  }}
+                  className="rounded-full px-3 py-1 text-xs"
+                >
+                  Kembali Dari: {formatDate(returnedFrom)}
+                  <RemoveFilterIcon />
+                </Button>
+              )}
+
+              {returnedTo !== "" && (
+                <Button
+                  type="button"
+                  variant="secondary"
+                  size="sm"
+                  onClick={() => {
+                    setReturnedTo("");
+                    resetPagination();
+                  }}
+                  className="rounded-full px-3 py-1 text-xs"
+                >
+                  Kembali Sampai: {formatDate(returnedTo)}
+                  <RemoveFilterIcon />
+                </Button>
               )}
 
               {status !== "" && (
-                <button
+                <Button
                   type="button"
+                  variant="secondary"
+                  size="sm"
                   onClick={removeStatusFilter}
-                  className="inline-flex min-h-8 items-center gap-1.5 rounded-full border border-slate-200 bg-white px-3 py-1 text-xs font-medium text-slate-700 transition hover:border-slate-300 hover:bg-slate-50 sm:text-sm"
+                  className="rounded-full px-3 py-1 text-xs"
                 >
                   Status: {getStatusLabel(status)}
-                  <span className="text-slate-400" aria-hidden="true">
-                    ×
-                  </span>
-                </button>
+                  <RemoveFilterIcon />
+                </Button>
               )}
 
-              <button
+              <Button
                 type="button"
+                variant="ghost"
+                size="sm"
                 onClick={resetFilters}
-                className="inline-flex min-h-8 items-center gap-1.5 rounded-lg px-2.5 text-xs font-medium text-slate-500 transition-colors hover:bg-slate-100 hover:text-slate-900 focus:outline-none focus-visible:ring-2 focus-visible:ring-brand focus-visible:ring-offset-1 sm:text-sm"
+                className="text-slate-500 hover:text-slate-900"
               >
                 <svg
                   viewBox="0 0 24 24"
@@ -712,50 +1147,25 @@ export default function TransactionsPage() {
                     strokeLinejoin="round"
                   />
                 </svg>
-
-                <span>Reset semua</span>
-              </button>
+                <span>Atur ulang semua</span>
+              </Button>
             </div>
           )}
         </div>
 
-        {/* =====================================================
-            FILTER DRAWER
-        ====================================================== */}
-
-        {isFilterMounted && (
-          <div
-            className="fixed inset-0 z-50 overflow-hidden"
-            role="dialog"
-            aria-modal="true"
-            aria-labelledby="filter-title"
-          >
-            {/* OVERLAY */}
-
-            <button
-              type="button"
-              aria-label="Tutup filter"
-              onClick={closeFilter}
-              className={`fixed inset-0 bg-slate-900/40 backdrop-blur-[2px] transition-opacity duration-200 ease-out ${
-                isFilterOpen ? "opacity-100" : "opacity-0"
-              }`}
-            />
-
-            {/* DRAWER */}
-
-            <aside
-              className={`
-                fixed inset-y-0 right-0
-                flex h-full w-full max-w-md
-                flex-col bg-white shadow-2xl
-                transition-transform duration-200 ease-out
-                ${isFilterOpen ? "translate-x-0" : "translate-x-full"}
-              `}
-            >
-              {/* =================================================
-                  DRAWER HEADER
-              ================================================== */}
-
+        {/* FILTER DRAWER */}
+        <Modal
+          open={isFilterMounted}
+          onClose={closeFilter}
+          raw
+          ariaLabelledBy="filter-title"
+          overlayClassName={`fixed inset-0 z-50 overflow-hidden bg-slate-900/40 backdrop-blur-[2px] transition-opacity duration-200 ease-out ${
+            isFilterOpen ? "opacity-100" : "opacity-0"
+          }`}
+          className={`fixed inset-y-0 right-0 flex h-full w-full max-w-md flex-col bg-white shadow-2xl transition-transform duration-200 ease-out ${
+            isFilterOpen ? "translate-x-0" : "translate-x-full"
+          }`}
+        >
               <div className="flex items-start justify-between border-b border-slate-200 px-5 py-4 sm:px-6">
                 <div>
                   <h2
@@ -764,17 +1174,18 @@ export default function TransactionsPage() {
                   >
                     Filter Transaksi
                   </h2>
-
                   <p className="mt-1 text-sm leading-5 text-slate-500">
-                    Atur filter untuk menemukan transaksi.
+                    Filter berdasarkan rentang tanggal peminjaman dan status.
                   </p>
                 </div>
 
-                <button
+                <Button
                   type="button"
+                  variant="ghost"
+                  size="sm"
                   onClick={closeFilter}
                   aria-label="Tutup filter"
-                  className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg text-slate-500 transition hover:bg-slate-100 hover:text-slate-900"
+                  className="min-h-[32px] min-w-[32px] p-2 text-slate-500 hover:bg-slate-100 hover:text-slate-900"
                 >
                   <svg
                     viewBox="0 0 24 24"
@@ -789,40 +1200,56 @@ export default function TransactionsPage() {
                       strokeLinecap="round"
                     />
                   </svg>
-                </button>
+                </Button>
               </div>
 
-              {/* =================================================
-                  DRAWER CONTENT
-              ================================================== */}
-
               <div className="flex-1 overflow-y-auto px-5 py-5 sm:px-6 sm:py-6">
-                {/* =================================================
-                    PERIODE
-                ================================================== */}
-
+                {/* STATUS FILTER */}
                 <section>
                   <h3 className="text-sm font-semibold text-slate-900">
-                    Periode
+                    Status Transaksi
                   </h3>
 
+                  <div className="mt-3 flex flex-wrap gap-2">
+                    {STATUS_OPTIONS.map((option) => {
+                      const selected = filterStatus === option.value;
+
+                      return (
+                        <Button
+                          key={option.value || "all"}
+                          type="button"
+                          variant={selected ? "primary" : "secondary"}
+                          size="sm"
+                          onClick={() => {
+                            setFilterStatus(option.value);
+                          }}
+                        >
+                          {option.label}
+                        </Button>
+                      );
+                    })}
+                  </div>
+                </section>
+
+                <div className="my-6 border-t border-slate-100" />
+
+                {/* RENTANG TANGGAL PEMINJAMAN */}
+                <section>
+                  <h3 className="text-sm font-semibold text-slate-900">
+                    Rentang Tanggal Pinjam
+                  </h3>
                   <p className="mt-1 text-sm text-slate-500">
-                    Pilih rentang tanggal transaksi.
+                    Filter transaksi berdasarkan tanggal peminjaman buku (borrowedAt).
                   </p>
 
-                  <div className="mt-4 grid gap-4 sm:grid-cols-2">
-                    {/* DARI */}
-
+                  <div className="mt-3 grid gap-4 sm:grid-cols-2">
                     <DatePicker
                       id="transaction-start-date"
-                      label="Dari tanggal"
+                      label="Dari tanggal pinjam"
                       value={filterStartDate}
                       showClearButton
                       onChange={(value) => {
                         setFilterStartDate(value);
-
-                        // Kalau tanggal awal digeser melewati
-                        // tanggal akhir, kosongkan tanggal akhir.
                         if (
                           filterEndDate !== "" &&
                           value !== "" &&
@@ -833,11 +1260,9 @@ export default function TransactionsPage() {
                       }}
                     />
 
-                    {/* SAMPAI */}
-
                     <DatePicker
                       id="transaction-end-date"
-                      label="Sampai tanggal"
+                      label="Sampai tanggal pinjam"
                       value={filterEndDate}
                       min={filterStartDate || undefined}
                       showClearButton
@@ -848,63 +1273,101 @@ export default function TransactionsPage() {
                   </div>
                 </section>
 
-                {/* DIVIDER */}
+                <div className="my-6 border-t border-slate-100" />
+
+                {/* RENTANG TANGGAL JATUH TEMPO */}
+                <section>
+                  <h3 className="text-sm font-semibold text-slate-900">
+                    Rentang Tanggal Jatuh Tempo
+                  </h3>
+                  <p className="mt-1 text-sm text-slate-500">
+                    Filter transaksi berdasarkan batas waktu jatuh tempo pengembalian.
+                  </p>
+
+                  <div className="mt-3 grid gap-4 sm:grid-cols-2">
+                    <DatePicker
+                      id="transaction-due-from"
+                      label="Dari jatuh tempo"
+                      value={filterDueFrom}
+                      showClearButton
+                      onChange={(value) => {
+                        setFilterDueFrom(value);
+                        if (
+                          filterDueTo !== "" &&
+                          value !== "" &&
+                          filterDueTo < value
+                        ) {
+                          setFilterDueTo("");
+                        }
+                      }}
+                    />
+
+                    <DatePicker
+                      id="transaction-due-to"
+                      label="Sampai jatuh tempo"
+                      value={filterDueTo}
+                      min={filterDueFrom || undefined}
+                      showClearButton
+                      onChange={(value) => {
+                        setFilterDueTo(value);
+                      }}
+                    />
+                  </div>
+                </section>
 
                 <div className="my-6 border-t border-slate-100" />
 
-                {/* =================================================
-                    STATUS
-                ================================================== */}
-
+                {/* RENTANG TANGGAL PENGEMBALIAN */}
                 <section>
                   <h3 className="text-sm font-semibold text-slate-900">
-                    Status
+                    Rentang Tanggal Pengembalian
                   </h3>
+                  <p className="mt-1 text-sm text-slate-500">
+                    Filter transaksi berdasarkan tanggal pengembalian buku.
+                  </p>
 
-                  <div className="mt-3 flex flex-wrap gap-2">
-                    {STATUS_OPTIONS.map((option) => {
-                      const selected = filterStatus === option.value;
+                  <div className="mt-3 grid gap-4 sm:grid-cols-2">
+                    <DatePicker
+                      id="transaction-returned-from"
+                      label="Dari tanggal kembali"
+                      value={filterReturnedFrom}
+                      showClearButton
+                      onChange={(value) => {
+                        setFilterReturnedFrom(value);
+                        if (
+                          filterReturnedTo !== "" &&
+                          value !== "" &&
+                          filterReturnedTo < value
+                        ) {
+                          setFilterReturnedTo("");
+                        }
+                      }}
+                    />
 
-                      return (
-                        <button
-                          key={option.value || "all"}
-                          type="button"
-                          onClick={() => {
-                            setFilterStatus(option.value);
-                          }}
-                          className={[
-                            "min-h-10 rounded-lg border px-4 py-2 text-sm font-medium transition",
-                            selected
-                              ? "border-blue-600 bg-blue-600 text-white"
-                              : "border-slate-200 bg-white text-slate-700 hover:border-slate-300 hover:bg-slate-50",
-                          ].join(" ")}
-                        >
-                          {option.label}
-                        </button>
-                      );
-                    })}
+                    <DatePicker
+                      id="transaction-returned-to"
+                      label="Sampai tanggal kembali"
+                      value={filterReturnedTo}
+                      min={filterReturnedFrom || undefined}
+                      showClearButton
+                      onChange={(value) => {
+                        setFilterReturnedTo(value);
+                      }}
+                    />
                   </div>
                 </section>
               </div>
 
-              {/* =================================================
-                  DRAWER FOOTER
-              ================================================== */}
-
               <div className="border-t border-slate-200 bg-white px-5 py-4 sm:px-6">
                 <div className="flex gap-2.5 sm:gap-3">
-                  {/* RESET */}
-
                   <Button
                     type="button"
                     variant="secondary"
                     className="flex-1 px-3"
                     onClick={resetDrawerFilters}
                   >
-                    Reset Filter
+                    Atur Ulang Filter
                   </Button>
-
-                  {/* APPLY */}
 
                   <Button
                     type="button"
@@ -915,57 +1378,44 @@ export default function TransactionsPage() {
                   </Button>
                 </div>
               </div>
-            </aside>
-          </div>
-        )}
+        </Modal>
 
-        {/* =====================================================
-            EXPORT EXCEL MODAL
-        ====================================================== */}
-
-        {isExportMounted && (
-          <div
-            className="fixed inset-0 z-50 overflow-y-auto"
-            role="dialog"
-            aria-modal="true"
-            aria-labelledby="export-title"
-          >
-            <button
-              type="button"
-              aria-label="Tutup export"
-              onClick={closeExport}
-              className={`fixed inset-0 bg-slate-900/40 backdrop-blur-[2px] transition-opacity duration-200 ease-out ${
-                isExportOpen ? "opacity-100" : "opacity-0"
-              }`}
-            />
-
-            <div className="relative flex min-h-full items-center justify-center p-4">
-              <div
-                className={`w-full max-w-md rounded-xl bg-white shadow-2xl transition-all duration-200 ease-out ${
-                  isExportOpen
-                    ? "opacity-100 scale-100 translate-y-0"
-                    : "opacity-0 scale-95 translate-y-2"
-                }`}
-              >
+        {/* EXPORT EXCEL MODAL */}
+        <Modal
+          open={isExportMounted}
+          onClose={closeExport}
+          raw
+          size="md"
+          ariaLabelledBy="export-title"
+          overlayClassName={`fixed inset-0 z-50 flex min-h-full items-center justify-center p-4 overflow-y-auto bg-slate-900/40 backdrop-blur-[2px] transition-opacity duration-200 ease-out ${
+            isExportOpen ? "opacity-100" : "opacity-0"
+          }`}
+          className={`w-full max-w-md rounded-xl bg-white shadow-2xl transition-all duration-200 ease-out ${
+            isExportOpen
+              ? "opacity-100 scale-100 translate-y-0"
+              : "opacity-0 scale-95 translate-y-2"
+          }`}
+        >
                 <div className="flex items-start justify-between border-b border-slate-200 px-5 py-4 sm:px-6">
                   <div>
                     <h2
                       id="export-title"
                       className="text-lg font-semibold tracking-tight text-slate-900"
                     >
-                      Export Excel
+                      Ekspor Excel
                     </h2>
-
                     <p className="mt-1 text-sm leading-5 text-slate-500">
-                      Pilih periode transaksi yang ingin diexport.
+                      Pilih periode transaksi yang ingin diekspor.
                     </p>
                   </div>
 
-                  <button
+                  <Button
                     type="button"
+                    variant="ghost"
+                    size="sm"
                     onClick={closeExport}
-                    aria-label="Tutup export"
-                    className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg text-slate-500 transition hover:bg-slate-100 hover:text-slate-900 focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 focus-visible:ring-offset-1"
+                    aria-label="Tutup ekspor"
+                    className="min-h-[32px] min-w-[32px] p-2 text-slate-500 hover:bg-slate-100 hover:text-slate-900"
                   >
                     <svg
                       viewBox="0 0 24 24"
@@ -980,7 +1430,7 @@ export default function TransactionsPage() {
                         strokeLinecap="round"
                       />
                     </svg>
-                  </button>
+                  </Button>
                 </div>
 
                 <div className="px-5 py-5 sm:px-6 sm:py-6">
@@ -995,453 +1445,359 @@ export default function TransactionsPage() {
                       const selected = exportPeriod === option.value;
 
                       return (
-                        <button
+                        <Button
                           key={option.value}
                           type="button"
+                          variant="ghost"
                           onClick={() => setExportPeriod(option.value)}
                           className={[
-                            "flex w-full items-center gap-3 rounded-lg border px-4 py-3 text-left text-sm transition",
+                            "w-full h-auto flex items-center justify-start gap-3 rounded-lg border px-4 py-3 text-left text-sm font-normal transition",
                             selected
                               ? "border-blue-600 bg-blue-50 text-blue-700"
                               : "border-slate-200 bg-white text-slate-700 hover:border-slate-300 hover:bg-slate-50",
                           ].join(" ")}
                         >
                           <span
-                            className={[
-                              "flex h-5 w-5 shrink-0 items-center justify-center rounded-full border-2",
+                            className={`flex h-4 w-4 shrink-0 items-center justify-center rounded-full border ${
                               selected
-                                ? "border-blue-600 bg-white"
-                                : "border-slate-300 bg-white",
-                            ].join(" ")}
+                                ? "border-blue-600 bg-blue-600 text-white"
+                                : "border-slate-300 bg-white"
+                            }`}
                           >
-                            <span
-                              className="block rounded-full"
-                              style={{
-                                width: selected ? 10 : 0,
-                                height: selected ? 10 : 0,
-                                backgroundColor: selected
-                                  ? "#2563eb"
-                                  : "transparent",
-                              }}
-                            />
+                            {selected && (
+                              <span className="h-1.5 w-1.5 rounded-full bg-white" />
+                            )}
                           </span>
-
                           <span className="font-medium">{option.label}</span>
-                        </button>
+                        </Button>
                       );
                     })}
                   </div>
+
                   {exportPeriod === "CUSTOM" && (
-                    <div className="mt-5 grid gap-4 sm:grid-cols-2">
+                    <div className="mt-4 grid gap-3 sm:grid-cols-2">
                       <DatePicker
                         id="export-start-date"
                         label="Dari tanggal"
                         value={exportStartDate}
-                        showClearButton
                         onChange={(value) => setExportStartDate(value)}
                       />
-
                       <DatePicker
                         id="export-end-date"
                         label="Sampai tanggal"
                         value={exportEndDate}
                         min={exportStartDate || undefined}
-                        showClearButton
                         onChange={(value) => setExportEndDate(value)}
                       />
                     </div>
                   )}
                 </div>
 
-                <div className="flex gap-3 border-t border-slate-200 px-5 py-4 sm:px-6">
-                  <Button
-                    type="button"
-                    variant="secondary"
-                    className="flex-1"
-                    onClick={closeExport}
-                  >
-                    Batal
-                  </Button>
-
-                  <Button
-                    type="button"
-                    className="flex-1"
-                    onClick={handleExportExcel}
-                    disabled={
-                      exportPeriod === "CUSTOM" &&
-                      (exportStartDate === "" || exportEndDate === "")
-                    }
-                  >
-                    Export Excel
-                  </Button>
+                <div className="border-t border-slate-200 bg-slate-50/70 px-5 py-4 sm:px-6">
+                  <div className="flex justify-end gap-2.5">
+                    <Button
+                      type="button"
+                      variant="secondary"
+                      onClick={closeExport}
+                      disabled={exportLoading}
+                    >
+                      Batal
+                    </Button>
+                    <Button
+                      type="button"
+                      onClick={() => void handleExportExcel()}
+                      loading={exportLoading}
+                      disabled={exportLoading}
+                    >
+                      Unduh Excel
+                    </Button>
+                  </div>
                 </div>
-              </div>
-            </div>
-          </div>
-        )}
+        </Modal>
 
-        {/* =====================================================
-            EMPTY STATE
-        ====================================================== */}
-
-        {filteredTransactions.length === 0 && !tableLoading ? (
-          <Card className="mt-5 p-4 sm:p-5">
-            <EmptyState
-              title="Tidak ada transaksi"
-              description="Tidak ada transaksi yang sesuai dengan pencarian atau filter."
-            />
-          </Card>
+        {/* ERROR STATE vs CONTENT */}
+        {error ? (
+          <ErrorState
+            title="Gagal Memuat Riwayat Transaksi"
+            message={error}
+            onRetry={() => void loadTransactions()}
+            className="mt-5"
+          />
         ) : (
-          <>
-            {/* =================================================
-                TABLE VIEW (DESKTOP: xl+ only)
-            ================================================== */}
-            <Card className="relative mt-5 hidden xl:block">
-              <div className="overflow-x-auto rounded-t-xl">
-                <table className="w-full min-w-[1050px] table-fixed border-collapse text-left text-sm">
-                  <colgroup>
-                    <col className="w-[150px]" />
-                    <col className="w-[140px]" />
-                    <col className="min-w-[200px]" />
-                    <col className="w-[120px]" />
-                    <col className="w-[115px]" />
-                    <col className="w-[115px]" />
-                    <col className="w-[115px]" />
-                    <col className="w-[125px]" />
-                  </colgroup>
+          <div className="mt-5">
+            <DataTable
+              rows={transactions}
+              columns={columns}
+              keyExtractor={(t) => t.loan.id}
+              loading={loading || tableLoading}
+              sortBy={sortBy}
+              order={sortOrder}
+              onSortChange={(k) => toggleSort(k as SortField)}
+              mobileBreakpoint="xl"
+              rowClassName={(transaction) => {
+                const overdueDays = getOverdueDays(transaction.loan);
+                const isOverdue =
+                  transaction.loan.status === "OVERDUE" || overdueDays > 0;
+                return isOverdue
+                  ? "border-l-4 border-l-red-500 bg-red-50/35 hover:bg-red-50/60"
+                  : "hover:bg-slate-50/70";
+              }}
+              emptyState={
+                <Card className="p-4 sm:p-5">
+                  <EmptyState
+                    title={
+                      isFiltered
+                        ? "Transaksi tidak ditemukan"
+                        : "Belum ada riwayat transaksi"
+                    }
+                    description={
+                      isFiltered
+                        ? "Tidak ada transaksi yang sesuai dengan pencarian atau filter yang diterapkan. Coba sesuaikan kata kunci atau atur ulang filter."
+                        : "Belum ada data riwayat transaksi peminjaman di sistem."
+                    }
+                  />
+                </Card>
+              }
+              renderMobileCard={(transaction) => {
+                const overdueDays = getOverdueDays(transaction.loan);
+                const isOverdue =
+                  transaction.loan.status === "OVERDUE" || overdueDays > 0;
 
-                  {/* TABLE HEADER */}
-                  <thead>
-                    <tr className="border-b border-slate-200 bg-slate-50">
-                      <th className="px-3.5 py-3 text-center text-xs font-semibold tracking-wide text-slate-500">
-                        Nomor transaksi
-                      </th>
-
-                      <th className="px-3.5 py-3 text-center text-xs font-semibold tracking-wide text-slate-500">
-                        Anggota
-                      </th>
-
-                      <th className="px-3.5 py-3 text-center text-xs font-semibold tracking-wide text-slate-500">
-                        Buku
-                      </th>
-
-                      <th className="px-3.5 py-3 text-center text-xs font-semibold tracking-wide text-slate-500">
-                        Petugas
-                      </th>
-
-                      <th className="px-3.5 py-3 text-center text-xs font-semibold tracking-wide text-slate-500">
-                        Peminjaman
-                      </th>
-
-                      <th className="px-3.5 py-3 text-center text-xs font-semibold tracking-wide text-slate-500">
-                        Jatuh tempo
-                      </th>
-
-                      <th className="px-3.5 py-3 text-center text-xs font-semibold tracking-wide text-slate-500">
-                        Pengembalian
-                      </th>
-
-                      <th className="px-3.5 py-3 text-center text-xs font-semibold tracking-wide text-slate-500">
-                        Status
-                      </th>
-                    </tr>
-                  </thead>
-
-                  {/* TABLE BODY */}
-                  <tbody>
-                    {paginatedTransactions.map((transaction) => (
-                      <tr
-                        key={transaction.loan.id}
-                        className="border-b border-slate-100 last:border-b-0 hover:bg-slate-50/70"
-                      >
-                        {/* NOMOR TRANSAKSI */}
-                        <td className="min-w-0 px-3.5 py-3 align-middle">
+                return (
+                  <Card
+                    key={transaction.loan.id}
+                    className={`p-3.5 sm:p-4 shadow-xs transition flex flex-col justify-between h-full ${
+                      isOverdue
+                        ? "border-l-4 border-l-red-500 border-red-200 bg-red-50/20"
+                        : "hover:border-slate-300"
+                    }`}
+                  >
+                    <div>
+                      {/* TRANSACTION HEADER */}
+                      <div className="flex items-start justify-between gap-2.5">
+                        <div className="min-w-0 flex-1">
                           <p
-                            className="truncate whitespace-nowrap font-semibold tracking-tight text-slate-900"
+                            className="truncate text-sm font-bold tracking-tight text-slate-900 sm:text-base font-mono tabular-nums"
                             title={transaction.loan.loanNumber}
                           >
                             {transaction.loan.loanNumber}
                           </p>
-                        </td>
 
-                        {/* ANGGOTA */}
-                        <td className="min-w-0 px-3.5 py-3 align-middle">
                           <p
-                            className="truncate text-slate-700"
+                            className="mt-0.5 truncate text-xs text-slate-600 sm:text-sm font-medium"
                             title={transaction.member?.name ?? "-"}
                           >
                             {transaction.member?.name ?? "-"}
                           </p>
-                        </td>
-
-                        {/* BUKU */}
-                        <td className="min-w-0 px-3.5 py-3 align-middle">
-                          {transaction.items.length === 0 ? (
-                            <span className="text-slate-400">-</span>
-                          ) : (
-                            <ul className="min-w-0 space-y-0.5">
-                              {transaction.items.map(({ book, bookCopy }) => (
-                                <li
-                                  key={`${transaction.loan.id}-${book?.id ?? "book"}-${bookCopy?.id ?? "copy"}`}
-                                  className="grid min-w-0 grid-cols-[10px_minmax(0,1fr)]"
-                                >
-                                  <span
-                                    className="text-slate-300"
-                                    aria-hidden="true"
-                                  >
-                                    •
-                                  </span>
-
-                                  <span
-                                    className="min-w-0 leading-5 text-slate-700"
-                                    title={`${book?.title ?? "-"}${bookCopy?.code ? ` (${bookCopy.code})` : ""}`}
-                                  >
-                                    <span className="font-medium">
-                                      {book?.title ?? "-"}
-                                    </span>
-
-                                    {bookCopy?.code && (
-                                      <span className="ml-1 text-slate-400">
-                                        ({bookCopy.code})
-                                      </span>
-                                    )}
-                                  </span>
-                                </li>
-                              ))}
-                            </ul>
-                          )}
-                        </td>
-
-                        {/* PETUGAS */}
-                        <td className="min-w-0 px-3.5 py-3 align-middle">
-                          <p
-                            className="truncate text-slate-700"
-                            title={transaction.user?.name ?? "-"}
-                          >
-                            {transaction.user?.name ?? "-"}
-                          </p>
-                        </td>
-
-                        {/* PEMINJAMAN */}
-                        <td className="px-3.5 py-3 text-center align-middle">
-                          <span className="whitespace-nowrap text-slate-700">
-                            {formatDate(transaction.loan.borrowedAt)}
-                          </span>
-                        </td>
-
-                        {/* JATUH TEMPO */}
-                        <td className="px-3.5 py-3 text-center align-middle">
-                          <span className="whitespace-nowrap text-slate-700">
-                            {formatDate(transaction.loan.dueAt)}
-                          </span>
-                        </td>
-
-                        {/* PENGEMBALIAN */}
-                        <td className="px-3.5 py-3 text-center align-middle">
-                          <span className="whitespace-nowrap text-slate-700">
-                            {formatDate(transaction.loan.returnedAt)}
-                          </span>
-                        </td>
-
-                        {/* STATUS */}
-                        <td className="px-3.5 py-3 align-middle">
-                          <div className="flex justify-center">
-                            <Badge
-                              variant={getStatusVariant(transaction.loan.status)}
-                            >
-                              {getStatusLabel(transaction.loan.status)}
-                            </Badge>
-                          </div>
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-
-              {tableLoading && (
-                <div
-                  className="absolute inset-0 flex items-center justify-center bg-white/70"
-                  role="status"
-                  aria-live="polite"
-                  aria-label="Memuat riwayat transaksi"
-                >
-                  <div className="rounded-lg bg-white px-4 py-3 text-sm font-medium text-slate-600 shadow-sm ring-1 ring-slate-200">
-                    Memuat data...
-                  </div>
-                </div>
-              )}
-
-              {/* PAGINATION (DESKTOP) */}
-              <Pagination
-                currentPage={currentPage}
-                totalPages={totalPages}
-                onPageChange={(nextPage) => setPage(nextPage)}
-                totalItems={filteredTransactions.length}
-                pageSize={pageSize}
-                onPageSizeChange={(newSize) => {
-                  setPageSize(newSize);
-                  setPage(1);
-                }}
-              />
-            </Card>
-
-            {/* =================================================
-                CARD VIEW (TABLET & MOBILE: < xl)
-            ================================================== */}
-            <div className="mt-4 xl:hidden">
-              <div className="relative grid grid-cols-1 md:grid-cols-2 gap-3.5">
-                {paginatedTransactions.map((transaction) => {
-                  return (
-                    <Card
-                      key={transaction.loan.id}
-                      className="p-3.5 sm:p-4 shadow-sm transition hover:border-slate-300 flex flex-col justify-between h-full"
-                    >
-                      <div>
-                        {/* TRANSACTION HEADER */}
-                        <div className="flex items-start justify-between gap-2.5">
-                          <div className="min-w-0 flex-1">
-                            <p
-                              className="truncate text-sm font-bold tracking-tight text-slate-900 sm:text-base"
-                              title={transaction.loan.loanNumber}
-                            >
-                              {transaction.loan.loanNumber}
-                            </p>
-
-                            <p
-                              className="mt-0.5 truncate text-xs text-slate-500 sm:text-sm"
-                              title={transaction.member?.name ?? "-"}
-                            >
-                              {transaction.member?.name ?? "-"}
-                            </p>
-                          </div>
-
-                          <div className="shrink-0">
-                            <Badge
-                              variant={getStatusVariant(transaction.loan.status)}
-                            >
-                              {getStatusLabel(transaction.loan.status)}
-                            </Badge>
-                          </div>
                         </div>
 
-                        {/* BUKU */}
-                        <div className="mt-2.5 rounded-lg bg-slate-50 px-3 py-2">
-                          <p className="text-[11px] font-semibold text-slate-500">
-                            Buku Dipinjam ({transaction.items.length})
-                          </p>
-
-                          {transaction.items.length === 0 ? (
-                            <p className="mt-0.5 text-xs text-slate-900">-</p>
+                        <div className="shrink-0 text-right">
+                          {isOverdue && overdueDays > 0 ? (
+                            <div>
+                              <Badge variant="danger">
+                                Terlambat ({overdueDays} hr)
+                              </Badge>
+                              {getLoanFine(transaction.loan, transaction.items.length) === null ? (
+                                <span className="mt-0.5 block text-xs font-semibold text-amber-600">
+                                  Denda: Menunggu konfigurasi
+                                </span>
+                              ) : (
+                                <span className="mt-0.5 block text-xs font-semibold text-red-600 tabular-nums">
+                                  Denda: Rp {getLoanFine(transaction.loan, transaction.items.length)!.toLocaleString("id-ID")}
+                                </span>
+                              )}
+                            </div>
                           ) : (
-                            <ul className="mt-1 space-y-0.5 text-xs text-slate-900 sm:text-sm">
-                              {transaction.items.map(({ book, bookCopy }) => (
-                                <li
-                                  key={`${transaction.loan.id}-${book?.id ?? "book"}-${bookCopy?.id ?? "copy"}`}
-                                  className="break-words"
-                                >
-                                  <span
-                                    aria-hidden="true"
-                                    className="mr-1.5 text-slate-400"
-                                  >
-                                    •
+                            <div>
+                              <Badge
+                                variant={getStatusVariant(
+                                  transaction.loan.status
+                                )}
+                              >
+                                {getStatusLabel(transaction.loan.status)}
+                              </Badge>
+                              {overdueDays > 0 && (
+                                getLoanFine(transaction.loan, transaction.items.length) === null ? (
+                                  <span className="mt-0.5 block text-xs font-medium text-amber-600">
+                                    Denda: Menunggu konfigurasi
                                   </span>
-
-                                  <span className="font-medium text-slate-800">
-                                    {book?.title ?? "-"}
+                                ) : (
+                                  <span className="mt-0.5 block text-xs font-medium text-slate-500 tabular-nums">
+                                    Denda: Rp {getLoanFine(transaction.loan, transaction.items.length)!.toLocaleString("id-ID")}
                                   </span>
-
-                                  {bookCopy?.code && (
-                                    <span className="ml-1.5 font-mono text-xs text-slate-500">
-                                      ({bookCopy.code})
-                                    </span>
-                                  )}
-                                </li>
-                              ))}
-                            </ul>
+                                )
+                              )}
+                            </div>
                           )}
                         </div>
                       </div>
 
-                      {/* DATES & PETUGAS GRID (2x2 Grid) */}
-                      <div className="mt-3 grid grid-cols-2 gap-2 border-t border-slate-100 pt-2.5 text-xs">
-                        <div className="rounded-lg border border-slate-100 bg-slate-50/70 px-2.5 py-1.5">
-                          <span className="text-[10px] font-semibold uppercase tracking-wide text-slate-400 block">
-                            Petugas
-                          </span>
-                          <p className="mt-0.5 truncate font-semibold text-slate-700" title={transaction.user?.name ?? "-"}>
-                            {transaction.user?.name ?? "-"}
-                          </p>
-                        </div>
+                      {/* BUKU */}
+                      <div className="mt-2.5 rounded-lg bg-slate-50 px-3 py-2">
+                        <p className="text-xs font-semibold text-slate-500">
+                          Buku Dipinjam ({transaction.items.length})
+                        </p>
 
-                        <div className="rounded-lg border border-slate-100 bg-slate-50/70 px-2.5 py-1.5">
-                          <span className="text-[10px] font-semibold uppercase tracking-wide text-slate-400 block">
-                            Pinjam
-                          </span>
-                          <p className="mt-0.5 truncate font-semibold text-slate-700" title={formatDate(transaction.loan.borrowedAt)}>
-                            {formatDate(transaction.loan.borrowedAt)}
-                          </p>
-                        </div>
+                        {transaction.items.length === 0 ? (
+                          <p className="mt-0.5 text-xs text-slate-900">-</p>
+                        ) : (
+                          <ul className="mt-1 space-y-0.5 text-xs text-slate-900 sm:text-sm">
+                            {transaction.items.map(({ book, bookCopy }) => (
+                              <li
+                                key={`${transaction.loan.id}-${book?.id ?? "book"}-${bookCopy?.id ?? "copy"}`}
+                                className="break-words"
+                              >
+                                <span
+                                  aria-hidden="true"
+                                  className="mr-1.5 text-slate-600 select-none"
+                                >
+                                  &bull;
+                                </span>
 
-                        <div className="rounded-lg border border-slate-100 bg-slate-50/70 px-2.5 py-1.5">
-                          <span className="text-[10px] font-semibold uppercase tracking-wide text-slate-400 block">
-                            Jatuh Tempo
-                          </span>
-                          <p className="mt-0.5 truncate font-semibold text-slate-700" title={formatDate(transaction.loan.dueAt)}>
-                            {formatDate(transaction.loan.dueAt)}
-                          </p>
-                        </div>
+                                <span className="font-medium text-slate-800">
+                                  {book?.title ?? "-"}
+                                </span>
 
-                        <div className="rounded-lg border border-slate-100 bg-slate-50/70 px-2.5 py-1.5">
-                          <span className="text-[10px] font-semibold uppercase tracking-wide text-slate-400 block">
-                            Pengembalian
-                          </span>
-                          <p className="mt-0.5 truncate font-semibold text-slate-700" title={formatDate(transaction.loan.returnedAt)}>
-                            {formatDate(transaction.loan.returnedAt)}
-                          </p>
-                        </div>
+                                {bookCopy?.code && (
+                                  <span className="ml-1.5 font-mono text-xs text-slate-500">
+                                    ({bookCopy.code})
+                                  </span>
+                                )}
+                              </li>
+                            ))}
+                          </ul>
+                        )}
                       </div>
-                    </Card>
-                  );
-                })}
-
-                {tableLoading && (
-                  <div
-                    className="absolute inset-0 flex items-center justify-center rounded-xl bg-white/70"
-                    role="status"
-                    aria-live="polite"
-                    aria-label="Memuat riwayat transaksi"
-                  >
-                    <div className="rounded-lg bg-white px-4 py-3 text-sm font-medium text-slate-600 shadow-sm ring-1 ring-slate-200">
-                      Memuat data...
                     </div>
-                  </div>
-                )}
-              </div>
 
-              {/* PAGINATION (CARD VIEW) */}
-              {filteredTransactions.length > 0 && (
-                <div className="mt-4">
-                  <div className="rounded-xl border border-slate-200 bg-white shadow-sm">
-                    <Pagination
-                      currentPage={currentPage}
-                      totalPages={totalPages}
-                      onPageChange={(nextPage) => setPage(nextPage)}
-                      totalItems={filteredTransactions.length}
-                      pageSize={pageSize}
-                      onPageSizeChange={(newSize) => {
-                        setPageSize(newSize);
-                        setPage(1);
-                      }}
-                      className="border-t-0 rounded-xl"
-                    />
-                  </div>
+                    {/* DATES & PETUGAS GRID (2x2 Grid) */}
+                    <div className="mt-3 grid grid-cols-2 gap-2 border-t border-slate-100 pt-2.5 text-xs">
+                      <div className="rounded-lg border border-slate-100 bg-slate-50/70 px-2.5 py-1.5">
+                        <span className="text-[11px] font-semibold uppercase tracking-wide text-slate-500 block">
+                          Petugas
+                        </span>
+                        <p
+                          className="mt-0.5 truncate font-semibold text-slate-700"
+                          title={transaction.user?.name ?? "-"}
+                        >
+                          {transaction.user?.name ?? "-"}
+                        </p>
+                      </div>
+
+                      <div className="rounded-lg border border-slate-100 bg-slate-50/70 px-2.5 py-1.5">
+                        <span className="text-[11px] font-semibold uppercase tracking-wide text-slate-500 block">
+                          Pinjam
+                        </span>
+                        <p
+                          className="mt-0.5 truncate font-semibold text-slate-700 tabular-nums"
+                          title={formatDate(transaction.loan.borrowedAt)}
+                        >
+                          {formatDate(transaction.loan.borrowedAt)}
+                        </p>
+                      </div>
+
+                      <div className="rounded-lg border border-slate-100 bg-slate-50/70 px-2.5 py-1.5">
+                        <span className="text-[11px] font-semibold uppercase tracking-wide text-slate-500 block">
+                          Jatuh Tempo
+                        </span>
+                        <p
+                          className="mt-0.5 truncate font-semibold text-slate-700 tabular-nums"
+                          title={formatDate(transaction.loan.dueAt)}
+                        >
+                          {formatDate(transaction.loan.dueAt)}
+                        </p>
+                      </div>
+
+                      <div className="rounded-lg border border-slate-100 bg-slate-50/70 px-2.5 py-1.5">
+                        <span className="text-[11px] font-semibold uppercase tracking-wide text-slate-500 block">
+                          Pengembalian
+                        </span>
+                        <p
+                          className="mt-0.5 truncate font-semibold text-slate-700 tabular-nums"
+                          title={formatDate(transaction.loan.returnedAt)}
+                        >
+                          {formatDate(transaction.loan.returnedAt)}
+                        </p>
+                      </div>
+                    </div>
+
+                    {/* AKSI BARIS (MOBILE / TABLET) */}
+                    <div className="mt-3 flex items-center justify-between border-t border-slate-100 pt-2.5">
+                      <span className="text-xs font-medium text-slate-600">Pilihan Aksi</span>
+                      <RowActions
+                        actions={[
+                          ...(canReturn && transaction.loan.status !== "COMPLETED"
+                            ? [
+                                {
+                                  label: "Kembalikan",
+                                  href: `/returns?loanNumber=${encodeURIComponent(transaction.loan.loanNumber)}&loanId=${encodeURIComponent(transaction.loan.id)}`,
+                                  icon: (
+                                    <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden="true">
+                                      <path d="m9 14-5-5 5-5" />
+                                      <path d="M4 9h11a4 4 0 0 1 4 4v2" />
+                                    </svg>
+                                  ),
+                                },
+                              ]
+                            : []),
+                          ...(canViewMember && (transaction.member?.id || transaction.loan.memberId)
+                            ? [
+                                {
+                                  label: "Lihat Anggota",
+                                  href: `/master/members?memberId=${encodeURIComponent(transaction.member?.id || transaction.loan.memberId)}`,
+                                  icon: (
+                                    <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden="true">
+                                      <path d="M19 21v-2a4 4 0 0 0-4-4H9a4 4 0 0 0-4 4v2" />
+                                      <circle cx="12" cy="7" r="4" />
+                                    </svg>
+                                  ),
+                                },
+                              ]
+                            : []),
+                        ]}
+                      />
+                    </div>
+                  </Card>
+                );
+              }}
+            />
+
+            {/* PAGINATION */}
+            {transactions.length > 0 && (
+              <div className="mt-4">
+                <div className="rounded-xl border border-slate-200 bg-white shadow-2xs">
+                  <Pagination
+                    currentPage={page}
+                    totalPages={totalPages}
+                    onPageChange={(nextPage) => setPage(nextPage)}
+                    totalItems={totalItems}
+                    pageSize={pageSize}
+                    onPageSizeChange={(newSize) => {
+                      setPageSize(newSize);
+                      setPage(1);
+                    }}
+                    className="border-t-0 rounded-xl"
+                  />
                 </div>
-              )}
-            </div>
-          </>
+              </div>
+            )}
+          </div>
         )}
       </div>
-    </main>
+    </div>
+  );
+}
+
+export default function TransactionsPage() {
+  return (
+    <Suspense
+      fallback={
+        <div className="min-h-screen bg-slate-50">
+          <LoadingState label="Memuat riwayat transaksi..." />
+        </div>
+      }
+    >
+      <TransactionsContent />
+    </Suspense>
   );
 }

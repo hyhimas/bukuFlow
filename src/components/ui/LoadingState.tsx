@@ -1,36 +1,28 @@
+import LogoSpinner from "./LogoSpinner";
+
 interface LoadingStateProps {
   label?: string;
   className?: string;
+  nested?: boolean;
 }
 
 export default function LoadingState({
   label = "Memuat...",
   className = "",
+  nested = false,
 }: LoadingStateProps) {
+  const containerClasses = nested
+    ? `flex items-center justify-center py-12 ${className}`
+    : `flex min-h-screen items-center justify-center bg-slate-50 ${className}`;
+
   return (
     <div
-      className={`flex min-h-screen items-center justify-center bg-slate-50 ${className}`}
+      className={containerClasses}
       role="status"
       aria-live="polite"
     >
       <div className="flex flex-col items-center text-center">
-        {/* Loading Icon */}
-        <div className="relative flex h-16 w-16 items-center justify-center">
-          {/* Outer Spinner */}
-          <div
-            className="absolute inset-0 animate-spin rounded-full border-2 border-blue-100 border-t-blue-600"
-            aria-hidden="true"
-          />
-
-          {/* Book Logo Animation */}
-          <div className="animate-pulse">
-            <img
-              src="/logo-icon.png"
-              alt="BukuFlow Loading"
-              className="h-8 w-8 object-contain"
-            />
-          </div>
-        </div>
+        <LogoSpinner />
 
         {/* Loading Label */}
         <p className="mt-4 text-sm font-medium text-slate-700">
@@ -38,7 +30,7 @@ export default function LoadingState({
         </p>
 
         {/* Loading Description */}
-        <p className="mt-1 text-xs text-slate-400">
+        <p className="mt-1 text-xs text-slate-500">
           Harap tunggu sebentar...
         </p>
       </div>

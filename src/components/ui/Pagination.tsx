@@ -77,8 +77,8 @@ export default function Pagination({
     safeTotalPages
   );
 
-  // Calculate pages with ellipses for desktop & tablet
-  function getPageItems(): (number | "...")[] {
+  // Desktop pages calculation (max 7 slots: ensures predictable width regardless of page count)
+  function getDesktopPageItems(): (number | "...")[] {
     if (safeTotalPages <= 1) return [1];
     if (safeTotalPages <= 7) {
       return Array.from({ length: safeTotalPages }, (_, i) => i + 1);
@@ -111,7 +111,38 @@ export default function Pagination({
     ];
   }
 
-  const pageItems = getPageItems();
+  // Mobile / narrow view calculation (max 5 slots: guaranteed to never overflow on mobile devices)
+  function getMobilePageItems(): (number | "...")[] {
+    if (safeTotalPages <= 1) return [1];
+    if (safeTotalPages <= 4) {
+      return Array.from({ length: safeTotalPages }, (_, i) => i + 1);
+    }
+
+    if (safeCurrentPage <= 2) {
+      return [1, 2, 3, "...", safeTotalPages];
+    }
+
+    if (safeCurrentPage >= safeTotalPages - 1) {
+      return [
+        1,
+        "...",
+        safeTotalPages - 2,
+        safeTotalPages - 1,
+        safeTotalPages,
+      ];
+    }
+
+    return [
+      1,
+      "...",
+      safeCurrentPage,
+      "...",
+      safeTotalPages,
+    ];
+  }
+
+  const desktopPageItems = getDesktopPageItems();
+  const mobilePageItems = getMobilePageItems();
 
   const startItem =
     pageSize && safeTotalItems !== undefined
@@ -122,11 +153,6 @@ export default function Pagination({
       ? Math.min(safeCurrentPage * pageSize, safeTotalItems)
       : undefined;
 
-  const displayedItemsCount =
-    startItem !== undefined && endItem !== undefined
-      ? Math.max(0, endItem - startItem + 1)
-      : pageSize;
-
   const handleToggleSize = () => {
     if (disabled) return;
     if (!sizeOpen && sizeContainerRef.current) {
@@ -134,20 +160,12 @@ export default function Pagination({
       const spaceAbove = rect.top;
       const spaceBelow = window.innerHeight - rect.bottom;
 
-      // Jika data yang tampil sedikit (< 5 baris), buka ke bawah agar tidak menabrak header tabel.
-      // Jika data yang tampil banyak (>= 5 baris), buka ke atas karena ruang di atasnya luas.
-      if (displayedItemsCount < 5) {
-        if (spaceBelow >= 180 || spaceBelow > spaceAbove) {
-          setOpenDirection("down");
-        } else {
-          setOpenDirection("up");
-        }
+      // Dropdown di footer tabel default buka ke atas (dropup) agar tidak terpotong
+      // oleh batas bawah kartu atau viewport. Buka ke bawah hanya jika ruang atas sangat terbatas.
+      if (spaceAbove < 180 && spaceBelow >= 180) {
+        setOpenDirection("down");
       } else {
-        if (spaceAbove >= 180 || spaceAbove >= spaceBelow) {
-          setOpenDirection("up");
-        } else {
-          setOpenDirection("down");
-        }
+        setOpenDirection("up");
       }
     }
     setSizeOpen((prev) => !prev);
@@ -159,7 +177,7 @@ export default function Pagination({
         aria-label="Navigasi Halaman"
         className={`flex items-center justify-between gap-2 py-1 text-xs ${className}`}
       >
-        <p className="text-[11px] font-medium text-slate-500 whitespace-nowrap">
+        <p className="text-xs font-medium text-slate-500 whitespace-nowrap">
           {totalItems !== undefined && startItem && endItem
             ? `${startItem}-${endItem} dari ${totalItems}`
             : `Halaman ${safeCurrentPage} dari ${totalPages}`}
@@ -172,9 +190,9 @@ export default function Pagination({
               disabled={safeCurrentPage <= 1 || disabled}
               onClick={() => onPageChange(Math.max(1, safeCurrentPage - 1))}
               aria-label="Halaman sebelumnya"
-              className="flex h-7 w-7 items-center justify-center rounded-md border border-slate-200 bg-white text-slate-600 transition hover:bg-slate-50 hover:text-slate-900 focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 disabled:cursor-not-allowed disabled:opacity-40"
+              className="flex h-10 w-10 min-h-[40px] min-w-[40px] items-center justify-center rounded-lg border border-slate-200 bg-white text-slate-600 transition hover:bg-slate-50 hover:text-slate-900 focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 disabled:cursor-not-allowed disabled:opacity-40"
             >
-              <svg viewBox="0 0 20 20" fill="currentColor" className="h-3.5 w-3.5">
+              <svg viewBox="0 0 20 20" fill="currentColor" className="h-4 w-4" aria-hidden="true">
                 <path
                   fillRule="evenodd"
                   d="M12.79 5.23a.75.75 0 01-.02 1.06L8.832 10l3.938 3.71a.75.75 0 11-1.04 1.08l-4.5-4.25a.75.75 0 010-1.08l4.5-4.25a.75.75 0 011.06.02z"
@@ -183,13 +201,14 @@ export default function Pagination({
               </svg>
             </button>
 
-            <div className="flex items-center gap-0.5">
-              {pageItems.map((item, idx) => {
+            <div className="flex items-center gap-1">
+              {mobilePageItems.map((item, idx) => {
                 if (item === "...") {
                   return (
                     <span
                       key={`ellipsis-${idx}`}
-                      className="flex h-7 w-4 select-none items-center justify-center text-[10px] font-bold text-slate-400"
+                      className="flex h-10 w-4 min-h-[40px] select-none items-center justify-center text-xs font-bold text-slate-500"
+                      aria-hidden="true"
                     >
                       …
                     </span>
@@ -205,7 +224,7 @@ export default function Pagination({
                     disabled={disabled}
                     onClick={() => onPageChange(item)}
                     aria-current={isCurrent ? "page" : undefined}
-                    className={`flex h-7 min-w-7 items-center justify-center rounded-md px-1 text-xs font-semibold transition ${
+                    className={`flex h-10 min-w-10 min-h-[40px] items-center justify-center rounded-lg px-2 text-xs font-semibold transition focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 ${
                       isCurrent
                         ? "bg-blue-600 text-white shadow-xs"
                         : "border border-slate-200 bg-white text-slate-700 hover:bg-slate-50"
@@ -222,9 +241,9 @@ export default function Pagination({
               disabled={safeCurrentPage >= totalPages || disabled}
               onClick={() => onPageChange(Math.min(totalPages, safeCurrentPage + 1))}
               aria-label="Halaman berikutnya"
-              className="flex h-7 w-7 items-center justify-center rounded-md border border-slate-200 bg-white text-slate-600 transition hover:bg-slate-50 hover:text-slate-900 focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 disabled:cursor-not-allowed disabled:opacity-40"
+              className="flex h-10 w-10 min-h-[40px] min-w-[40px] items-center justify-center rounded-lg border border-slate-200 bg-white text-slate-600 transition hover:bg-slate-50 hover:text-slate-900 focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 disabled:cursor-not-allowed disabled:opacity-40"
             >
-              <svg viewBox="0 0 20 20" fill="currentColor" className="h-3.5 w-3.5">
+              <svg viewBox="0 0 20 20" fill="currentColor" className="h-4 w-4" aria-hidden="true">
                 <path
                   fillRule="evenodd"
                   d="M7.21 14.77a.75.75 0 01.02-1.06L11.168 10 7.23 6.29a.75.75 0 111.04-1.08l4.5 4.25a.75.75 0 010 1.08l-4.5 4.25a.75.75 0 01-1.06-.02z"
@@ -241,20 +260,20 @@ export default function Pagination({
   return (
     <nav
       aria-label="Navigasi Halaman"
-      className={`flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 border-t border-slate-200 bg-white px-3.5 py-3 sm:px-5 sm:py-3.5 ${className}`}
+      className={`flex flex-wrap items-center justify-between gap-y-2.5 gap-x-3 border-t border-slate-200 bg-white px-3.5 py-3 sm:px-5 sm:py-3.5 rounded-b-xl ${className}`}
     >
       {/* =========================================================
           KIRI: SIZE SELECTOR & INFO DATA
       ========================================================= */}
-      <div className="flex w-full sm:w-auto items-center justify-between sm:justify-start gap-2 text-xs text-slate-600 sm:text-sm shrink-0">
+      <div className="flex flex-wrap items-center gap-2 text-xs text-slate-600 sm:text-sm">
         {onPageSizeChange && (
-          <div className="flex items-center gap-1.5 text-xs text-slate-500 shrink-0">
+          <div className="flex items-center gap-1.5 text-xs text-slate-500">
             <span className="font-medium whitespace-nowrap">Tampilkan</span>
             <div ref={sizeContainerRef} className="relative inline-flex items-center">
               <button
                 type="button"
                 disabled={disabled}
-                aria-label="Pilih jumlah data per halaman"
+                aria-label={`${pageSize}, pilih jumlah data per halaman`}
                 aria-haspopup="listbox"
                 aria-expanded={sizeOpen}
                 onClick={handleToggleSize}
@@ -315,6 +334,7 @@ export default function Pagination({
                             fill="none"
                             stroke="currentColor"
                             strokeWidth="2.5"
+                            aria-hidden="true"
                           >
                             <polyline points="20 6 9 17 4 12" />
                           </svg>
@@ -325,19 +345,19 @@ export default function Pagination({
                 </div>
               )}
             </div>
-            <span className="hidden sm:inline mx-0.5 text-slate-300 shrink-0">•</span>
+            <span className="hidden sm:inline mx-0.5 text-slate-300 shrink-0 select-none" aria-hidden="true">&bull;</span>
           </div>
         )}
 
         {totalItems !== undefined && startItem && endItem ? (
-          <p className="leading-5 text-slate-500 whitespace-nowrap shrink-0 text-right sm:text-left text-xs sm:text-sm">
+          <p className="leading-5 text-slate-500 whitespace-nowrap text-xs sm:text-sm">
             {onPageSizeChange ? "" : "Menampilkan "}
             <span className="font-semibold text-slate-700">{startItem}</span> -{" "}
             <span className="font-semibold text-slate-700">{endItem}</span> dari{" "}
             <span className="font-semibold text-slate-700">{totalItems}</span> data
           </p>
         ) : (
-          <p className="leading-5 text-slate-500 whitespace-nowrap shrink-0 text-right sm:text-left text-xs sm:text-sm">
+          <p className="leading-5 text-slate-500 whitespace-nowrap text-xs sm:text-sm">
             Halaman <span className="font-semibold text-slate-700">{safeCurrentPage}</span> dari{" "}
             <span className="font-semibold text-slate-700">{totalPages}</span>
           </p>
@@ -348,19 +368,19 @@ export default function Pagination({
           KANAN: KONTROL TOMBOL NAVIGASI
       ========================================================= */}
       {totalPages > 1 && (
-        <div className="flex w-full sm:w-auto items-center justify-center sm:justify-end gap-1.5 shrink-0">
+        <div className="flex items-center justify-end gap-1 sm:gap-1.5 ml-auto sm:ml-0 shrink-0 max-w-full overflow-x-auto py-0.5">
           {/* TOMBOL SEBELUMNYA */}
           <button
             type="button"
             disabled={safeCurrentPage <= 1 || disabled}
             onClick={() => onPageChange(Math.max(1, safeCurrentPage - 1))}
             aria-label="Halaman sebelumnya"
-            className="flex h-8.5 min-w-8.5 sm:h-8 sm:min-w-8 items-center justify-center gap-1 rounded-lg border border-slate-200 bg-white px-2 sm:px-2.5 text-xs font-medium text-slate-700 shadow-2xs transition hover:bg-slate-50 hover:text-slate-900 focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 disabled:cursor-not-allowed disabled:opacity-40"
+            className="flex h-10 min-w-10 min-h-[40px] sm:h-9 sm:min-w-9 sm:min-h-[36px] items-center justify-center gap-1 rounded-lg border border-slate-200 bg-white px-2 sm:px-2.5 text-xs font-medium text-slate-700 shadow-2xs transition hover:bg-slate-50 hover:text-slate-900 focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 disabled:cursor-not-allowed disabled:opacity-40"
           >
             <svg
               viewBox="0 0 20 20"
               fill="currentColor"
-              className="h-4 w-4"
+              className="h-4 w-4 shrink-0"
               aria-hidden="true"
             >
               <path
@@ -369,17 +389,17 @@ export default function Pagination({
                 clipRule="evenodd"
               />
             </svg>
-            <span className="hidden md:inline">Sebelumnya</span>
+            <span className="hidden 2xl:inline">Sebelumnya</span>
           </button>
 
-          {/* NOMOR HALAMAN */}
-          <div className="flex items-center gap-1 sm:gap-1.5">
-            {pageItems.map((item, idx) => {
+          {/* NOMOR HALAMAN (MOBILE: < sm, MAX 5 ITEMS) */}
+          <div className="flex items-center gap-1 sm:hidden">
+            {mobilePageItems.map((item, idx) => {
               if (item === "...") {
                 return (
                   <span
-                    key={`ellipsis-${idx}`}
-                    className="flex h-8.5 w-6 sm:h-8 select-none items-center justify-center text-xs font-bold text-slate-400 sm:w-7"
+                    key={`m-ellipsis-${idx}`}
+                    className="flex h-10 w-4 min-h-[40px] select-none items-center justify-center text-xs font-bold text-slate-500"
                     aria-hidden="true"
                   >
                     …
@@ -391,12 +411,48 @@ export default function Pagination({
 
               return (
                 <button
-                  key={`page-${item}`}
+                  key={`m-page-${item}`}
                   type="button"
                   disabled={disabled}
                   onClick={() => onPageChange(item)}
                   aria-current={isCurrent ? "page" : undefined}
-                  className={`flex h-8.5 min-w-8.5 sm:h-8 sm:min-w-8 items-center justify-center rounded-lg px-2 text-xs font-semibold transition focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 ${
+                  className={`flex h-10 min-w-10 min-h-[40px] items-center justify-center rounded-lg px-2 text-xs font-semibold transition focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 ${
+                    isCurrent
+                      ? "bg-blue-600 text-white shadow-sm ring-1 ring-blue-600"
+                      : "border border-slate-200 bg-white text-slate-700 hover:border-slate-300 hover:bg-slate-50"
+                  }`}
+                >
+                  {item}
+                </button>
+              );
+            })}
+          </div>
+
+          {/* NOMOR HALAMAN (TABLET & DESKTOP: >= sm, MAX 7 ITEMS) */}
+          <div className="hidden sm:flex items-center gap-1 sm:gap-1.5">
+            {desktopPageItems.map((item, idx) => {
+              if (item === "...") {
+                return (
+                  <span
+                    key={`d-ellipsis-${idx}`}
+                    className="flex h-10 w-5 sm:h-9 min-h-[40px] sm:min-h-[36px] select-none items-center justify-center text-xs font-bold text-slate-500 sm:w-6"
+                    aria-hidden="true"
+                  >
+                    …
+                  </span>
+                );
+              }
+
+              const isCurrent = item === safeCurrentPage;
+
+              return (
+                <button
+                  key={`d-page-${item}`}
+                  type="button"
+                  disabled={disabled}
+                  onClick={() => onPageChange(item)}
+                  aria-current={isCurrent ? "page" : undefined}
+                  className={`flex h-10 min-w-10 min-h-[40px] sm:h-9 sm:min-w-9 sm:min-h-[36px] items-center justify-center rounded-lg px-2 text-xs font-semibold transition focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 ${
                     isCurrent
                       ? "bg-blue-600 text-white shadow-sm ring-1 ring-blue-600"
                       : "border border-slate-200 bg-white text-slate-700 hover:border-slate-300 hover:bg-slate-50"
@@ -414,13 +470,13 @@ export default function Pagination({
             disabled={safeCurrentPage >= totalPages || disabled}
             onClick={() => onPageChange(Math.min(totalPages, safeCurrentPage + 1))}
             aria-label="Halaman berikutnya"
-            className="flex h-8.5 min-w-8.5 sm:h-8 sm:min-w-8 items-center justify-center gap-1 rounded-lg border border-slate-200 bg-white px-2 sm:px-2.5 text-xs font-medium text-slate-700 shadow-2xs transition hover:bg-slate-50 hover:text-slate-900 focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 disabled:cursor-not-allowed disabled:opacity-40"
+            className="flex h-10 min-w-10 min-h-[40px] sm:h-9 sm:min-w-9 sm:min-h-[36px] items-center justify-center gap-1 rounded-lg border border-slate-200 bg-white px-2 sm:px-2.5 text-xs font-medium text-slate-700 shadow-2xs transition hover:bg-slate-50 hover:text-slate-900 focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 disabled:cursor-not-allowed disabled:opacity-40"
           >
-            <span className="hidden md:inline">Berikutnya</span>
+            <span className="hidden 2xl:inline">Berikutnya</span>
             <svg
               viewBox="0 0 20 20"
               fill="currentColor"
-              className="h-4 w-4"
+              className="h-4 w-4 shrink-0"
               aria-hidden="true"
             >
               <path

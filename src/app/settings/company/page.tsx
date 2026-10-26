@@ -1,412 +1,385 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 
 import Card from "@/components/ui/Card";
-import BackLink from "@/components/ui/BackLink";
+import PageHeader from "@/components/ui/PageHeader";
 import Button from "@/components/ui/Button";
 import Input from "@/components/ui/Input";
-import Dropdown from "@/components/ui/Dropdown";
 import LoadingState from "@/components/ui/LoadingState";
 import FeedbackPanel from "@/components/ui/FeedbackPanel";
+import ErrorState from "@/components/ui/ErrorState";
+import Skeleton from "@/components/ui/Skeleton";
+import { useToast } from "@/components/ui/Toast";
+import { useSubmitHotkey } from "@/hooks/useHotkeys";
 
-import { getSession } from "@/lib/auth";
+import { getSession, isStoredSessionExpired, hasStoredAuth } from "@/lib/auth";
 import { canAccessCompanySettings } from "@/lib/authorization";
 import {
-  getCompanyDetailApi,
   getCompanySettingsApi,
-  updateCompanyApi,
   updateCompanySettingsApi,
+  getErrorMessage,
 } from "@/lib/api";
-import type { Company, CompanySettings } from "@/lib/types";
 
 export default function CompanySettingsPage() {
   const router = useRouter();
+  const { toast } = useToast();
 
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
-  const [successMessage, setSuccessMessage] = useState("");
   const [errorMessage, setErrorMessage] = useState("");
 
-  const [companyId, setCompanyId] = useState<string>("company-001");
-  const [company, setCompany] = useState<Company | null>(null);
+  const [companyId] = useState<string>(() => {
+    if (typeof window === "undefined") return "";
+    return getSession()?.user?.companyId || "";
+  });
+  const [isInitialConfig, setIsInitialConfig] = useState(false);
 
-  // Form State - Company Identity
-  const [name, setName] = useState("");
-  const [code, setCode] = useState("");
-  const [address, setAddress] = useState("");
-  const [timezone, setTimezone] = useState("Asia/Jakarta");
+  // Form State - 3 Kebijakan Sirkulasi Backend (/bukuflow/company/config)
+  const [defaultLoanDuration, setDefaultLoanDuration] = useState<number | string>("");
+  const [maxActiveLoans, setMaxActiveLoans] = useState<number | string>("");
+  const [dailyFineRate, setDailyFineRate] = useState<number | string>("");
 
-  // Form State - Policies
-  const [defaultLoanDuration, setDefaultLoanDuration] = useState<number>(7);
-  const [maxActiveLoans, setMaxActiveLoans] = useState<number>(3);
-  const [dailyFineRate, setDailyFineRate] = useState<number>(1000);
-  const [allowRenewal, setAllowRenewal] = useState<boolean>(true);
-  const [maxRenewals, setMaxRenewals] = useState<number>(1);
+  const [loadError, setLoadError] = useState(false);
 
-  useEffect(() => {
+  const loadData = useCallback(async () => {
     const session = getSession();
 
-    if (!session || !canAccessCompanySettings(session.user.role)) {
-      router.replace("/dashboard");
+    if (!session) {
+      if (!isStoredSessionExpired() && !hasStoredAuth()) {
+        router.replace("/login");
+      }
       return;
     }
 
-    const currentCompId = session.user.companyId || "company-001";
-    setCompanyId(currentCompId);
-
-    async function loadData() {
-      try {
-        setLoading(true);
-        const [compData, settingsData] = await Promise.all([
-          getCompanyDetailApi(currentCompId).catch(() => null),
-          getCompanySettingsApi(currentCompId).catch(() => null),
-        ]);
-
-        if (compData) {
-          setCompany(compData);
-          setName(compData.name || "");
-          setCode(compData.code || "");
-          setAddress(compData.address || "");
-          setTimezone(compData.timezone || "Asia/Jakarta");
-        }
-
-        if (settingsData) {
-          setDefaultLoanDuration(settingsData.defaultLoanDuration ?? 7);
-          setMaxActiveLoans(settingsData.maxActiveLoans ?? 3);
-          setDailyFineRate(settingsData.dailyFineRate ?? 1000);
-          setAllowRenewal(settingsData.allowRenewal ?? true);
-          setMaxRenewals(settingsData.maxRenewals ?? 1);
-        }
-      } catch (err: any) {
-        setErrorMessage(err.message || "Gagal memuat konfigurasi instansi.");
-      } finally {
-        setLoading(false);
-      }
+    if (!canAccessCompanySettings(session.user.role)) {
+      router.replace(session.user.role === "SUPER_ADMIN" ? "/office/dashboard" : "/dashboard");
+      return;
     }
 
-    loadData();
+    const currentCompId = session.user.companyId || "";
+
+    if (!currentCompId && session?.user?.role !== "SUPER_ADMIN") {
+      setErrorMessage("ID instansi tidak tersedia di sesi. Silakan login ulang.");
+      setLoadError(true);
+      setLoading(false);
+      return;
+    }
+
+    try {
+      setLoading(true);
+      setErrorMessage("");
+      setLoadError(false);
+      const settingsData = await getCompanySettingsApi(currentCompId);
+
+      if (settingsData) {
+        setDefaultLoanDuration(settingsData.defaultLoanDuration);
+        setMaxActiveLoans(settingsData.maxActiveLoans);
+        setDailyFineRate(settingsData.dailyFineRate ?? "");
+        setIsInitialConfig(false);
+      } else {
+        setDefaultLoanDuration("");
+        setMaxActiveLoans("");
+        setDailyFineRate("");
+        setIsInitialConfig(true);
+      }
+    } catch (err: unknown) {
+      setLoadError(true);
+      setErrorMessage(
+        getErrorMessage(err, "Gagal memuat konfigurasi kebijakan peminjaman.")
+      );
+    } finally {
+      setLoading(false);
+    }
   }, [router]);
 
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
-    setSuccessMessage("");
+  useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- Fetch konfigurasi kebijakan instansi saat mount
+    void loadData();
+  }, [loadData]);
+
+  const handleSubmit = async (e?: React.FormEvent) => {
+    e?.preventDefault();
     setErrorMessage("");
 
-    if (!name.trim()) {
-      setErrorMessage("Nama instansi/perpustakaan tidak boleh kosong.");
-      return;
-    }
+    const durationNum = Number(defaultLoanDuration);
+    const maxLoansNum = Number(maxActiveLoans);
+    const fineRateNum = Number(dailyFineRate);
 
-    if (defaultLoanDuration < 1) {
+    if (defaultLoanDuration === "" || isNaN(durationNum) || durationNum < 1) {
       setErrorMessage("Durasi peminjaman minimal 1 hari.");
       return;
     }
 
-    if (maxActiveLoans < 1) {
-      setErrorMessage("Batas maksimal peminjaman minimal 1 buku.");
+    if (maxActiveLoans === "" || isNaN(maxLoansNum) || maxLoansNum < 1) {
+      setErrorMessage("Batas maksimal transaksi aktif minimal 1 transaksi.");
+      return;
+    }
+
+    if (dailyFineRate === "" || isNaN(fineRateNum) || fineRateNum < 0) {
+      setErrorMessage("Tarif denda keterlambatan tidak boleh negatif.");
       return;
     }
 
     try {
       setSaving(true);
-
-      // 1. Update Company Profile
-      await updateCompanyApi(companyId, {
-        name: name.trim(),
-        address: address.trim(),
-        timezone,
-      });
-
-      // 2. Update Policies & Settings
       await updateCompanySettingsApi(companyId, {
-        defaultLoanDuration: Number(defaultLoanDuration),
-        maxActiveLoans: Number(maxActiveLoans),
-        dailyFineRate: Number(dailyFineRate),
-        allowRenewal,
-        maxRenewals: allowRenewal ? Number(maxRenewals) : 0,
-        timezone,
+        defaultLoanDuration: durationNum,
+        maxActiveLoans: maxLoansNum,
+        dailyFineRate: fineRateNum,
       });
 
-      setSuccessMessage("Konfigurasi instansi dan kebijakan perpustakaan berhasil disimpan!");
-      setTimeout(() => setSuccessMessage(""), 5000);
-    } catch (err: any) {
-      setErrorMessage(err.message || "Gagal menyimpan konfigurasi.");
+      toast.success("Konfigurasi kebijakan perpustakaan berhasil disimpan.");
+      setIsInitialConfig(false);
+    } catch (err: unknown) {
+      setErrorMessage(getErrorMessage(err, "Gagal menyimpan konfigurasi kebijakan."));
     } finally {
       setSaving(false);
     }
   };
 
-  if (loading) {
-    return (
-      <main className="min-h-screen bg-slate-50">
-        <LoadingState label="Memuat konfigurasi instansi..." />
-      </main>
-    );
-  }
+  useSubmitHotkey(() => void handleSubmit(), {
+    enabled: !loading && !saving,
+    loading: saving,
+  });
 
   return (
-    <main className="min-h-screen bg-slate-50">
+    <div className="min-h-screen bg-slate-50">
       <div className="page-container py-6">
-        <BackLink href="/dashboard" />
-
         {/* Header */}
-        <div className="mt-4 flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
-          <div>
-            <h1 className="text-2xl font-bold text-slate-900">
-              Konfigurasi Instansi & Kebijakan
-            </h1>
-            <p className="mt-1 text-sm text-slate-500">
-              Atur identitas perpustakaan, batas durasi peminjaman, kuota buku, dan ketentuan denda.
-            </p>
-          </div>
-          <div className="flex items-center gap-2">
-            <span className="inline-flex items-center rounded-lg bg-blue-50 px-3 py-1 text-xs font-semibold text-blue-700 border border-blue-200">
-              Instansi: {code || companyId}
-            </span>
-          </div>
+        <div className="mb-6">
+          <PageHeader
+            backLink="/dashboard"
+            title="Konfigurasi Kebijakan Perpustakaan"
+            description="Atur batas durasi peminjaman standar, kuota maksimal buku aktif, dan tarif denda harian."
+            actions={
+              <span className="inline-flex items-center rounded-lg bg-blue-50 px-3 py-1 text-xs font-semibold text-blue-700 border border-blue-200">
+                ID Instansi: {companyId || "-"}
+              </span>
+            }
+          />
         </div>
 
-        {/* Feedback Alerts */}
-        {successMessage && (
-          <div className="mt-4">
-            <FeedbackPanel tone="success">
-              <p className="font-medium">{successMessage}</p>
-            </FeedbackPanel>
+        {loadError ? (
+          <div className="mt-6">
+            <ErrorState
+              title="Gagal Memuat Konfigurasi"
+              message={errorMessage}
+              onRetry={() => void loadData()}
+              retryLabel="Coba Lagi"
+            />
           </div>
-        )}
-
-        {errorMessage && (
-          <div className="mt-4">
-            <FeedbackPanel tone="error">
-              <p className="font-medium">{errorMessage}</p>
-            </FeedbackPanel>
-          </div>
-        )}
-
-        <form onSubmit={handleSubmit} className="mt-6 space-y-6">
-          {/* Section 1: Profil Instansi */}
-          <Card className="p-6">
-            <div className="border-b border-slate-100 pb-4 mb-5">
-              <div className="flex items-center gap-3">
-                <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-blue-50 text-blue-600">
-                  <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                    <path d="M4 20V5l8-2v17M12 20h8V8l-8-3" />
-                    <path d="M7 8h2M7 12h2M7 16h2M15 11h2M15 15h2" />
-                  </svg>
-                </div>
-                <div>
-                  <h2 className="text-base font-semibold text-slate-900">
-                    Informasi & Identitas Perpustakaan
-                  </h2>
-                  <p className="text-xs text-slate-500">
-                    Informasi umum instansi atau unit perpustakaan Anda.
-                  </p>
-                </div>
-              </div>
+        ) : loading ? (
+          <Card className="mt-6 p-6 space-y-6">
+            <div className="space-y-2">
+              <Skeleton className="h-4 w-48" />
+              <Skeleton className="h-10 w-full" />
             </div>
-
-            <div className="grid gap-5 md:grid-cols-2">
-              <div>
-                <Input
-                  id="comp-name"
-                  label="Nama Perpustakaan / Instansi *"
-                  value={name}
-                  onChange={(e) => setName(e.target.value)}
-                  placeholder="Contoh: Perpustakaan SMAN 1 Surakarta"
-                  required
-                />
-              </div>
-
-              <div>
-                <Input
-                  id="comp-code"
-                  label="Kode Unik Instansi"
-                  value={code}
-                  disabled
-                  helperText="Kode instansi diberikan oleh Super Admin platform."
-                />
-              </div>
-
-              <div className="md:col-span-2">
-                <Input
-                  id="comp-address"
-                  label="Alamat Lengkap Perpustakaan"
-                  value={address}
-                  onChange={(e) => setAddress(e.target.value)}
-                  placeholder="Contoh: Jl. Slamet Riyadi No. 123, Surakarta, Jawa Tengah"
-                  helperText="Alamat akan dicantumkan pada slip peminjaman dan bukti transaksi."
-                />
-              </div>
-
-              <div>
-                <Dropdown
-                  id="comp-timezone"
-                  label="Zona Waktu Operasional"
-                  value={timezone}
-                  onChange={(val) => setTimezone(val)}
-                  helperText="Digunakan untuk perhitungan batas jatuh tempo transaksi."
-                  options={[
-                    { value: "Asia/Jakarta", label: "WIB - Asia/Jakarta (UTC+7)" },
-                    { value: "Asia/Makassar", label: "WITA - Asia/Makassar (UTC+8)" },
-                    { value: "Asia/Jayapura", label: "WIT - Asia/Jayapura (UTC+9)" },
-                  ]}
-                />
-              </div>
+            <div className="space-y-2">
+              <Skeleton className="h-4 w-48" />
+              <Skeleton className="h-10 w-full" />
+            </div>
+            <div className="space-y-2">
+              <Skeleton className="h-4 w-48" />
+              <Skeleton className="h-10 w-full" />
             </div>
           </Card>
+        ) : (
+          <>
+            {/* Feedback Alerts */}
+            {isInitialConfig && !errorMessage && (
+              <div className="mt-4 rounded-xl border border-blue-200 bg-blue-50/80 p-4 text-blue-900">
+                <p className="font-semibold text-sm flex items-center gap-1.5"><svg className="h-4 w-4 text-amber-600 shrink-0 inline" fill="none" viewBox="0 0 24 24" stroke="currentColor" aria-hidden="true"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" /></svg> Konfigurasi Belum Dikonfigurasi</p>
+                <p className="mt-1 text-xs text-blue-700">
+                  Instansi ini belum memiliki data kebijakan peminjaman. Isi setiap kolom kebijakan, lalu klik <strong>&ldquo;Inisialisasi & Simpan Konfigurasi&rdquo;</strong> untuk menyimpannya.
+                </p>
+              </div>
+            )}
 
-          {/* Section 2: Kebijakan Sirkulasi & Peminjaman */}
-          <Card className="p-6">
-            <div className="border-b border-slate-100 pb-4 mb-5">
-              <div className="flex items-center gap-3">
-                <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-emerald-50 text-emerald-600">
-                  <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                    <path d="M12 2v20M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6" />
-                  </svg>
+            {errorMessage && (
+              <div className="mt-4">
+                <FeedbackPanel tone="error">
+                  <p className="font-medium">{errorMessage}</p>
+                </FeedbackPanel>
+              </div>
+            )}
+
+            <form onSubmit={handleSubmit} className="mt-6">
+              <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 items-start">
+                {/* Left Column: Form Identitas & Kebijakan (lg:col-span-7 xl:col-span-8) */}
+                <div className="space-y-6 lg:col-span-7 xl:col-span-8">
+                  {/* Kebijakan Sirkulasi & Peminjaman (3 Field Backend) */}
+                  <Card className="p-5 sm:p-6">
+                    <div className="border-b border-slate-100 pb-3 mb-4">
+                      <div className="flex items-center gap-2.5">
+                        <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-emerald-50 text-emerald-600">
+                          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden="true">
+                            <path d="M12 2v20M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6" />
+                          </svg>
+                        </div>
+                        <div>
+                          <h2 className="text-sm font-semibold text-slate-900">
+                            Kebijakan Sirkulasi Peminjaman & Denda
+                          </h2>
+                          <p className="text-xs text-slate-500">
+                            Parameter operasional peminjaman otomatis yang berlaku untuk seluruh anggota.
+                          </p>
+                        </div>
+                      </div>
+                    </div>
+
+                    <div className="space-y-4">
+                      <div className="grid gap-4 sm:grid-cols-2">
+                        <div>
+                          <Input
+                            id="loan-duration"
+                            type="number"
+                            min="1"
+                            max="90"
+                            label="Durasi Peminjaman Standar (Hari) *"
+                            value={defaultLoanDuration}
+                            onChange={(e) => setDefaultLoanDuration(e.target.value === "" ? "" : Number(e.target.value))}
+                            onBlur={() => {
+                              if (!isInitialConfig && (defaultLoanDuration === "" || Number(defaultLoanDuration) < 1)) {
+                                setDefaultLoanDuration(1);
+                              }
+                            }}
+                            helperText="Lama waktu standar peminjaman buku sebelum jatuh tempo."
+                            required
+                          />
+                        </div>
+
+                        <div>
+                          <Input
+                            id="max-active-loans"
+                            type="number"
+                            min="1"
+                            max="50"
+                            label="Maksimal Transaksi Aktif *"
+                            value={maxActiveLoans}
+                            onChange={(e) => setMaxActiveLoans(e.target.value === "" ? "" : Number(e.target.value))}
+                            onBlur={() => {
+                              if (!isInitialConfig && (maxActiveLoans === "" || Number(maxActiveLoans) < 1)) {
+                                setMaxActiveLoans(1);
+                              }
+                            }}
+                            helperText="Batas maksimal transaksi peminjaman aktif per anggota."
+                            required
+                          />
+                        </div>
+                      </div>
+
+                      <div>
+                        <Input
+                          id="fine-rate"
+                          type="number"
+                          min="0"
+                          step="500"
+                          label="Tarif Denda Harian (Rp per Buku / Hari) *"
+                          value={dailyFineRate}
+                          onChange={(e) => setDailyFineRate(e.target.value === "" ? "" : Number(e.target.value))}
+                          onBlur={() => {
+                            if (!isInitialConfig && (dailyFineRate === "" || Number(dailyFineRate) < 0)) {
+                              setDailyFineRate(0);
+                            }
+                          }}
+                          helperText="Besaran denda harian per buku bila terlambat dikembalikan."
+                          required
+                        />
+                      </div>
+                    </div>
+                  </Card>
                 </div>
-                <div>
-                  <h2 className="text-base font-semibold text-slate-900">
-                    Ketentuan Peminjaman & Denda
-                  </h2>
-                  <p className="text-xs text-slate-500">
-                    Aturan sirkulasi otomatis yang berlaku untuk seluruh anggota di instansi ini.
-                  </p>
-                </div>
-              </div>
-            </div>
 
-            <div className="grid gap-5 md:grid-cols-2">
-              <div>
-                <Input
-                  id="loan-duration"
-                  type="number"
-                  min="1"
-                  max="90"
-                  label="Durasi Peminjaman Default (Hari) *"
-                  value={defaultLoanDuration}
-                  onChange={(e) => setDefaultLoanDuration(Math.max(1, Number(e.target.value)))}
-                  helperText="Lama waktu standar anggota boleh meminjam buku sebelum jatuh tempo."
-                  required
-                />
-              </div>
+                {/* Right Column: Ringkasan Kebijakan & Action Buttons (lg:col-span-5 xl:col-span-4) */}
+                <div className="space-y-4 lg:col-span-5 xl:col-span-4 lg:sticky lg:top-24">
+                  {/* Section 3: Ringkasan Kebijakan Aktif */}
+                  <div className="rounded-xl border border-blue-200/80 bg-blue-50/70 p-5 shadow-xs">
+                    <div className="flex items-center gap-2 text-blue-950 font-semibold text-sm mb-3">
+                      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="text-blue-600 shrink-0" aria-hidden="true">
+                        <circle cx="12" cy="12" r="10" />
+                        <path d="M12 16v-4" />
+                        <path d="M12 8h.01" />
+                      </svg>
+                      <h3 className="truncate">Ringkasan Aturan Operasional</h3>
+                    </div>
 
-              <div>
-                <Input
-                  id="max-books"
-                  type="number"
-                  min="1"
-                  max="20"
-                  label="Maksimal Buku Dipinjam per Anggota *"
-                  value={maxActiveLoans}
-                  onChange={(e) => setMaxActiveLoans(Math.max(1, Number(e.target.value)))}
-                  helperText="Batas maksimal total buku aktif yang dapat dipinjam secara bersamaan."
-                  required
-                />
-              </div>
+                    <div className="space-y-2.5 text-xs sm:text-sm text-blue-900">
+                      <div className="flex items-start gap-2.5 rounded-lg bg-white/90 p-2.5 border border-blue-100 shadow-2xs">
+                        <span className="flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-blue-100 text-blue-700 text-xs font-bold">
+                          1
+                        </span>
+                        <div className="min-w-0">
+                          <p className="text-xs text-slate-500 font-medium">Durasi Peminjaman</p>
+                          <p className="font-semibold text-slate-900">
+                            {defaultLoanDuration !== "" ? `${defaultLoanDuration} hari kalender` : "-"}
+                          </p>
+                        </div>
+                      </div>
 
-              <div>
-                <Input
-                  id="fine-rate"
-                  type="number"
-                  min="0"
-                  step="500"
-                  label="Tarif Denda Keterlambatan (Rp per Buku / Hari) *"
-                  value={dailyFineRate}
-                  onChange={(e) => setDailyFineRate(Math.max(0, Number(e.target.value)))}
-                  helperText="Besaran denda yang dihitung harian untuk setiap buku yang terlambat."
-                  required
-                />
-              </div>
+                      <div className="flex items-start gap-2.5 rounded-lg bg-white/90 p-2.5 border border-blue-100 shadow-2xs">
+                        <span className="flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-blue-100 text-blue-700 text-xs font-bold">
+                          2
+                        </span>
+                        <div className="min-w-0">
+                          <p className="text-xs text-slate-500 font-medium">Batas Transaksi Aktif</p>
+                          <p className="font-semibold text-slate-900">
+                            {maxActiveLoans !== "" ? `Maks. ${maxActiveLoans} transaksi bersamaan` : "-"}
+                          </p>
+                        </div>
+                      </div>
 
-              <div>
-                <Input
-                  id="max-renewals"
-                  type="number"
-                  min="0"
-                  max="5"
-                  label="Batas Maksimal Perpanjangan (Kali)"
-                  disabled={!allowRenewal}
-                  value={allowRenewal ? maxRenewals : 0}
-                  onChange={(e) => setMaxRenewals(Math.max(0, Number(e.target.value)))}
-                  helperText={
-                    allowRenewal
-                      ? "Frekuensi perpanjangan transaksi yang diizinkan untuk setiap buku."
-                      : "Fitur perpanjangan dinonaktifkan."
-                  }
-                />
-              </div>
+                      <div className="flex items-start gap-2.5 rounded-lg bg-white/90 p-2.5 border border-blue-100 shadow-2xs">
+                        <span className="flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-blue-100 text-blue-700 text-xs font-bold">
+                          3
+                        </span>
+                        <div className="min-w-0">
+                          <p className="text-xs text-slate-500 font-medium">Denda Keterlambatan</p>
+                          <p className="font-semibold text-slate-900">
+                            {dailyFineRate !== ""
+                              ? `Rp ${Number(dailyFineRate).toLocaleString("id-ID")} / buku / hari`
+                              : "-"}
+                          </p>
+                        </div>
+                      </div>
+                    </div>
 
-              {/* Toggle Perpanjangan */}
-              <div className="md:col-span-2 rounded-xl border border-slate-200 bg-slate-50/70 p-4">
-                <label className="flex items-center gap-3 cursor-pointer select-none">
-                  <input
-                    type="checkbox"
-                    checked={allowRenewal}
-                    onChange={(e) => setAllowRenewal(e.target.checked)}
-                    className="h-5 w-5 rounded border-slate-300 text-blue-600 focus:ring-blue-500"
-                  />
-                  <div>
-                    <span className="text-sm font-semibold text-slate-900 block">
-                      Izinkan Perpanjangan Masa Pinjam (Renewal)
-                    </span>
-                    <span className="text-xs text-slate-500 block mt-0.5">
-                      Jika diaktifkan, staf dapat memperpanjang masa jatuh tempo buku sebelum statusnya terlambat.
-                    </span>
+                    <p className="mt-3.5 text-[11px] text-blue-700/90 leading-relaxed border-t border-blue-200/60 pt-2.5">
+                      Aturan di atas diterapkan otomatis oleh sistem pada peminjaman baru dan penghitungan denda pengembalian.
+                    </p>
                   </div>
-                </label>
+
+                  {/* Action Buttons Card */}
+                  <Card className="p-4">
+                    <div className="flex flex-col gap-2.5">
+                      <Button
+                        type="submit"
+                        loading={saving}
+                        disabled={saving}
+                        aria-keyshortcuts="Control+Enter Meta+Enter"
+                        className="w-full"
+                      >
+                        {isInitialConfig ? "Inisialisasi & Simpan Konfigurasi" : "Simpan Konfigurasi"}
+                      </Button>
+
+                      <Button
+                        type="button"
+                        variant="secondary"
+                        onClick={() => router.push("/dashboard")}
+                        disabled={saving}
+                        className="w-full"
+                      >
+                        Kembali ke Dashboard
+                      </Button>
+                    </div>
+                  </Card>
+                </div>
               </div>
-            </div>
-          </Card>
-
-          {/* Section 3: Ringkasan Kebijakan Aktif */}
-          <div className="rounded-xl border border-blue-100 bg-blue-50/50 p-5">
-            <h3 className="text-sm font-semibold text-blue-950">
-              Ringkasan Ketentuan Perpustakaan Aktif:
-            </h3>
-            <ul className="mt-2.5 space-y-1.5 text-xs sm:text-sm text-blue-900 list-disc list-inside">
-              <li>
-                Setiap anggota dapat meminjam maksimal <strong>{maxActiveLoans} buku</strong> dalam satu waktu.
-              </li>
-              <li>
-                Durasi pinjam standar adalah <strong>{defaultLoanDuration} hari</strong> kalender.
-              </li>
-              <li>
-                Denda keterlambatan sebesar{" "}
-                <strong>
-                  Rp {dailyFineRate.toLocaleString("id-ID")}
-                </strong>{" "}
-                per buku per hari keterlambatan.
-              </li>
-              <li>
-                Perpanjangan buku:{" "}
-                <strong>
-                  {allowRenewal
-                    ? `Diizinkan (maks. ${maxRenewals} kali perpanjangan)`
-                    : "Tidak diizinkan"}
-                </strong>
-                .
-              </li>
-            </ul>
-          </div>
-
-          {/* Action Buttons */}
-          <div className="flex flex-col-reverse gap-3 sm:flex-row sm:justify-end">
-            <Button
-              type="button"
-              variant="secondary"
-              onClick={() => router.push("/dashboard")}
-              disabled={saving}
-            >
-              Kembali ke Dashboard
-            </Button>
-            <Button type="submit" loading={saving}>
-              Simpan Konfigurasi
-            </Button>
-          </div>
-        </form>
+            </form>
+          </>
+        )}
       </div>
-    </main>
+    </div>
   );
 }

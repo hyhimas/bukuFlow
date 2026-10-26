@@ -1,24 +1,63 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
-
+import { useCallback, useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
-import { getSession } from "@/lib/auth";
+import { getSession, isStoredSessionExpired, hasStoredAuth } from "@/lib/auth";
 import { canAccessReturns, canManageReturns } from "@/lib/authorization";
 
 import Button from "@/components/ui/Button";
 import Card from "@/components/ui/Card";
 import Input from "@/components/ui/Input";
 import Badge from "@/components/ui/Badge";
-import BackLink from "@/components/ui/BackLink";
-import ConfirmationDialog from "@/components/ui/ConfirmationDialog";
+import PageHeader from "@/components/ui/PageHeader";
 import EmptyState from "@/components/ui/EmptyState";
-import FeedbackPanel from "@/components/ui/FeedbackPanel";
+import ErrorState from "@/components/ui/ErrorState";
 import LoadingState from "@/components/ui/LoadingState";
 import Pagination from "@/components/ui/Pagination";
-import type { ReturnLoanData, Loan } from "@/lib/types";
-import { getActiveReturnsApi, returnLoanItemsApi } from "@/lib/api";
-import { useToast } from "@/context/ToastContext";
+import Modal from "@/components/ui/Modal";
+import Skeleton from "@/components/ui/Skeleton";
+import type { ReturnLoanData, Loan, Member } from "@/lib/types";
+import {
+  getActiveReturnsApi,
+  listLoansApi,
+  getLoanByIdApi,
+  returnLoanItemsApi,
+  getCompanySettingsApi,
+  searchMembersApi,
+  getErrorMessage,
+} from "@/lib/api";
+import { useToast } from "@/components/ui/Toast";
+import { useSubmitHotkey } from "@/hooks/useHotkeys";
+
+function getTodayLocal(): string {
+  const now = new Date();
+  const year = now.getFullYear();
+  const month = String(now.getMonth() + 1).padStart(2, "0");
+  const day = String(now.getDate()).padStart(2, "0");
+  return `${year}-${month}-${day}`;
+}
+
+function calculateLateInfo(
+  dueAt?: string,
+  returnDateStr?: string,
+  dailyRate: number | null = null
+) {
+  if (!dueAt || !returnDateStr) {
+    return { daysOverdue: 0, finePerBook: 0 };
+  }
+  const dueDate = new Date(`${dueAt.slice(0, 10)}T00:00:00`);
+  const retDate = new Date(`${returnDateStr.slice(0, 10)}T00:00:00`);
+  if (isNaN(dueDate.getTime()) || isNaN(retDate.getTime())) {
+    return { daysOverdue: 0, finePerBook: 0 };
+  }
+  const diffTime = retDate.getTime() - dueDate.getTime();
+  const diffDays = Math.floor(diffTime / (1000 * 60 * 60 * 24));
+  const daysOverdue = diffDays > 0 ? diffDays : 0;
+  return {
+    daysOverdue,
+    finePerBook: dailyRate !== null ? daysOverdue * dailyRate : 0,
+  };
+}
 
 export default function ReturnsPage() {
   const router = useRouter();
@@ -28,45 +67,81 @@ export default function ReturnsPage() {
   const successModalCloseRef = useRef<HTMLButtonElement>(null);
 
   const [loans, setLoans] = useState<ReturnLoanData[]>([]);
-  const [filteredLoans, setFilteredLoans] = useState<ReturnLoanData[]>([]);
 
   const [query, setQuery] = useState("");
+  const [debouncedQuery, setDebouncedQuery] = useState("");
   const [selectedLoan, setSelectedLoan] = useState<ReturnLoanData | null>(null);
   const [page, setPage] = useState(1);
   const [pageSize, setPageSize] = useState(10);
+  const [totalItems, setTotalItems] = useState(0);
+  const [totalPages, setTotalPages] = useState(1);
+  const savedTotalRef = useRef(0);
 
   const [selectedItemIds, setSelectedItemIds] = useState<string[]>([]);
 
   const [loading, setLoading] = useState(true);
   const [returnLoading, setReturnLoading] = useState(false);
-  const [isStaff, setIsStaff] = useState(false);
+  const [isStaff, setIsStaff] = useState(() => {
+    if (typeof window !== "undefined") {
+      const s = getSession();
+      return s ? canManageReturns(s.user.role) : false;
+    }
+    return false;
+  });
 
   const [error, setError] = useState("");
 
+  const [dailyFineRate, setDailyFineRate] = useState<number | null>(null);
+  const [settingsPending, setSettingsPending] = useState(false);
+  const [returnDate, setReturnDate] = useState<string>(getTodayLocal());
+
   const [successLoan, setSuccessLoan] = useState<Loan | null>(null);
   const [returnedCopies, setReturnedCopies] = useState<string[]>([]);
-  const [showConfirmation, setShowConfirmation] = useState(false);
+  const [lastReturnDetails, setLastReturnDetails] = useState<{
+    daysOverdue: number;
+    finePerBook: number;
+    totalFine: number;
+    returnDate: string;
+    isPartial: boolean;
+    remainingCount: number;
+  } | null>(null);
 
   // =====================================================
   // SCANNER & BARCODE STATE
   // =====================================================
   const [scanLoading, setScanLoading] = useState(false);
 
+  // Refs for stable event listener callbacks
+  const loansRef = useRef(loans);
+  loansRef.current = loans;
+  const selectedLoanRef = useRef(selectedLoan);
+  selectedLoanRef.current = selectedLoan;
+  const selectedItemIdsRef = useRef(selectedItemIds);
+  selectedItemIdsRef.current = selectedItemIds;
+
+  useSubmitHotkey(() => void handleReturn(), {
+    enabled: Boolean(selectedLoan && selectedItemIds.length > 0 && !returnLoading),
+    loading: returnLoading,
+  });
+
   // =====================================================
   // SCANNER & BARCODE LOOKUP HANDLER
   // =====================================================
-  async function handleScanCode(scannedRaw: string) {
+  const handleScanCode = useCallback(async (scannedRaw: string) => {
     const rawCode = scannedRaw.trim();
     if (!rawCode || scanLoading) return;
     const code = rawCode.toUpperCase();
     const cleanCode = code.replace(/[^A-Z0-9]/g, "");
 
+    const currentSelectedLoan = selectedLoanRef.current;
+    const currentLoans = loansRef.current;
+
     setScanLoading(true);
     try {
       // 1. IF CURRENTLY HAS A SELECTED LOAN:
-      if (selectedLoan) {
+      if (currentSelectedLoan) {
         // Check if scanned code matches a copy or book in current selected loan
-        const matchedItem = selectedLoan.items.find((it) => {
+        const matchedItem = currentSelectedLoan.items.find((it) => {
           const cCode = it.bookCopy.code.toUpperCase();
           const cId = it.bookCopy.id.toUpperCase();
           const bCode = it.book.code.toUpperCase();
@@ -91,15 +166,15 @@ export default function ReturnsPage() {
             return;
           }
 
-          if (selectedItemIds.includes(matchedItem.loanItem.id)) {
-            toast.info(`Copy ${matchedItem.bookCopy.code} sudah terpilih.`);
+          if (selectedItemIdsRef.current.includes(matchedItem.loanItem.id)) {
+            toast.info(`Eksemplar ${matchedItem.bookCopy.code} sudah terpilih.`);
             return;
           }
 
           // Select this copy item
           setSelectedItemIds((prev) => [...prev, matchedItem.loanItem.id]);
           toast.success(
-            `Copy ${matchedItem.bookCopy.code} (${matchedItem.book.title}) berhasil dipilih!`
+            `Eksemplar ${matchedItem.bookCopy.code} (${matchedItem.book.title}) berhasil dipilih.`
           );
           return;
         }
@@ -107,7 +182,7 @@ export default function ReturnsPage() {
 
       // 2. SEARCH ACROSS ALL ACTIVE LOANS
       // A. Match Loan Number (e.g. TRX-...)
-      const matchedLoanByNumber = loans.find(
+      const matchedLoanByNumber = currentLoans.find(
         (it) =>
           it.loan.loanNumber.toUpperCase() === code ||
           it.loan.loanNumber.toUpperCase().replace(/[^A-Z0-9]/g, "") === cleanCode ||
@@ -122,16 +197,16 @@ export default function ReturnsPage() {
           .map((it) => it.loanItem.id);
         setSelectedItemIds(borrowedIds);
         toast.success(
-          `Transaksi ${matchedLoanByNumber.loan.loanNumber} (${matchedLoanByNumber.member.name}) ditemukan!`
+          `Peminjaman ${matchedLoanByNumber.loan.loanNumber} (${matchedLoanByNumber.member.name}) ditemukan.`
         );
         return;
       }
 
       // B. Match Book Copy code across all active loans
       let foundLoan: ReturnLoanData | null = null;
-      let foundLoanItem: (typeof loans)[0]["items"][0] | null = null;
+      let foundLoanItem: (typeof currentLoans)[0]["items"][0] | null = null;
 
-      for (const loanData of loans) {
+      for (const loanData of currentLoans) {
         const item = loanData.items.find((it) => {
           const cCode = it.bookCopy.code.toUpperCase();
           const cId = it.bookCopy.id.toUpperCase();
@@ -161,56 +236,87 @@ export default function ReturnsPage() {
         if (foundLoanItem.loanItem.status === "BORROWED") {
           setSelectedItemIds([foundLoanItem.loanItem.id]);
           toast.success(
-            `Ditemukan transaksi ${foundLoan.loan.loanNumber}! Copy ${foundLoanItem.bookCopy.code} dipilih.`
+            `Ditemukan peminjaman ${foundLoan.loan.loanNumber}. Eksemplar ${foundLoanItem.bookCopy.code} dipilih.`
           );
         } else {
           setSelectedItemIds([]);
           toast.warning(
-            `Transaksi ${foundLoan.loan.loanNumber} ditemukan, namun copy ${foundLoanItem.bookCopy.code} sudah dikembalikan.`
+            `Peminjaman ${foundLoan.loan.loanNumber} ditemukan, namun eksemplar ${foundLoanItem.bookCopy.code} sudah dikembalikan.`
           );
         }
         return;
       }
 
-      // C. Match Member Number / Name / Identity Number
-      const matchedLoanByMember = loans.find(
-        (it) =>
-          it.member.memberNumber.toUpperCase() === code ||
-          it.member.memberNumber.toUpperCase().replace(/[^A-Z0-9]/g, "") === cleanCode ||
-          it.member.id.toUpperCase() === code ||
-          (it.member.identityNumber && it.member.identityNumber.toUpperCase() === code) ||
-          it.member.name.toUpperCase() === code
-      );
+      // C. Match Member Number / Name / Identity Number (Support multiple active loans from server)
+      let foundMemberObj: Member | null = null;
+      try {
+        const memberCandidates = await searchMembersApi(rawCode);
+        if (Array.isArray(memberCandidates) && memberCandidates.length > 0) {
+          foundMemberObj =
+            memberCandidates.find(
+              (m) =>
+                m.memberNumber.toUpperCase() === code ||
+                m.identityNumber?.toUpperCase() === code ||
+                m.id.toUpperCase() === code
+            ) || null;
+        }
+      } catch {
+        // Abaikan jika endpoint search member gagal
+      }
 
-      if (matchedLoanByMember) {
-        selectLoan(matchedLoanByMember);
-        const borrowedIds = matchedLoanByMember.items
-          .filter((it) => it.loanItem.status === "BORROWED")
-          .map((it) => it.loanItem.id);
-        setSelectedItemIds(borrowedIds);
-        toast.success(
-          `Transaksi anggota ${matchedLoanByMember.member.name} (${matchedLoanByMember.loan.loanNumber}) ditemukan!`
-        );
-        return;
+      if (foundMemberObj?.id) {
+        try {
+          // Panggil GET /loan/search?member_id=...&status=ACTIVE&status=OVERDUE
+          const memberLoansRes = await listLoansApi({
+            member_id: foundMemberObj.id,
+            status: ["ACTIVE", "OVERDUE"],
+            size: 50,
+          });
+
+          if (memberLoansRes.items.length > 0) {
+            setQuery(foundMemberObj.memberNumber || rawCode);
+            const primaryLoan = memberLoansRes.items[0];
+            selectLoan(primaryLoan);
+            const borrowedIds = primaryLoan.items
+              .filter((it) => it.loanItem.status === "BORROWED")
+              .map((it) => it.loanItem.id);
+            setSelectedItemIds(borrowedIds);
+
+            if (memberLoansRes.items.length > 1) {
+              toast.info(
+                `Ditemukan ${memberLoansRes.items.length} peminjaman aktif untuk anggota ${primaryLoan.member.name}. Silakan pilih transaksi di panel kiri.`
+              );
+            } else {
+              toast.success(
+                `Peminjaman anggota ${primaryLoan.member.name} (${primaryLoan.loan.loanNumber}) ditemukan.`
+              );
+            }
+            return;
+          } else {
+            toast.info(`Anggota ${foundMemberObj.name} tidak memiliki peminjaman aktif.`);
+            return;
+          }
+        } catch {
+          // Lanjut ke pengecekan berikutnya
+        }
       }
 
       // If not found in active loans:
-      toast.error(`Tidak ditemukan transaksi aktif untuk barcode/kode "${rawCode}".`);
-    } catch (err: any) {
-      toast.error(err instanceof Error ? err.message : "Gagal memproses scan barcode.");
+      toast.error(`Tidak ditemukan peminjaman aktif untuk barcode/kode "${rawCode}".`);
+    } catch (err: unknown) {
+      toast.error(getErrorMessage(err, "Gagal memproses scan barcode."));
     } finally {
       setScanLoading(false);
     }
-  }
+  }, [scanLoading, toast]);
+
+  const handleScanCodeRef = useRef(handleScanCode);
+  handleScanCodeRef.current = handleScanCode;
 
   // =====================================================
   // GLOBAL HARDWARE USB BARCODE SCANNER LISTENER
   // =====================================================
   useEffect(() => {
-    if (successLoan ) {
-      return;
-    }
-
     let buffer = "";
     let lastKeyTime = 0;
 
@@ -235,7 +341,7 @@ export default function ReturnsPage() {
         if (clean.length >= 2) {
           e.preventDefault();
           buffer = "";
-          void handleScanCode(clean);
+          void handleScanCodeRef.current(clean);
         }
         return;
       }
@@ -257,7 +363,7 @@ export default function ReturnsPage() {
     return () => {
       window.removeEventListener("keydown", handleGlobalKeyDown);
     };
-  }, [loans, selectedLoan, selectedItemIds, successLoan, scanLoading]);
+  }, []);
 
   function formatDate(value?: string) {
     if (!value) return "-";
@@ -273,11 +379,16 @@ export default function ReturnsPage() {
         });
   }
 
+  // =====================================================
+  // AUTH & COMPANY SETTINGS
+  // =====================================================
   useEffect(() => {
     const session = getSession();
 
     if (!session) {
-      router.replace("/login");
+      if (!isStoredSessionExpired() && !hasStoredAuth()) {
+        router.replace("/login");
+      }
       return;
     }
 
@@ -286,90 +397,78 @@ export default function ReturnsPage() {
       return;
     }
 
-    setIsStaff(canManageReturns(session.user.role));
-  }, [router]);
-
-  useEffect(() => {
-    async function loadLoans() {
-      setLoading(true);
-      setError("");
-
-      try {
-        const result = await getActiveReturnsApi({
-          page,
-          size: pageSize,
-          search: query.trim() || undefined,
+    const compId = session.user.companyId;
+    if (compId) {
+      getCompanySettingsApi(compId)
+        .then((settings) => {
+          if (settings && typeof settings.dailyFineRate === "number") {
+            setDailyFineRate(settings.dailyFineRate);
+            setSettingsPending(false);
+          } else {
+            setDailyFineRate(null);
+            setSettingsPending(true);
+          }
+        })
+        .catch((_err) => {
+          setDailyFineRate(null);
+          setSettingsPending(true);
         });
-
-        const activeOnly = result.filter(
-          (item) =>
-            item.loan.status !== "COMPLETED" &&
-            item.items.some((it) => it.loanItem.status === "BORROWED")
-        );
-
-        setLoans(activeOnly);
-        setFilteredLoans(activeOnly);
-      } catch (err: any) {
-        setError(
-          err instanceof Error ? err.message : "Transaksi aktif gagal dimuat."
-        );
-      } finally {
-        setLoading(false);
-      }
+    } else {
+      // eslint-disable-next-line react-hooks/set-state-in-effect -- Muat konfigurasi tarif denda instansi atau tandai pending saat mount
+      setDailyFineRate(null);
+      setSettingsPending(true);
     }
-
-    void loadLoans();
-  }, [page, pageSize]);
-
-  const totalPages = Math.max(1, Math.ceil(filteredLoans.length / pageSize));
-
-  const currentPage = Math.min(page, totalPages);
-
-  const paginatedLoans = filteredLoans.slice(
-    (currentPage - 1) * pageSize,
-    currentPage * pageSize,
-  );
+  }, [router]);
 
   // =====================================================
   // SEARCH TRANSACTION WITH DEBOUNCE
   // =====================================================
-
   useEffect(() => {
-    let cancelled = false;
-
     const timer = window.setTimeout(() => {
-      if (cancelled) {
-        return;
-      }
-
-      const keyword = query.trim().toLowerCase();
-
-      if (!keyword) {
-        setFilteredLoans(loans);
-        return;
-      }
-
-      const result = loans.filter(
-        ({ loan, member, items }) =>
-          loan.loanNumber.toLowerCase().includes(keyword) ||
-          member.name.toLowerCase().includes(keyword) ||
-          items.some(
-            (item) =>
-              item.book.title.toLowerCase().includes(keyword) ||
-              item.bookCopy.code.toLowerCase().includes(keyword),
-          ),
-      );
-
-      if (!cancelled) {
-        setFilteredLoans(result);
-      }
-    }, 400);
+      setDebouncedQuery(query);
+    }, 350);
 
     return () => {
-      cancelled = true;
       window.clearTimeout(timer);
     };
-  }, [query, loans]);
+  }, [query]);
+
+  // =====================================================
+  // LOAD LOANS (SERVER-SIDE WITH QUERY & PAGINATION)
+  // =====================================================
+  const loadLoans = useCallback(async () => {
+    setLoading(true);
+    setError("");
+
+    try {
+      const result = await getActiveReturnsApi({
+        page,
+        size: pageSize,
+        search: debouncedQuery.trim() || undefined,
+      });
+
+      setLoans(result.items);
+      if (result.total !== -1) {
+        savedTotalRef.current = result.total;
+        setTotalItems(result.total);
+        setTotalPages(result.totalPages);
+      } else {
+        setTotalItems(savedTotalRef.current);
+        setTotalPages(Math.max(1, Math.ceil(savedTotalRef.current / pageSize)));
+      }
+    } catch (err: unknown) {
+      setError(
+        getErrorMessage(err, "Peminjaman aktif gagal dimuat.")
+      );
+    } finally {
+      setLoading(false);
+    }
+  }, [page, pageSize, debouncedQuery]);
+
+  useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- Fetch daftar peminjaman aktif pengembalian saat mount dan filter berubah
+    void loadLoans();
+  }, [loadLoans]);
 
   useEffect(() => {
     if (selectedLoan) {
@@ -392,7 +491,6 @@ export default function ReturnsPage() {
     };
 
     document.addEventListener("keydown", handleEscape);
-
     return () => document.removeEventListener("keydown", handleEscape);
   }, [successLoan]);
 
@@ -400,7 +498,73 @@ export default function ReturnsPage() {
     setSelectedLoan(loanData);
     setSelectedItemIds([]);
     setSuccessLoan(null);
+    setReturnDate(getTodayLocal());
   }
+
+  // =====================================================
+  // AUTO SELECT TARGET LOAN FROM URL PARAMS (DEEP LINKING)
+  // =====================================================
+  const hasAutoSelectedRef = useRef(false);
+
+  useEffect(() => {
+    if (typeof window === "undefined" || hasAutoSelectedRef.current) return;
+    const params = new URLSearchParams(window.location.search);
+    const targetLoanNumber = params.get("loanNumber");
+    const targetLoanId = params.get("loanId");
+
+    if (!targetLoanNumber && !targetLoanId) return;
+    hasAutoSelectedRef.current = true;
+
+    // Direct fetch loan by ID so details appear immediately
+    const fetchTargetLoan = async () => {
+      try {
+        let found: ReturnLoanData | null = null;
+        if (targetLoanId) {
+          found = await getLoanByIdApi(targetLoanId);
+        }
+
+        if (!found && targetLoanNumber) {
+          const res = await getActiveReturnsApi({
+            page: 1,
+            size: 10,
+            search: targetLoanNumber,
+          });
+          found =
+            res.items.find(
+              (item) =>
+                item.loan.loanNumber === targetLoanNumber ||
+                (targetLoanId && item.loan.id === targetLoanId)
+            ) || null;
+        }
+
+        if (found) {
+          selectLoan(found);
+          const borrowedItemIds = found.items
+            .filter((it) => it.loanItem.status === "BORROWED")
+            .map((it) => it.loanItem.id);
+          if (borrowedItemIds.length > 0) {
+            setSelectedItemIds(borrowedItemIds);
+          }
+
+          setLoans((prev) => {
+            if (prev.some((l) => l.loan.id === found!.loan.id)) return prev;
+            return [found!, ...prev];
+          });
+
+          setTimeout(() => {
+            detailRef.current?.scrollIntoView({
+              behavior: "smooth",
+              block: "start",
+            });
+          }, 150);
+        }
+      } catch (err) {
+        console.warn("Gagal auto-select transaksi dari URL:", err);
+      }
+    };
+
+    void fetchTargetLoan();
+  }, [toast]);
 
   function toggleItem(itemId: string) {
     setSelectedItemIds((current) => {
@@ -412,9 +576,12 @@ export default function ReturnsPage() {
     });
   }
 
+  // =====================================================
+  // EXECUTE RETURN (INLINE CONFIRMATION - SINGLE MODAL)
+  // =====================================================
   async function handleReturn() {
     if (!selectedLoan) {
-      toast.error("Transaksi belum dipilih.");
+      toast.error("Peminjaman belum dipilih.");
       return;
     }
 
@@ -433,20 +600,25 @@ export default function ReturnsPage() {
             bookCopy.id || loanItem.bookCopyId || loanItem.id
         );
 
+      const returnedItemsList = selectedLoan.items
+        .filter(({ loanItem }) => selectedItemIds.includes(loanItem.id))
+        .map(({ book, bookCopy }) => `${book.title} (${bookCopy.code})`);
+
+      const lateInfo = calculateLateInfo(
+        selectedLoan.loan.dueAt,
+        returnDate,
+        dailyFineRate
+      );
+      const totalFine =
+        dailyFineRate !== null
+          ? lateInfo.daysOverdue * dailyFineRate * selectedItemIds.length
+          : 0;
+
       const loan = await returnLoanItemsApi(
         selectedLoan.loan.id,
         selectedCopies,
         selectedItemIds,
         selectedLoan.loan.companyId
-      );
-
-      toast.success("Buku berhasil dikembalikan.");
-      setSuccessLoan(loan);
-
-      setReturnedCopies(
-        selectedLoan.items
-          .filter(({ loanItem }) => selectedItemIds.includes(loanItem.id))
-          .map(({ book, bookCopy }) => `${book.title} (${bookCopy.code})`),
       );
 
       const returnedIdSet = new Set(selectedItemIds);
@@ -457,7 +629,9 @@ export default function ReturnsPage() {
             loanItem: {
               ...it.loanItem,
               status: "RETURNED" as const,
-              returnedAt: new Date().toISOString(),
+              returnedAt:
+                loan.returnedAt ||
+                (returnDate ? `${returnDate}T12:00:00.000Z` : ""),
             },
             bookCopy: {
               ...it.bookCopy,
@@ -468,9 +642,11 @@ export default function ReturnsPage() {
         return it;
       });
 
-      const hasRemainingBorrowed = updatedItems.some(
+      const remainingBorrowedCount = updatedItems.filter(
         (it) => it.loanItem.status === "BORROWED"
-      );
+      ).length;
+
+      const hasRemainingBorrowed = remainingBorrowedCount > 0;
 
       const updatedLoanData: ReturnLoanData = {
         ...selectedLoan,
@@ -480,24 +656,34 @@ export default function ReturnsPage() {
           status: hasRemainingBorrowed
             ? loan.status || selectedLoan.loan.status
             : "COMPLETED",
+          returnedAt: hasRemainingBorrowed
+            ? loan.returnedAt || selectedLoan.loan.returnedAt
+            : loan.returnedAt || `${returnDate}T12:00:00.000Z`,
         },
         items: updatedItems,
       };
 
+      setReturnedCopies(returnedItemsList);
+      setLastReturnDetails({
+        daysOverdue: lateInfo.daysOverdue,
+        finePerBook: lateInfo.finePerBook,
+        totalFine,
+        returnDate,
+        isPartial: hasRemainingBorrowed,
+        remainingCount: remainingBorrowedCount,
+      });
+
+      setSuccessLoan(updatedLoanData.loan);
       setSelectedItemIds([]);
+
+      toast.success(
+        hasRemainingBorrowed
+          ? "Sebagian buku berhasil dikembalikan."
+          : "Semua buku berhasil dikembalikan."
+      );
 
       // Update loans state
       setLoans((prev) =>
-        prev
-          .map((item) => (item.loan.id === loan.id ? updatedLoanData : item))
-          .filter(
-            (item) =>
-              item.loan.status !== "COMPLETED" &&
-              item.items.some((it) => it.loanItem.status === "BORROWED")
-          )
-      );
-
-      setFilteredLoans((prev) =>
         prev
           .map((item) => (item.loan.id === loan.id ? updatedLoanData : item))
           .filter(
@@ -514,17 +700,17 @@ export default function ReturnsPage() {
       }
 
       // Re-sync background data from backend
-      void getActiveReturnsApi()
+      void getActiveReturnsApi({
+        page,
+        size: pageSize,
+        search: debouncedQuery.trim() || undefined,
+      })
         .then((latest) => {
-          const activeOnly = latest.filter(
-            (item) =>
-              item.loan.status !== "COMPLETED" &&
-              item.items.some((it) => it.loanItem.status === "BORROWED")
-          );
-          setLoans(activeOnly);
-          setFilteredLoans(activeOnly);
+          setLoans(latest.items);
+          setTotalItems(latest.total);
+          setTotalPages(latest.totalPages);
           if (hasRemainingBorrowed) {
-            const currentSelected = activeOnly.find(
+            const currentSelected = latest.items.find(
               (item) => item.loan.id === loan.id
             );
             if (currentSelected) {
@@ -532,10 +718,11 @@ export default function ReturnsPage() {
             }
           }
         })
-        .catch(() => {});
+        .catch((err: unknown) => {
+          toast.error(getErrorMessage(err, "Gagal menyinkronkan data peminjaman terbaru."));
+        });
     } catch (error) {
-      const message =
-        error instanceof Error ? error.message : "Pengembalian gagal diproses.";
+      const message = getErrorMessage(error, "Pengembalian gagal diproses.");
       toast.error(message);
     } finally {
       setReturnLoading(false);
@@ -551,7 +738,7 @@ export default function ReturnsPage() {
 
   function getItemStatusVariant(
     status: string,
-    isOverdue?: boolean,
+    isOverdue?: boolean
   ): "success" | "warning" | "danger" | "neutral" {
     if (status === "BORROWED") {
       return isOverdue ? "danger" : "warning";
@@ -570,11 +757,11 @@ export default function ReturnsPage() {
     }
 
     const borrowedCount = items.filter(
-      ({ loanItem }) => loanItem.status === "BORROWED",
+      ({ loanItem }) => loanItem.status === "BORROWED"
     ).length;
 
     const returnedCount = items.filter(
-      ({ loanItem }) => loanItem.status === "RETURNED",
+      ({ loanItem }) => loanItem.status === "RETURNED"
     ).length;
 
     // Semua buku sudah dikembalikan
@@ -614,51 +801,74 @@ export default function ReturnsPage() {
     };
   }
 
-  if (loading) {
-    return (
-      <main className="min-h-screen bg-slate-50">
-        <LoadingState label="Memuat pengembalian..." />
-      </main>
-    );
-  }
+
+
+  // Active loans for currently selected member (for multi-loan switcher)
+  const memberActiveLoans = selectedLoan
+    ? loans.filter(
+        (l) =>
+          l.member.id === selectedLoan.member.id ||
+          l.member.memberNumber === selectedLoan.member.memberNumber
+      )
+    : [];
 
   return (
-    <main className="min-h-screen bg-slate-50">
+    <div className="min-h-screen bg-slate-50">
       <div className="page-container py-5 sm:py-6">
         <div className="mb-5">
-          <BackLink href="/dashboard" />
-
-          <h1 className="mt-2 text-2xl font-bold text-slate-900">
-            Pengembalian Buku
-          </h1>
-
-          <p className="mt-1 text-sm text-slate-500">
-            Cari transaksi aktif untuk memproses pengembalian.
-          </p>
+          <PageHeader
+            backLink="/dashboard"
+            title="Pengembalian Buku"
+            description="Cari peminjaman aktif atau scan barcode untuk memproses pengembalian buku."
+            actions={
+              <div className="flex items-center gap-2 self-start rounded-full border border-slate-200 bg-white px-3 py-1.5 text-xs text-slate-600 shadow-2xs sm:self-auto">
+                <span
+                  className={`h-2 w-2 rounded-full ${
+                    scanLoading ? "bg-amber-500 animate-pulse" : "bg-emerald-500"
+                  }`}
+                />
+                <span className="font-medium">
+                  {scanLoading ? "Memproses Barcode..." : "Scanner USB Aktif"}
+                </span>
+              </div>
+            }
+          />
         </div>
 
+        {/* Banner Durasi/Tarif Denda Belum Dikonfigurasi */}
+        {settingsPending && (
+          <div className="mb-5 rounded-xl border border-amber-300 bg-amber-50 p-4 text-xs text-amber-900">
+            <div className="flex items-center gap-2 font-bold text-sm">
+              <svg className="h-4 w-4 text-amber-600 shrink-0 inline" fill="none" viewBox="0 0 24 24" stroke="currentColor" aria-hidden="true"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" /></svg>
+              <p>Belum dikonfigurasi di server</p>
+            </div>
+            <p className="mt-1 text-xs text-amber-800">
+              Pengaturan kebijakan sirkulasi instansi belum disetel di Pengaturan. Denda keterlambatan belum bisa dihitung secara otomatis.
+            </p>
+          </div>
+        )}
+
         <div className="mt-5 grid gap-4 sm:gap-5 md:grid-cols-[minmax(0,1.12fr)_minmax(330px,0.98fr)] lg:grid-cols-[minmax(0,1.35fr)_minmax(380px,0.9fr)] md:items-start">
+          {/* KOLOM KIRI: CARI & DAFTAR TRANSAKSI */}
           <div className="min-w-0">
             <Card className="p-4 sm:p-5">
               <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
                 <div>
-                  <h3 className="text-lg font-semibold text-slate-900">
-                    1. Cari Transaksi
-                  </h3>
-
+                  <h2 className="text-lg font-semibold text-slate-900">
+                    1. Cari Peminjaman
+                  </h2>
                   <p className="mt-1 text-sm text-slate-500">
-                    Cari berdasarkan nomor transaksi, nama anggota, judul buku,
-                    atau kode copy.
+                    Cari berdasarkan nomor peminjaman, nama anggota, judul buku, atau kode eksemplar.
                   </p>
                 </div>
-
               </div>
 
               <div className="mt-4">
                 <Input
                   id="return-search"
-                  label="Cari transaksi"
+                  label="Cari peminjaman"
                   value={query}
+                  disabled={Boolean(error) || loading}
                   onChange={(event) => {
                     setQuery(event.target.value);
                     setPage(1);
@@ -667,89 +877,93 @@ export default function ReturnsPage() {
                 />
               </div>
 
-              
-
               {error && (
-                <FeedbackPanel tone="error" className="mt-4">
-                  <p>{error}</p>
-
-                  <button
-                    type="button"
-                    onClick={() => window.location.reload()}
-                    className="mt-3 min-h-10 rounded-lg border border-red-300 bg-white px-4 py-2 text-sm font-semibold text-red-700 transition hover:bg-red-50 focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 focus-visible:ring-offset-2"
-                  >
-                    Coba lagi
-                  </button>
-                </FeedbackPanel>
+                <ErrorState
+                  title="Gagal Memuat Peminjaman Aktif"
+                  message={error}
+                  onRetry={() => void loadLoans()}
+                  className="mt-4"
+                  nested
+                />
               )}
             </Card>
 
-            <Card className="mt-5 p-4 sm:p-5">
+            {!error && (
+              <Card className="mt-5 p-4 sm:p-5">
               <div className="flex items-center justify-between gap-3">
                 <div>
                   <h3 className="text-lg font-semibold text-slate-900">
-                    2. Daftar Transaksi
+                    2. Daftar Peminjaman
                   </h3>
-
                   <p className="mt-1 text-sm text-slate-500">
-                    Pilih transaksi untuk melihat detail pengembalian.
+                    Pilih peminjaman untuk melihat detail pengembalian.
                   </p>
                 </div>
 
-                {filteredLoans.length > 0 && (
+                {loans.length > 0 && (
                   <p className="shrink-0 text-xs text-slate-500">
-                    {filteredLoans.length} transaksi
+                    {totalItems > 0 ? `${totalItems} peminjaman` : `${loans.length} peminjaman`}
                   </p>
                 )}
               </div>
 
-              {!error && filteredLoans.length === 0 && (
+              {loading && loans.length === 0 && (
+                <div className="mt-4 space-y-2.5">
+                  {Array.from({ length: 4 }).map((_, i) => (
+                    <div key={i} className="p-3.5 rounded-xl border border-slate-200 bg-white space-y-2">
+                      <Skeleton className="h-4 w-36" />
+                      <Skeleton className="h-3 w-48" />
+                    </div>
+                  ))}
+                </div>
+              )}
+
+              {!loading && !error && loans.length === 0 && (
                 <div className="mt-4">
                   <EmptyState
                     title={
                       query.trim()
-                        ? "Transaksi tidak ditemukan"
-                        : "Belum ada transaksi aktif"
+                        ? "Peminjaman tidak ditemukan"
+                        : "Belum ada peminjaman aktif"
                     }
                     description={
                       query.trim()
-                        ? `Tidak ada transaksi yang sesuai dengan "${query.trim()}". Coba gunakan nomor transaksi, nama anggota, judul buku, atau kode copy lain.`
-                        : "Belum ada transaksi aktif yang dapat diproses. Transaksi akan muncul di sini selama masih ada buku yang belum dikembalikan."
+                        ? `Tidak ada peminjaman yang sesuai dengan "${query.trim()}". Coba gunakan nomor peminjaman, nama anggota, judul buku, atau kode eksemplar lain.`
+                        : "Belum ada peminjaman aktif yang dapat diproses. Peminjaman akan muncul di sini selama masih ada buku yang belum dikembalikan."
                     }
                   />
                 </div>
               )}
 
-              {filteredLoans.length > 0 && (
+              {loans.length > 0 && (
                 <div className="mt-4 space-y-2">
-                  {paginatedLoans.map((item) => {
+                  {loans.map((item) => {
                     const overallStatus = getOverallStatus(item);
 
                     return (
-                      <button
+                      <Button
                         key={item.loan.id}
                         type="button"
+                        variant="ghost"
                         onClick={() => selectLoan(item)}
                         aria-pressed={selectedLoan?.loan.id === item.loan.id}
-                        className={`w-full rounded-xl border p-3 text-left transition focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 ${
+                        className={`w-full h-auto rounded-xl border p-3 text-left justify-start font-normal transition ${
                           selectedLoan?.loan.id === item.loan.id
                             ? "border-blue-500 bg-blue-50 ring-1 ring-blue-200"
                             : "border-slate-200 bg-white hover:border-blue-300 hover:bg-blue-50"
                         }`}
                       >
-                        <div className="grid grid-cols-[minmax(0,1fr)_auto] items-start gap-3">
+                        <div className="grid w-full grid-cols-[minmax(0,1fr)_auto] items-start gap-3">
                           <div className="min-w-0">
                             <p className="truncate font-semibold text-slate-900">
                               {item.loan.loanNumber}
                             </p>
-
                             <p className="mt-1 truncate text-sm text-slate-600">
                               {item.member.name}
                             </p>
-
                             <p className="mt-1 text-xs text-slate-500">
-                              {item.items.length} item ·{" "}
-                              {formatDate(item.loan.borrowedAt)} →{" "}
+                              {item.items.length} item <span className="mx-1 select-none text-slate-400" aria-hidden="true">&bull;</span>{" "}
+                              {formatDate(item.loan.borrowedAt)} <span className="mx-1 select-none text-slate-400" aria-hidden="true">&rarr;</span>{" "}
                               {formatDate(item.loan.dueAt)}
                             </p>
                           </div>
@@ -760,19 +974,19 @@ export default function ReturnsPage() {
                             </Badge>
                           </div>
                         </div>
-                      </button>
+                      </Button>
                     );
                   })}
                 </div>
               )}
 
-              {/* PAGINATION (MOBILE, TABLET & DESKTOP) */}
-              {filteredLoans.length > 0 && (
+              {/* PAGINATION */}
+              {loans.length > 0 && (
                 <Pagination
-                  currentPage={currentPage}
+                  currentPage={page}
                   totalPages={totalPages}
                   onPageChange={(nextPage) => setPage(nextPage)}
-                  totalItems={filteredLoans.length}
+                  totalItems={totalItems}
                   pageSize={pageSize}
                   onPageSizeChange={(newSize) => {
                     setPageSize(newSize);
@@ -782,8 +996,10 @@ export default function ReturnsPage() {
                 />
               )}
             </Card>
+            )}
           </div>
 
+          {/* KOLOM KANAN: DETAIL PENGEMBALIAN */}
           <div
             ref={detailRef}
             className="min-w-0 scroll-mt-20 md:sticky md:top-20 md:self-start"
@@ -793,16 +1009,129 @@ export default function ReturnsPage() {
                 {(() => {
                   const overallStatus = getOverallStatus(selectedLoan);
 
-                  const borrowedCount = selectedLoan.items.filter(
-                    ({ loanItem }) => loanItem.status === "BORROWED",
-                  ).length;
+                  const borrowedItems = selectedLoan.items.filter(
+                    ({ loanItem }) => loanItem.status === "BORROWED"
+                  );
+                  const borrowedCount = borrowedItems.length;
 
                   const returnedCount = selectedLoan.items.filter(
-                    ({ loanItem }) => loanItem.status === "RETURNED",
+                    ({ loanItem }) => loanItem.status === "RETURNED"
                   ).length;
+
+                  const allBorrowedSelected =
+                    borrowedCount > 0 &&
+                    borrowedItems.every((it) =>
+                      selectedItemIds.includes(it.loanItem.id)
+                    );
+                  const isPartiallySelected =
+                    borrowedItems.some((it) =>
+                      selectedItemIds.includes(it.loanItem.id)
+                    ) && !allBorrowedSelected;
+
+                  const handleSelectAllToggle = () => {
+                    if (allBorrowedSelected) {
+                      setSelectedItemIds([]);
+                    } else {
+                      setSelectedItemIds(
+                        borrowedItems.map((it) => it.loanItem.id)
+                      );
+                    }
+                  };
+
+                  const lateInfo = calculateLateInfo(
+                    selectedLoan.loan.dueAt,
+                    returnDate,
+                    dailyFineRate
+                  );
+                  const selectedCount =
+                    selectedItemIds.length > 0
+                      ? selectedItemIds.length
+                      : borrowedCount;
+                  const estimatedFine =
+                    dailyFineRate !== null
+                      ? lateInfo.daysOverdue * dailyFineRate * selectedCount
+                      : null;
 
                   return (
                     <>
+                      {/* Non-staff Mode Notice */}
+                      {!isStaff && (
+                        <div className="mb-4 rounded-xl border border-amber-200 bg-amber-50 p-3 text-xs text-amber-800">
+                          <span className="font-semibold">Mode Baca Saja:</span>{" "}
+                          Akun Anda tidak memiliki hak akses staf untuk memproses pengembalian buku. Hubungi administrator jika Anda memerlukan akses.
+                        </div>
+                      )}
+
+                      {/* Multiple Active Loans Switcher for Member */}
+                      {memberActiveLoans.length > 1 && (
+                        <div className="mb-4 rounded-xl border border-blue-200 bg-blue-50/70 p-3">
+                          <div className="flex items-center justify-between gap-2">
+                            <p className="text-xs font-semibold text-blue-900">
+                              Anggota ini memiliki {memberActiveLoans.length} transaksi aktif:
+                            </p>
+                            <span className="text-xs text-blue-700 font-medium">
+                              Pilih transaksi untuk diproses
+                            </span>
+                          </div>
+
+                          {memberActiveLoans.length <= 3 ? (
+                            <div className="mt-2 flex flex-wrap gap-1.5">
+                              {memberActiveLoans.map((l) => {
+                                const isCurrent =
+                                  l.loan.id === selectedLoan.loan.id;
+                                const unreturnedCount = l.items.filter(
+                                  (it) => it.loanItem.status === "BORROWED"
+                                ).length;
+
+                                return (
+                                  <Button
+                                    key={l.loan.id}
+                                    type="button"
+                                    variant={isCurrent ? "primary" : "secondary"}
+                                    size="sm"
+                                    onClick={() => selectLoan(l)}
+                                    className="h-auto min-h-0 py-1 px-2.5 text-xs whitespace-nowrap"
+                                  >
+                                    {l.loan.loanNumber} ({unreturnedCount} buku)
+                                  </Button>
+                                );
+                              })}
+                            </div>
+                          ) : (
+                            <div className="mt-2">
+                              <div className="relative">
+                                <select
+                                  id="member-active-loan-switcher"
+                                  aria-label="Pilih transaksi aktif anggota"
+                                  value={selectedLoan.loan.id}
+                                  onChange={(e) => {
+                                    const target = memberActiveLoans.find((l) => l.loan.id === e.target.value);
+                                    if (target) selectLoan(target);
+                                  }}
+                                  className="w-full h-9 rounded-lg border border-blue-300 bg-white pl-3 pr-8 text-xs font-semibold text-slate-800 shadow-2xs focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 cursor-pointer"
+                                >
+                                  {memberActiveLoans.map((l) => {
+                                    const unreturnedCount = l.items.filter(
+                                      (it) => it.loanItem.status === "BORROWED"
+                                    ).length;
+                                    return (
+                                      <option key={l.loan.id} value={l.loan.id}>
+                                        {l.loan.loanNumber} ({unreturnedCount} buku) &bull; Pinjam: {formatDate(l.loan.borrowedAt)} &rarr; Jatuh tempo: {formatDate(l.loan.dueAt)}
+                                      </option>
+                                    );
+                                  })}
+                                </select>
+                                <div className="pointer-events-none absolute inset-y-0 right-0 flex items-center px-2.5 text-slate-500">
+                                  <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" aria-hidden="true">
+                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+                                  </svg>
+                                </div>
+                              </div>
+                            </div>
+                          )}
+                        </div>
+                      )}
+
                       <div className="border-b border-slate-200 pb-4">
                         <p className="text-xs font-medium uppercase tracking-wide text-slate-500">
                           3. Detail Pengembalian
@@ -819,9 +1148,9 @@ export default function ReturnsPage() {
 
                             <p
                               className="mt-1 break-words text-sm text-slate-600"
-                              title={`${selectedLoan.member.name} · ${selectedLoan.member.memberNumber}`}
+                              title={`${selectedLoan.member.name} - ${selectedLoan.member.memberNumber}`}
                             >
-                              {selectedLoan.member.name} ·{" "}
+                              {selectedLoan.member.name} <span className="mx-1 select-none text-slate-400" aria-hidden="true">&bull;</span>{" "}
                               {selectedLoan.member.memberNumber}
                             </p>
                           </div>
@@ -836,10 +1165,7 @@ export default function ReturnsPage() {
 
                       <div className="mt-4 grid gap-3 sm:grid-cols-2">
                         <div className="rounded-lg bg-slate-50 p-3">
-                          <p className="text-xs text-slate-500">
-                            Tanggal pinjam
-                          </p>
-
+                          <p className="text-xs text-slate-500">Tanggal pinjam</p>
                           <p className="mt-1 font-semibold text-slate-900">
                             {formatDate(selectedLoan.loan.borrowedAt)}
                           </p>
@@ -847,7 +1173,6 @@ export default function ReturnsPage() {
 
                         <div className="rounded-lg bg-slate-50 p-3">
                           <p className="text-xs text-slate-500">Jatuh tempo</p>
-
                           <p className="mt-1 font-semibold text-slate-900">
                             {formatDate(selectedLoan.loan.dueAt)}
                           </p>
@@ -855,7 +1180,6 @@ export default function ReturnsPage() {
 
                         <div className="rounded-lg bg-slate-50 p-3">
                           <p className="text-xs text-slate-500">Dipinjam</p>
-
                           <p className="mt-1 font-semibold text-amber-700">
                             {borrowedCount} buku
                           </p>
@@ -863,47 +1187,101 @@ export default function ReturnsPage() {
 
                         <div className="rounded-lg bg-slate-50 p-3">
                           <p className="text-xs text-slate-500">Dikembalikan</p>
-
-                          <p className="mt-1 font-semibold text-green-700">
+                          <p className="mt-1 font-semibold text-emerald-700">
                             {returnedCount} buku
                           </p>
                         </div>
                       </div>
 
+
+
+                      {/* Perhitungan Hari Terlambat & Denda */}
+                      {lateInfo.daysOverdue > 0 ? (
+                        <div className="mt-4 rounded-xl border border-red-200 bg-red-50 p-3.5 text-xs text-red-900">
+                          <div className="flex items-center justify-between font-semibold">
+                            <span className="flex items-center gap-1.5">
+                              <svg className="h-4 w-4 text-red-600 shrink-0 inline" fill="none" viewBox="0 0 24 24" stroke="currentColor" aria-hidden="true"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" /></svg>{" "}
+                              Terlambat {lateInfo.daysOverdue} Hari
+                            </span>
+                            <span className="rounded bg-red-100 px-2 py-0.5 text-xs font-bold text-red-700">
+                              {dailyFineRate !== null
+                                ? `Rp ${dailyFineRate.toLocaleString("id-ID")} / hari / buku`
+                                : "belum dikonfigurasi"}
+                            </span>
+                          </div>
+                          <p className="mt-1.5 text-red-700">
+                            Estimasi denda ({selectedItemIds.length > 0 ? `${selectedItemIds.length} buku dipilih` : `${borrowedCount} buku dipinjam`}):{" "}
+                            <span className="font-bold text-red-900">
+                              {estimatedFine !== null
+                                ? `Rp ${estimatedFine.toLocaleString("id-ID")}`
+                                : "belum bisa dihitung"}
+                            </span>
+                          </p>
+                        </div>
+                      ) : (
+                        <div className="mt-4 flex items-center gap-2 rounded-xl border border-emerald-200 bg-emerald-50/60 p-3 text-xs text-emerald-800">
+                          <svg className="h-4 w-4 text-emerald-600 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" aria-hidden="true"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M5 13l4 4L19 7" /></svg>
+                          <span>Pengembalian tepat waktu (tidak ada denda keterlambatan).</span>
+                        </div>
+                      )}
+
                       <div className="mt-5">
-                        <h4 className="font-semibold text-slate-900">
-                          Detail buku
-                        </h4>
+                        <div className="flex items-center justify-between">
+                          <h4 className="font-semibold text-slate-900">
+                            Detail buku
+                          </h4>
+                          {isStaff && borrowedCount > 1 && (
+                            <Button
+                              type="button"
+                              variant="ghost"
+                              size="sm"
+                              onClick={handleSelectAllToggle}
+                              className="h-auto min-h-0 p-0 text-xs font-semibold text-blue-600 hover:text-blue-800"
+                            >
+                              {allBorrowedSelected
+                                ? "Batal pilih semua"
+                                : `Pilih semua (${borrowedCount})`}
+                            </Button>
+                          )}
+                        </div>
 
                         <p className="mt-1 text-sm text-slate-500">
-                          Pilih buku yang ingin dikembalikan. Buku yang sudah
-                          dikembalikan tetap ditampilkan sebagai riwayat status.
+                          {isStaff
+                            ? "Pilih buku yang ingin dikembalikan. Buku yang sudah dikembalikan tetap ditampilkan sebagai riwayat status."
+                            : "Daftar buku dalam transaksi peminjaman ini beserta riwayat statusnya."}
                         </p>
+
+                        {/* Checkbox "Pilih semua" Bar */}
+                        {isStaff && borrowedCount > 1 && (
+                          <div className="mt-3 flex items-center justify-between rounded-lg bg-slate-100/80 px-3 py-2 text-xs">
+                            <label className="flex cursor-pointer items-center gap-2 font-medium text-slate-700">
+                              <input
+                                type="checkbox"
+                                checked={allBorrowedSelected}
+                                ref={(el) => {
+                                  if (el) el.indeterminate = isPartiallySelected;
+                                }}
+                                onChange={handleSelectAllToggle}
+                                className="h-4 w-4 rounded border-slate-300 text-blue-600 focus:ring-2 focus:ring-blue-500"
+                              />
+                              Pilih Semua Buku Dipinjam
+                            </label>
+                            <span className="text-slate-500">
+                              {selectedItemIds.length} dari {borrowedCount} dipilih
+                            </span>
+                          </div>
+                        )}
 
                         <div className="mt-3 space-y-2.5">
                           {selectedLoan.items.map(
                             ({ loanItem, book, bookCopy }) => {
                               const isBorrowed = loanItem.status === "BORROWED";
-
                               const selected = selectedItemIds.includes(
-                                loanItem.id,
+                                loanItem.id
                               );
 
-                              return (
-                                <label
-                                  key={loanItem.id}
-                                  className={`flex items-start gap-3 rounded-xl border p-3.5 transition ${
-                                    isBorrowed
-                                      ? selected
-                                        ? "border-blue-500 bg-blue-50/70 shadow-2xs"
-                                        : "border-slate-200 bg-white hover:border-blue-300"
-                                      : "border-green-200 bg-green-50/40"
-                                  } ${
-                                    isStaff && isBorrowed
-                                      ? "cursor-pointer"
-                                      : "cursor-default"
-                                  }`}
-                                >
+                              const cardBody = (
+                                <>
                                   {isStaff && (
                                     <input
                                       type="checkbox"
@@ -927,12 +1305,12 @@ export default function ReturnsPage() {
                                         <Badge
                                           variant={getItemStatusVariant(
                                             loanItem.status,
-                                            selectedLoan.loan.status === "OVERDUE",
+                                            selectedLoan.loan.status === "OVERDUE" || lateInfo.daysOverdue > 0
                                           )}
                                         >
                                           {getItemStatusLabel(
                                             loanItem.status,
-                                            selectedLoan.loan.status === "OVERDUE",
+                                            selectedLoan.loan.status === "OVERDUE" || lateInfo.daysOverdue > 0
                                           )}
                                         </Badge>
                                       </div>
@@ -941,8 +1319,8 @@ export default function ReturnsPage() {
                                     <div className="mt-1 flex flex-wrap items-center gap-x-2 gap-y-0.5 text-xs text-slate-500">
                                       {book.code && <span>{book.code}</span>}
                                       {book.code && bookCopy.code && (
-                                        <span className="text-slate-300" aria-hidden="true">
-                                          ·-
+                                        <span className="text-slate-300 select-none" aria-hidden="true">
+                                          &bull;
                                         </span>
                                       )}
                                       <span className="font-medium text-slate-700">
@@ -957,13 +1335,46 @@ export default function ReturnsPage() {
                                         </p>
                                       )}
                                   </div>
+                                </>
+                              );
+
+                              // Jika bukan staff (Admin / Mode Baca Saja): Tampilan statis non-interaktif tanpa border atau background biru
+                              if (!isStaff) {
+                                return (
+                                  <div
+                                    key={loanItem.id}
+                                    className={`flex items-start gap-3 rounded-xl border p-3.5 ${
+                                      isBorrowed
+                                        ? "border-slate-200 bg-white"
+                                        : "border-emerald-200 bg-emerald-50/40"
+                                    }`}
+                                  >
+                                    {cardBody}
+                                  </div>
+                                );
+                              }
+
+                              // Jika staff: Tampilan interaktif dengan checkbox dan highlight biru saat dipilih
+                              return (
+                                <label
+                                  key={loanItem.id}
+                                  className={`flex items-start gap-3 rounded-xl border p-3.5 transition ${
+                                    isBorrowed
+                                      ? selected
+                                        ? "border-blue-500 bg-blue-50/70 shadow-2xs cursor-pointer"
+                                        : "border-slate-200 bg-white hover:border-blue-300 cursor-pointer"
+                                      : "border-emerald-200 bg-emerald-50/40 cursor-default"
+                                  }`}
+                                >
+                                  {cardBody}
                                 </label>
                               );
-                            },
+                            }
                           )}
                         </div>
                       </div>
 
+                      {/* INLINE ACTION BUTTONS (SINGLE MODAL FLOW) */}
                       {isStaff && (
                         <div className="mt-5 flex flex-col-reverse gap-2 border-t border-slate-200 pt-4 sm:flex-row sm:justify-end">
                           <Button
@@ -981,10 +1392,13 @@ export default function ReturnsPage() {
                           <Button
                             type="button"
                             loading={returnLoading}
-                            disabled={selectedItemIds.length === 0}
-                            onClick={() => setShowConfirmation(true)}
+                            disabled={selectedItemIds.length === 0 || returnLoading}
+                            aria-keyshortcuts="Control+Enter Meta+Enter"
+                            onClick={() => void handleReturn()}
                           >
-                            Konfirmasi Pengembalian
+                            {selectedItemIds.length > 0
+                              ? `Konfirmasi Pengembalian (${selectedItemIds.length} Buku)`
+                              : "Pilih Buku untuk Dikembalikan"}
                           </Button>
                         </div>
                       )}
@@ -997,7 +1411,7 @@ export default function ReturnsPage() {
                 <div className="flex min-h-[240px] items-center justify-center">
                   <EmptyState
                     title="Pilih transaksi"
-                    description="Pilih salah satu transaksi di sebelah kiri untuk melihat detail buku dan memproses pengembalian."
+                    description="Pilih salah satu transaksi di sebelah kiri atau scan barcode kartu/eksemplar untuk melihat detail buku dan memproses pengembalian."
                   />
                 </div>
               </Card>
@@ -1006,63 +1420,55 @@ export default function ReturnsPage() {
         </div>
       </div>
 
-      {successLoan && (
-        <div
-          className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/50 p-4"
-          role="presentation"
-          onMouseDown={(event) => {
-            if (event.target === event.currentTarget) {
-              setSuccessLoan(null);
-            }
-          }}
-        >
-          <div
-            className="w-full max-w-lg rounded-2xl bg-white shadow-2xl"
-            role="dialog"
-            aria-modal="true"
-            aria-labelledby="return-success-title"
-          >
+      {/* SINGLE SUCCESS MODAL */}
+      <Modal
+        open={Boolean(successLoan)}
+        onClose={() => setSuccessLoan(null)}
+        raw
+        size="lg"
+        initialFocusRef={successModalCloseRef}
+        ariaLabelledBy="return-success-title"
+        className="w-full max-w-lg rounded-2xl bg-white shadow-2xl"
+      >
+        {successLoan ? (
+          <>
             <div className="flex items-start justify-between gap-4 border-b border-slate-200 px-5 py-4">
               <div className="flex items-start gap-3">
-                <div
-                  className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-green-100 text-green-700"
-                  aria-hidden="true"
-                >
-                  ✓
-                </div>
+                <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-emerald-100 text-emerald-700" aria-hidden="true"><svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5} aria-hidden="true"><path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" /></svg></div>
 
                 <div>
                   <h2
                     id="return-success-title"
                     className="text-lg font-semibold text-slate-900"
                   >
-                    Pengembalian berhasil
+                    Pengembalian Berhasil
                   </h2>
 
                   <p className="mt-1 text-sm text-slate-500">
-                    Transaksi berhasil diperbarui.
+                    {lastReturnDetails?.isPartial
+                      ? `Pengembalian sebagian berhasil (${lastReturnDetails.remainingCount} buku masih dipinjam).`
+                      : "Semua buku telah dikembalikan dan transaksi selesai."}
                   </p>
                 </div>
               </div>
 
-              <button
+              <Button
                 ref={successModalCloseRef}
                 type="button"
+                variant="ghost"
+                size="sm"
                 aria-label="Tutup pengembalian berhasil"
                 onClick={() => setSuccessLoan(null)}
-                className="rounded-md p-2 text-slate-500 transition hover:bg-slate-100 hover:text-slate-700 focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-500"
+                className="min-h-[32px] min-w-[32px] p-2 text-slate-500 hover:bg-slate-100 hover:text-slate-700"
               >
-                <span aria-hidden="true" className="text-xl leading-none">
-                  ×
-                </span>
-              </button>
+                <svg className="h-5 w-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" aria-hidden="true"><path d="M18 6 6 18M6 6l12 12" /></svg>
+              </Button>
             </div>
 
             <div className="space-y-4 p-5">
-              <div className="flex items-center justify-between gap-3 rounded-lg border border-green-200 bg-green-50 px-4 py-3">
+              <div className="flex items-center justify-between gap-3 rounded-lg border border-emerald-200 bg-emerald-50 px-4 py-3">
                 <div>
-                  <p className="text-xs text-slate-500">Nomor transaksi</p>
-
+                  <p className="text-xs text-slate-500">Nomor peminjaman</p>
                   <p className="mt-1 font-semibold text-slate-900">
                     {successLoan.loanNumber}
                   </p>
@@ -1070,27 +1476,52 @@ export default function ReturnsPage() {
 
                 <Badge
                   variant={
-                    successLoan.status === "COMPLETED"
-                      ? "success"
-                      : successLoan.status === "OVERDUE"
-                        ? "danger"
-                        : "warning"
+                    lastReturnDetails?.isPartial
+                      ? "neutral"
+                      : "success"
                   }
                 >
-                  {successLoan.status === "COMPLETED"
-                    ? "Selesai"
-                    : successLoan.status === "OVERDUE"
-                      ? "Terlambat"
-                      : "Aktif"}
+                  {lastReturnDetails?.isPartial
+                    ? "Sebagian Dikembalikan"
+                    : "Selesai"}
                 </Badge>
               </div>
+
+              {/* Rincian Keterlambatan & Denda di Modal Sukses */}
+              {lastReturnDetails && lastReturnDetails.daysOverdue > 0 && (
+                <div className="rounded-xl border border-red-200 bg-red-50/80 p-3.5 text-sm">
+                  <div className="flex items-center justify-between font-semibold text-red-800">
+                    <span className="flex items-center gap-1.5"><svg className="h-4 w-4 text-red-600 shrink-0 inline" fill="none" viewBox="0 0 24 24" stroke="currentColor" aria-hidden="true"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" /></svg> Keterlambatan Pengembalian</span>
+                    <span className="rounded bg-red-100 px-2 py-0.5 text-xs text-red-700">
+                      {lastReturnDetails.daysOverdue} Hari Terlambat
+                    </span>
+                  </div>
+                  <div className="mt-2.5 grid grid-cols-2 gap-2 text-xs">
+                    <div>
+                      <span className="text-slate-500">Tarif Denda:</span>
+                      <p className="font-semibold text-slate-800">
+                        {dailyFineRate !== null
+                          ? `Rp ${dailyFineRate.toLocaleString("id-ID")} / hari / buku`
+                          : "Belum dikonfigurasi"}
+                      </p>
+                    </div>
+                    <div>
+                      <span className="text-slate-500">Total Denda:</span>
+                      <p className="font-bold text-red-600 text-sm">
+                        {dailyFineRate !== null
+                          ? `Rp ${lastReturnDetails.totalFine.toLocaleString("id-ID")}`
+                          : "belum bisa dihitung"}
+                      </p>
+                    </div>
+                  </div>
+                </div>
+              )}
 
               <div className="grid gap-4 text-sm sm:grid-cols-2">
                 <div>
                   <p className="text-xs text-slate-500">
-                    Buku/copy dikembalikan
+                    Buku/copy dikembalikan ({returnedCopies.length})
                   </p>
-
                   <p className="mt-1 font-medium text-slate-900">
                     {returnedCopies.join(", ") || "-"}
                   </p>
@@ -1098,9 +1529,10 @@ export default function ReturnsPage() {
 
                 <div>
                   <p className="text-xs text-slate-500">Tanggal pengembalian</p>
-
                   <p className="mt-1 font-medium text-slate-900">
-                    {formatDate(successLoan.returnedAt)}
+                    {formatDate(
+                      successLoan.returnedAt || lastReturnDetails?.returnDate
+                    )}
                   </p>
                 </div>
               </div>
@@ -1111,23 +1543,9 @@ export default function ReturnsPage() {
                 Selesai
               </Button>
             </div>
-          </div>
-        </div>
-      )}
-
-      <ConfirmationDialog
-        open={showConfirmation}
-        title="Konfirmasi pengembalian"
-        description={`Anda akan mencatat pengembalian ${selectedItemIds.length} copy buku. Pastikan copy yang dipilih sudah sesuai.`}
-        confirmLabel="Ya, catat pengembalian"
-        onClose={() => setShowConfirmation(false)}
-        onConfirm={() => {
-          setShowConfirmation(false);
-          void handleReturn();
-        }}
-      />
-
-      
-    </main>
+          </>
+        ) : null}
+      </Modal>
+    </div>
   );
 }

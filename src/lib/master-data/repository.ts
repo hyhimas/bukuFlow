@@ -1,7 +1,6 @@
 // Master Data Repository connecting directly to Backend API
 
 import {
-  getMembersApi,
   getMembersPaginatedApi,
   searchMembersApi,
   getMemberApi,
@@ -9,14 +8,12 @@ import {
   updateMemberApi,
   changeMemberStatusApi,
   searchBooksApi,
-  getBooksApi,
   getBooksPaginatedApi,
   createBookApi,
   getBookApi,
   updateBookApi,
   changeBookStatusApi,
   getBookCopiesApi,
-  createBookCopyApi,
   createBookCopiesBulkApi,
   changeBookCopyStatusApi,
 } from "@/lib/api";
@@ -25,9 +22,6 @@ import type {
   Book,
   BookCopy,
   Member,
-  MemberStatus,
-  BookStatus,
-  BookCopyStatus,
 } from "@/lib/types";
 
 import type {
@@ -66,13 +60,16 @@ export const masterDataRepository = {
 
     if (keyword.length > 0) {
       const members = await searchMembersApi(keyword);
-      const filtered =
-        input.status !== undefined
-          ? members.filter((member) => member.status === input.status)
-          : members;
-
+      const sorted = [...members];
+      if (input.sortby === "name") {
+        sorted.sort((a, b) =>
+          input.order === "desc"
+            ? b.name.localeCompare(a.name)
+            : a.name.localeCompare(b.name)
+        );
+      }
       return paginate(
-        filtered,
+        sorted,
         page,
         pageSize,
       );
@@ -81,15 +78,12 @@ export const masterDataRepository = {
     const res = await getMembersPaginatedApi({
       page,
       size: pageSize,
+      sortby: input.sortby ?? "name",
+      order: input.order ?? "asc",
     });
 
-    const filtered =
-      input.status !== undefined
-        ? res.items.filter((member) => member.status === input.status)
-        : res.items;
-
     return {
-      data: filtered,
+      data: res.items,
       total: res.total,
       page: res.page,
       pageSize: res.size,
@@ -110,6 +104,7 @@ export const masterDataRepository = {
   ): Promise<MutationResult<Member>> {
     const member = await createMemberApi({
       name: input.name,
+      memberNumber: input.memberNumber,
       phone: input.phone,
       identityNumber: input.identityNumber,
       email: input.email,
@@ -117,7 +112,7 @@ export const masterDataRepository = {
 
     return {
       data: member,
-      message: "Member berhasil dibuat.",
+      message: "Anggota berhasil dibuat.",
     };
   },
 
@@ -129,7 +124,7 @@ export const masterDataRepository = {
 
     return {
       data: member,
-      message: "Member berhasil diperbarui.",
+      message: "Anggota berhasil diperbarui.",
     };
   },
 
@@ -143,8 +138,8 @@ export const masterDataRepository = {
       data: member,
       message:
         input.status === "ACTIVE"
-          ? "Member berhasil diaktifkan."
-          : "Member berhasil dinonaktifkan.",
+          ? "Anggota berhasil diaktifkan."
+          : "Anggota berhasil dinonaktifkan.",
     };
   },
 
@@ -158,16 +153,29 @@ export const masterDataRepository = {
     const keyword = input.search?.trim() ?? "";
     const page = input.page ?? 1;
     const pageSize = input.pageSize ?? 10;
+    const sortby = input.sortby ?? "title";
+    const order = input.order ?? "asc";
 
     if (keyword.length > 0) {
       const books = await searchBooksApi(keyword);
-      const filtered =
-        input.status !== undefined
-          ? books.filter((book) => book.status === input.status)
-          : books;
+      const sorted = [...books];
+
+      if (sortby === "title") {
+        sorted.sort((a, b) =>
+          order === "desc"
+            ? b.title.localeCompare(a.title)
+            : a.title.localeCompare(b.title)
+        );
+      } else if (sortby === "code") {
+        sorted.sort((a, b) =>
+          order === "desc"
+            ? b.code.localeCompare(a.code)
+            : a.code.localeCompare(b.code)
+        );
+      }
 
       return paginate(
-        filtered,
+        sorted,
         page,
         pageSize,
       );
@@ -176,15 +184,12 @@ export const masterDataRepository = {
     const res = await getBooksPaginatedApi({
       page,
       size: pageSize,
+      sortby,
+      order,
     });
 
-    const filtered =
-      input.status !== undefined
-        ? res.items.filter((book) => book.status === input.status)
-        : res.items;
-
     return {
-      data: filtered,
+      data: res.items,
       total: res.total,
       page: res.page,
       pageSize: res.size,
@@ -192,14 +197,14 @@ export const masterDataRepository = {
     };
   },
 
-  async getBook(id: string): Promise<Book | null> {
-    return await getBookApi(id);
+  async getBook(id: string, companyId?: string): Promise<Book | null> {
+    return await getBookApi(id, companyId);
   },
 
   async createBook(
     input: CreateBookInput,
   ): Promise<MutationResult<Book>> {
-    const book = await createBookApi(input);
+    const book = await createBookApi(input, input.companyId);
 
     return {
       data: book,
@@ -211,7 +216,7 @@ export const masterDataRepository = {
     id: string,
     input: UpdateBookInput,
   ): Promise<MutationResult<Book>> {
-    const book = await updateBookApi(id, input);
+    const book = await updateBookApi(id, input, input.companyId);
 
     return {
       data: book,
@@ -223,7 +228,7 @@ export const masterDataRepository = {
     id: string,
     input: ChangeBookStatusInput,
   ): Promise<MutationResult<Book>> {
-    const book = await changeBookStatusApi(id, input.status);
+    const book = await changeBookStatusApi(id, input.status, input.companyId);
 
     return {
       data: book,
@@ -249,7 +254,7 @@ export const masterDataRepository = {
       );
     }
 
-    const copies = await getBookCopiesApi(input.bookId);
+    const copies = await getBookCopiesApi(input.bookId, input.companyId);
 
     const filtered =
       input.status !== undefined
@@ -275,15 +280,15 @@ export const masterDataRepository = {
     input: CreateBookCopyInput,
   ): Promise<MutationResult<BookCopy>> {
     const count = input.count ?? 1;
-    const copies = await createBookCopiesBulkApi(input.bookId, count);
+    const copies = await createBookCopiesBulkApi(input.bookId, count, input.companyId);
     const firstCopy = copies[0];
 
     return {
       data: firstCopy,
       message:
         count > 1
-          ? `${count} copy buku berhasil ditambahkan.`
-          : `Copy ${firstCopy.code} berhasil ditambahkan.`,
+          ? `${count} eksemplar buku berhasil ditambahkan.`
+          : `Eksemplar ${firstCopy.code} berhasil ditambahkan.`,
     };
   },
 
@@ -296,11 +301,12 @@ export const masterDataRepository = {
       bookId,
       id,
       input.status,
+      input.companyId,
     );
 
     return {
       data: copy,
-      message: `Status copy ${copy.code} berhasil diubah.`,
+      message: `Status eksemplar ${copy.code} berhasil diubah.`,
     };
   },
 

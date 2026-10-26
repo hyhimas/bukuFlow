@@ -4,12 +4,17 @@ import { useEffect, useState } from "react";
 import BookBarcodeLabel from "./BookBarcodeLabel";
 import Button from "@/components/ui/Button";
 import Dropdown from "@/components/ui/Dropdown";
+import Modal from "@/components/ui/Modal";
 
 export interface PrintableBookItem {
-  bookTitle: string;
-  bookCode: string;
-  copyCode: string;
+  type?: "book" | "member";
+  bookTitle?: string;
+  bookCode?: string;
+  copyCode?: string;
   category?: string;
+  memberName?: string;
+  memberNumber?: string;
+  memberType?: string;
 }
 
 interface BookBarcodePrintModalProps {
@@ -25,10 +30,15 @@ export default function BookBarcodePrintModal({
   onClose,
   items,
   title = "Cetak Label Barcode & QR Code",
-  companyName = "SMA NEGERI 1 JAKARTA",
+  companyName = "Perpustakaan",
 }: BookBarcodePrintModalProps) {
   const [format, setFormat] = useState<"barcode" | "qrcode" | "both">("both");
   const [size, setSize] = useState<"sm" | "md" | "lg">("md");
+  const [deselectedIndices, setDeselectedIndices] = useState<Set<number>>(new Set());
+
+  const gridCols = size === "sm" ? 3 : size === "lg" ? 1 : 2;
+  const isAllSelected = deselectedIndices.size === 0;
+  const selectedCount = Math.max(0, items.length - deselectedIndices.size);
 
   useEffect(() => {
     if (!isOpen) return;
@@ -51,6 +61,11 @@ export default function BookBarcodePrintModal({
       window.print();
       return;
     }
+
+    // Clone and strip unselected / hidden items before printing
+    const printClone = printArea.cloneNode(true) as HTMLElement;
+    printClone.querySelectorAll(".print-hidden, .print\\:hidden").forEach((el) => el.remove());
+    printClone.querySelectorAll("[data-unselected='true']").forEach((el) => el.remove());
 
     // Create or reuse hidden isolated iframe
     let printFrame = document.getElementById("barcode-print-iframe") as HTMLIFrameElement | null;
@@ -106,8 +121,8 @@ export default function BookBarcodePrintModal({
             }
             .sheet-grid {
               display: grid !important;
-              grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
-              gap: 6mm 4mm !important;
+              grid-template-columns: repeat(${gridCols}, minmax(0, 1fr)) !important;
+              gap: ${size === "sm" ? "4mm 3mm" : size === "lg" ? "8mm 6mm" : "6mm 4mm"} !important;
               width: 100% !important;
               padding: 4mm 2mm !important;
             }
@@ -124,7 +139,7 @@ export default function BookBarcodePrintModal({
               break-after: auto !important;
               page-break-after: auto !important;
               width: 100% !important;
-              max-width: 95mm !important;
+              max-width: ${size === "sm" ? "70mm" : size === "lg" ? "140mm" : "95mm"} !important;
               margin: 0 auto !important;
               border: 1px solid #94a3b8 !important;
               border-radius: 8px !important;
@@ -135,7 +150,7 @@ export default function BookBarcodePrintModal({
         </head>
         <body>
           <div class="sheet-grid">
-            ${printArea.innerHTML}
+            ${printClone.innerHTML}
           </div>
         </body>
       </html>
@@ -148,30 +163,29 @@ export default function BookBarcodePrintModal({
         printFrame.contentWindow?.focus();
         printFrame.contentWindow?.print();
       } catch (err) {
-        console.error("Iframe print fallback:", err);
+        console.error("Iframe print error:", err);
         window.print();
       }
     }, 250);
   };
 
   return (
-    <div
-      className="barcode-print-overlay fixed inset-0 z-50 flex items-center justify-center p-2 sm:p-4 bg-slate-900/50 backdrop-blur-xs"
-      role="presentation"
-      onMouseDown={(e) => {
-        if (e.target === e.currentTarget) {
-          onClose();
-        }
-      }}
+    <Modal
+      open={isOpen}
+      onClose={onClose}
+      raw
+      size="full"
+      className="barcode-print-container relative flex max-h-[92vh] w-full max-w-5xl flex-col rounded-2xl bg-white shadow-2xl overflow-hidden border border-slate-200"
+      ariaLabelledBy="barcode-print-modal-title"
     >
-      {/* Global CSS for Print Output (Ctrl+P fallback) */}
+      {/* Global CSS for Print Output (Ctrl+P / window.print) */}
       <style jsx global>{`
         @media print {
           @page {
             size: A4 portrait;
             margin: 8mm 6mm !important;
           }
-          header, nav, aside, footer, [data-sidebar], .print\\:hidden {
+          header, nav, aside, footer, [data-sidebar], .print\:hidden {
             display: none !important;
           }
           html, body {
@@ -222,8 +236,8 @@ export default function BookBarcodePrintModal({
           }
           #printable-barcode-sheet {
             display: grid !important;
-            grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
-            gap: 6mm 4mm !important;
+            grid-template-columns: repeat(${gridCols}, minmax(0, 1fr)) !important;
+            gap: ${size === "sm" ? "4mm 3mm" : size === "lg" ? "8mm 6mm" : "6mm 4mm"} !important;
             width: 100% !important;
             margin: 0 !important;
             padding: 0 !important;
@@ -237,7 +251,7 @@ export default function BookBarcodePrintModal({
             break-after: auto !important;
             page-break-after: auto !important;
             width: 100% !important;
-            max-width: 95mm !important;
+            max-width: ${size === "sm" ? "70mm" : size === "lg" ? "140mm" : "95mm"} !important;
             margin: 0 auto !important;
             border: 1px solid #334155 !important;
             border-radius: 6px !important;
@@ -247,13 +261,8 @@ export default function BookBarcodePrintModal({
         }
       `}</style>
 
-      {/* Container - hide from print */}
-      <div
-        className="barcode-print-container relative flex max-h-[92vh] w-full max-w-5xl flex-col rounded-2xl bg-white shadow-2xl overflow-hidden border border-slate-200"
-        role="dialog"
-        aria-modal="true"
-        aria-labelledby="barcode-print-modal-title"
-      >
+      {/* Container contents */}
+      <div className="relative flex max-h-[92vh] w-full flex-col overflow-hidden">
         {/* Header (No Print) */}
         <div className="border-b border-slate-200 bg-white print:hidden">
           {/* Top title & close bar */}
@@ -270,6 +279,7 @@ export default function BookBarcodePrintModal({
                   strokeLinecap="round"
                   strokeLinejoin="round"
                   className="sm:h-5 sm:w-5"
+                  aria-hidden="true"
                 >
                   <path d="M3 5v14M8 5v14M12 5v14M17 5v14M21 5v14" />
                 </svg>
@@ -281,8 +291,8 @@ export default function BookBarcodePrintModal({
                 >
                   {title}
                 </h3>
-                <p className="text-[11px] sm:text-xs text-slate-500 mt-0.5 leading-relaxed break-words">
-                  Total {items.length} label siap dicetak pada kertas stiker / HVS A4
+                <p className="text-xs text-slate-500 mt-0.5 leading-relaxed break-words">
+                  {selectedCount} dari {items.length} label dipilih untuk dicetak pada kertas stiker / HVS A4
                 </p>
               </div>
             </div>
@@ -293,21 +303,38 @@ export default function BookBarcodePrintModal({
               className="rounded-lg p-1.5 text-slate-400 transition hover:bg-slate-100 hover:text-slate-600 focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 shrink-0 mt-0.5 sm:mt-0"
               title="Tutup Modal"
             >
-              <span aria-hidden="true" className="text-xl leading-none">
-                ×
-              </span>
+              <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2} aria-hidden="true">
+                <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
+              </svg>
             </button>
           </div>
 
           {/* Controls toolbar */}
           <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-t border-slate-100 bg-slate-50/80 px-5 py-2.5">
             <div className="flex flex-wrap items-center gap-3">
-              <div className="flex items-center gap-1.5 text-xs min-w-[180px]">
+              {/* Select all checkbox */}
+              <label className="flex items-center gap-2 cursor-pointer text-xs font-semibold text-slate-700 bg-white border border-slate-200 rounded-lg px-2.5 py-1.5 shadow-2xs hover:bg-slate-50">
+                <input
+                  type="checkbox"
+                  checked={isAllSelected && items.length > 0}
+                  onChange={() => {
+                    if (isAllSelected) {
+                      setDeselectedIndices(new Set(items.map((_, i) => i)));
+                    } else {
+                      setDeselectedIndices(new Set());
+                    }
+                  }}
+                  className="h-4 w-4 rounded border-slate-300 text-blue-600 focus:ring-blue-500 cursor-pointer"
+                />
+                <span>Pilih Semua ({selectedCount}/{items.length})</span>
+              </label>
+
+              <div className="flex items-center gap-1.5 text-xs min-w-[170px]">
                 <span className="font-semibold text-slate-600 shrink-0">Format:</span>
                 <Dropdown
                   value={format}
                   size="sm"
-                  onChange={(val) => setFormat(val as any)}
+                  onChange={(val) => setFormat(val as "barcode" | "qrcode" | "both")}
                   className="flex-1"
                   options={[
                     { value: "both", label: "Kombinasi (1D + QR)" },
@@ -322,12 +349,12 @@ export default function BookBarcodePrintModal({
                 <Dropdown
                   value={size}
                   size="sm"
-                  onChange={(val) => setSize(val as any)}
+                  onChange={(val) => setSize(val as "sm" | "md" | "lg")}
                   className="flex-1"
                   options={[
-                    { value: "sm", label: "Kecil (Kompak)" },
-                    { value: "md", label: "Sedang (Standar)" },
-                    { value: "lg", label: "Besar (Jelas)" },
+                    { value: "sm", label: "Kecil (3 Kolom)" },
+                    { value: "md", label: "Sedang (2 Kolom)" },
+                    { value: "lg", label: "Besar (1 Kolom)" },
                   ]}
                 />
               </div>
@@ -347,7 +374,8 @@ export default function BookBarcodePrintModal({
                 type="button"
                 variant="primary"
                 onClick={handlePrint}
-                className="flex-1 sm:flex-initial text-xs px-4 py-1.5 h-8 font-bold shadow-xs flex items-center justify-center gap-1.5"
+                disabled={selectedCount === 0}
+                className="flex-1 sm:flex-initial text-xs px-4 py-1.5 h-8 font-bold shadow-xs flex items-center justify-center gap-1.5 disabled:opacity-50"
               >
                 <svg
                   width="13"
@@ -358,12 +386,13 @@ export default function BookBarcodePrintModal({
                   strokeWidth="2"
                   strokeLinecap="round"
                   strokeLinejoin="round"
+                  aria-hidden="true"
                 >
                   <polyline points="6 9 6 2 18 2 18 9" />
                   <path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2" />
                   <rect width="12" height="8" x="6" y="14" />
                 </svg>
-                <span>Cetak Sekarang</span>
+                <span>Cetak ({selectedCount})</span>
               </Button>
             </div>
           </div>
@@ -372,27 +401,62 @@ export default function BookBarcodePrintModal({
         {/* Printable Area */}
         <div className="barcode-print-body flex-1 overflow-y-auto p-4 sm:p-6 bg-slate-100/60 print:bg-white print:p-0 print:overflow-visible">
           {items.length === 0 ? (
-            <div className="py-12 text-center text-slate-400 text-sm">
+            <div className="py-12 text-center text-slate-500 text-sm">
               Tidak ada label untuk dicetak.
             </div>
           ) : (
             <div
               id="printable-barcode-sheet"
-              className="mx-auto flex flex-wrap justify-center gap-3 bg-white p-4 sm:p-6 rounded-xl border border-slate-200 shadow-xs print:m-0 print:p-0 print:border-0 print:shadow-none print:gap-2 print:justify-start"
+              style={{
+                display: "grid",
+                gridTemplateColumns: `repeat(${gridCols}, minmax(0, 1fr))`,
+                gap: size === "sm" ? "12px" : size === "lg" ? "20px" : "16px",
+              }}
+              className="mx-auto w-full max-w-5xl justify-center bg-white p-4 sm:p-6 rounded-xl border border-slate-200 shadow-xs print:m-0 print:p-0 print:border-0 print:shadow-none print:gap-2 print:justify-start"
             >
-              {items.map((item, index) => (
-                <div key={`${item.copyCode}-${index}`} className="break-inside-avoid">
-                  <BookBarcodeLabel
-                    companyName={companyName}
-                    bookTitle={item.bookTitle}
-                    bookCode={item.bookCode}
-                    copyCode={item.copyCode}
-                    category={item.category}
-                    format={format}
-                    size={size}
-                  />
-                </div>
-              ))}
+              {items.map((item, index) => {
+                const isSelected = !deselectedIndices.has(index);
+                return (
+                  <div
+                    key={`${item.copyCode || item.memberNumber || index}-${index}`}
+                    data-unselected={!isSelected ? "true" : undefined}
+                    className={`break-inside-avoid relative flex justify-center transition-all ${
+                      !isSelected ? "print:hidden opacity-35 grayscale" : "opacity-100"
+                    }`}
+                  >
+                    <label
+                      className="print:hidden absolute top-2 right-2 z-10 flex items-center justify-center h-6 w-6 rounded-md bg-white/95 border border-slate-300 shadow-2xs hover:bg-slate-100 cursor-pointer"
+                      title={isSelected ? "Batal pilih item ini" : "Pilih item ini untuk dicetak"}
+                    >
+                      <input
+                        type="checkbox"
+                        checked={isSelected}
+                        onChange={() => {
+                          const next = new Set(deselectedIndices);
+                          if (next.has(index)) next.delete(index);
+                          else next.add(index);
+                          setDeselectedIndices(next);
+                        }}
+                        className="h-3.5 w-3.5 rounded border-slate-300 text-blue-600 focus:ring-blue-500 cursor-pointer"
+                      />
+                    </label>
+
+                    <BookBarcodeLabel
+                      type={item.type || "book"}
+                      companyName={companyName}
+                      bookTitle={item.bookTitle}
+                      bookCode={item.bookCode}
+                      copyCode={item.copyCode}
+                      category={item.category}
+                      memberName={item.memberName}
+                      memberNumber={item.memberNumber}
+                      memberType={item.memberType}
+                      format={format}
+                      size={size}
+                    />
+                  </div>
+                );
+              })}
             </div>
           )}
         </div>
@@ -410,20 +474,21 @@ export default function BookBarcodePrintModal({
               strokeLinecap="round"
               strokeLinejoin="round"
               className="text-blue-600 shrink-0 mt-0.5 sm:mt-0"
+              aria-hidden="true"
             >
               <path d="M12 2v2M12 20v2M4.93 4.93l1.41 1.41M17.66 17.66l1.41 1.41M2 12h2M20 12h2M6.34 17.66l-1.41 1.41M19.07 4.93l-1.41 1.41" />
               <path d="M9 16a5 5 0 1 1 6 0 3.5 3.5 0 0 0-1 3 2 2 0 0 1-4 0 3.5 3.5 0 0 0-1-3" />
               <line x1="9" y1="22" x2="15" y2="22" />
             </svg>
             <p className="text-xs leading-relaxed text-slate-600">
-              Pilih opsi <span className="font-semibold text-slate-800">"None / Tidak Ada"</span> pada margin browser di jendela print untuk hasil cetak stiker yang rapi.
+              Pilih opsi <span className="font-semibold text-slate-800">&quot;None / Tidak Ada&quot;</span> pada margin browser di jendela print untuk hasil cetak stiker yang rapi.
             </p>
           </div>
-          <span className="text-slate-400 font-mono text-[11px] shrink-0 self-end sm:self-auto">
-            {items.length} label ditampilkan
+          <span className="text-slate-500 font-mono text-xs shrink-0 self-end sm:self-auto font-medium">
+            {selectedCount} dari {items.length} label terpilih
           </span>
         </div>
       </div>
-    </div>
+    </Modal>
   );
 }

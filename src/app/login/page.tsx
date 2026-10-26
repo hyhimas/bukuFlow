@@ -3,30 +3,34 @@
 import { FormEvent, useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import Button from "@/components/ui/Button";
-import Card from "@/components/ui/Card";
 import Input from "@/components/ui/Input";
+import LogoSpinner from "@/components/ui/LogoSpinner";
 
-import { loginApi } from "@/lib/api";
+import { loginApi, getErrorMessage } from "@/lib/api";
 import { getAuthData, saveAuthData } from "@/lib/auth";
 
 export default function LoginPage() {
   const router = useRouter();
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
+  const [emailError, setEmailError] = useState("");
+  const [passwordError, setPasswordError] = useState("");
   const [showPassword, setShowPassword] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
-  const [isSessionExpired, setIsSessionExpired] = useState(false);
-  const [checkingAuth, setCheckingAuth] = useState(true);
-
-  useEffect(() => {
+  const [isSessionExpired] = useState(() => {
     if (typeof window !== "undefined") {
       const params = new URLSearchParams(window.location.search);
-      if (params.get("reason") === "expired") {
-        setIsSessionExpired(true);
-      }
+      return params.get("reason") === "expired";
     }
-  }, []);
+    return false;
+  });
+  const [checkingAuth] = useState(() => {
+    if (typeof window !== "undefined") {
+      return Boolean(getAuthData());
+    }
+    return true;
+  });
 
   useEffect(() => {
     const auth = getAuthData();
@@ -36,30 +40,59 @@ export default function LoginPage() {
       } else {
         router.replace("/dashboard");
       }
-    } else {
-      setCheckingAuth(false);
     }
   }, [router]);
 
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     setError("");
+    setEmailError("");
+    setPasswordError("");
+
+    let hasValidationError = false;
+    if (!email.trim()) {
+      setEmailError("Email wajib diisi");
+      hasValidationError = true;
+    } else if (!email.includes("@")) {
+      setEmailError("Format email tidak valid");
+      hasValidationError = true;
+    }
+
+    if (!password) {
+      setPasswordError("Password wajib diisi");
+      hasValidationError = true;
+    }
+
+    if (hasValidationError) {
+      return;
+    }
+
     setLoading(true);
 
     try {
       const response = await loginApi(email, password);
 
       const user = response.data;
+      const companyId = user.companyId || "";
+      const role = user.role || "STAFF";
+
+      if (role !== "SUPER_ADMIN" && !companyId) {
+        setError("Akun belum terhubung ke instansi.");
+        setLoading(false);
+        return;
+      }
+
+      const u = user as unknown as Record<string, unknown>;
       const userToSave = {
         id: user.id,
         name: user.name,
         email: user.email,
         username: user.email,
         role: user.role,
-        companyId: user.companyId || "company-001",
+        companyId,
         status: "ACTIVE" as const,
-        createdAt: new Date().toISOString(),
-        updatedAt: new Date().toISOString(),
+        createdAt: (typeof u.created_at === "string" ? u.created_at : typeof u.createdAt === "string" ? u.createdAt : ""),
+        updatedAt: (typeof u.updated_at === "string" ? u.updated_at : typeof u.updatedAt === "string" ? u.updatedAt : ""),
       };
 
       saveAuthData({
@@ -73,37 +106,18 @@ export default function LoginPage() {
       } else {
         router.replace("/dashboard");
       }
-    } catch (err: any) {
-      let message = "Email atau password salah.";
-
-      if (err.response?.status === 500) {
-        const detail = err.response?.data?.detail;
-        const serverMsg =
-          typeof detail === "object"
-            ? detail.message || detail.error || JSON.stringify(detail)
-            : detail;
-        message = `Server Error (500): ${
-          serverMsg || "Terjadi kesalahan internal pada database / server backend."
-        }`;
-      } else if (err.response?.data?.detail) {
-        const detail = err.response.data.detail;
-        message =
-          typeof detail === "string"
-            ? detail
-            : detail.message || JSON.stringify(detail);
-      } else if (err.response?.data?.message) {
-        message = err.response.data.message;
-      } else if (
-        err.code === "ECONNABORTED" ||
-        err.message?.toLowerCase().includes("timeout")
-      ) {
-        message =
-          "Koneksi ke server timeout (Server backend tidak merespons dalam 45 detik).";
-      } else if (err.message) {
-        message = err.message;
+    } catch (err: unknown) {
+      const errObj = err as { response?: { status?: number } } | null | undefined;
+      if (errObj?.response?.status === 401) {
+        setError("Email atau password salah. Periksa kembali akun Anda.");
+      } else {
+        setError(
+          getErrorMessage(
+            err,
+            "Email atau password salah. Periksa kembali akun Anda."
+          )
+        );
       }
-
-      setError(message);
     } finally {
       setLoading(false);
     }
@@ -112,22 +126,7 @@ export default function LoginPage() {
   if (checkingAuth) {
     return (
       <div className="flex min-h-screen items-center justify-center bg-slate-50">
-        <div className="flex flex-col items-center">
-          <div className="relative flex h-16 w-16 items-center justify-center">
-            <div
-              className="absolute inset-0 animate-spin rounded-full border-2 border-blue-100 border-t-blue-600"
-              aria-hidden="true"
-            />
-            <div className="animate-pulse">
-              <img
-                src="/logo-icon.png"
-                alt="BukuFlow Loading"
-                className="h-8 w-8 object-contain"
-              />
-            </div>
-          </div>
-          <p className="mt-3 text-xs font-medium text-slate-500">Memeriksa sesi...</p>
-        </div>
+        <LogoSpinner label="Memeriksa sesi..." />
       </div>
     );
   }
@@ -140,7 +139,7 @@ export default function LoginPage() {
         
 
         {/* MAIN FORM CARD (SOLID CLEAN) */}
-        <div className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm sm:p-8">
+        <div className="rounded-xl border border-slate-200 bg-white p-6 shadow-sm sm:p-8">
           <div className="mb-6 flex flex-col items-center text-center">
           <img
             src="/logo.png"
@@ -186,81 +185,47 @@ export default function LoginPage() {
 
           <form onSubmit={handleSubmit} className="space-y-4">
             {/* EMAIL FIELD */}
-            <div>
-              <label
-                htmlFor="email"
-                className="mb-1.5 block text-xs font-semibold uppercase tracking-wider text-slate-700 sm:text-xs"
-              >
-                Email
-              </label>
-              <div className="relative">
-                <div className="pointer-events-none absolute inset-y-0 left-0 flex items-center pl-3.5 text-slate-400">
-                  <svg
-                    viewBox="0 0 24 24"
-                    fill="none"
-                    stroke="currentColor"
-                    strokeWidth="1.8"
-                    className="h-4 w-4"
-                    aria-hidden="true"
-                  >
-                    <rect width="20" height="16" x="2" y="4" rx="2" />
-                    <path d="m22 7-8.97 5.7a1.94 1.94 0 0 1-2.06 0L2 7" />
-                  </svg>
-                </div>
-                <input
-                  id="email"
-                  name="email"
-                  type="email"
-                  autoComplete="email"
-                  required
-                  value={email}
-                  onChange={(event) => setEmail(event.target.value)}
-                  placeholder="admin@perpustakaan.com"
-                  className="w-full rounded-xl border border-slate-300 bg-white py-2.5 pr-4 pl-10 text-sm text-slate-900 transition placeholder:text-slate-400 focus:border-blue-600 focus:outline-none focus:ring-2 focus:ring-blue-100"
-                />
-              </div>
-            </div>
+            <Input
+              id="email"
+              name="email"
+              type="email"
+              label="Email"
+              autoComplete="email"
+              required
+              value={email}
+              error={emailError}
+              onChange={(event) => {
+                setEmail(event.target.value);
+                if (emailError) setEmailError("");
+              }}
+              placeholder="admin@perpustakaan.com"
+              className="h-11"
+            />
 
             {/* PASSWORD FIELD */}
-            <div>
-              <div className="mb-1.5 flex items-center justify-between">
-                <label
-                  htmlFor="password"
-                  className="block text-xs font-semibold uppercase tracking-wider text-slate-700 sm:text-xs"
-                >
-                  Password
-                </label>
-              </div>
-              <div className="relative">
-                <div className="pointer-events-none absolute inset-y-0 left-0 flex items-center pl-3.5 text-slate-400">
-                  <svg
-                    viewBox="0 0 24 24"
-                    fill="none"
-                    stroke="currentColor"
-                    strokeWidth="1.8"
-                    className="h-4 w-4"
-                    aria-hidden="true"
-                  >
-                    <rect width="18" height="11" x="3" y="11" rx="2" ry="2" />
-                    <path d="M7 11V7a5 5 0 0 1 10 0v4" />
-                  </svg>
-                </div>
-                <input
-                  id="password"
-                  name="password"
-                  type={showPassword ? "text" : "password"}
-                  autoComplete="current-password"
-                  required
-                  value={password}
-                  onChange={(event) => setPassword(event.target.value)}
-                  placeholder="Masukkan kata sandi"
-                  className="w-full rounded-xl border border-slate-300 bg-white py-2.5 pr-11 pl-10 text-sm text-slate-900 transition placeholder:text-slate-400 focus:border-blue-600 focus:outline-none focus:ring-2 focus:ring-blue-100"
-                />
-                <button
+            <Input
+              id="password"
+              name="password"
+              type={showPassword ? "text" : "password"}
+              label="Password"
+              autoComplete="current-password"
+              required
+              value={password}
+              error={passwordError}
+              onChange={(event) => {
+                setPassword(event.target.value);
+                if (passwordError) setPasswordError("");
+              }}
+              placeholder="Masukkan kata sandi"
+              className="h-11"
+              endSlot={
+                <Button
                   type="button"
+                  variant="ghost"
+                  size="sm"
                   onClick={() => setShowPassword((prev) => !prev)}
                   aria-label={showPassword ? "Sembunyikan password" : "Lihat password"}
-                  className="absolute inset-y-0 right-0 flex items-center pr-3 text-slate-400 hover:text-slate-600 focus:outline-none"
+                  className="h-8 px-2 text-slate-400 hover:text-slate-600 focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-500"
                 >
                   {showPassword ? (
                     <svg
@@ -289,9 +254,9 @@ export default function LoginPage() {
                       <circle cx="12" cy="12" r="3" />
                     </svg>
                   )}
-                </button>
-              </div>
-            </div>
+                </Button>
+              }
+            />
 
             {/* ERROR FEEDBACK */}
             {error && (
@@ -317,56 +282,20 @@ export default function LoginPage() {
 
             {/* SUBMIT BUTTON */}
             <div className="pt-2">
-              <button
+              <Button
                 type="submit"
-                disabled={loading || !email.trim() || !password}
-                className="group flex w-full items-center justify-center gap-2 rounded-xl bg-blue-600 py-3 text-sm font-semibold text-white shadow-sm transition hover:bg-blue-700 active:bg-blue-800 disabled:cursor-not-allowed disabled:opacity-50"
+                loading={loading}
+                disabled={loading}
+                className="w-full h-11"
               >
-                {loading ? (
-                  <>
-                    <svg
-                      className="h-4 w-4 animate-spin text-white"
-                      viewBox="0 0 24 24"
-                      fill="none"
-                    >
-                      <circle
-                        className="opacity-25"
-                        cx="12"
-                        cy="12"
-                        r="10"
-                        stroke="currentColor"
-                        strokeWidth="4"
-                      />
-                      <path
-                        className="opacity-75"
-                        fill="currentColor"
-                        d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"
-                      />
-                    </svg>
-                    <span>Memproses Masuk...</span>
-                  </>
-                ) : (
-                  <>
-                    <span>Masuk</span>
-                    <svg
-                      viewBox="0 0 24 24"
-                      fill="none"
-                      stroke="currentColor"
-                      strokeWidth="2"
-                      className="h-4 w-4 transition-transform group-hover:translate-x-0.5"
-                      aria-hidden="true"
-                    >
-                      <path d="M5 12h14M12 5l7 7-7 7" />
-                    </svg>
-                  </>
-                )}
-              </button>
+                Masuk
+              </Button>
             </div>
           </form>
         </div>
 
         {/* FOOTER TEXT */}
-        <p className="mt-6 text-center text-xs text-slate-400">
+        <p className="mt-6 text-center text-xs text-slate-500">
           © {new Date().getFullYear()} BukuFlow. Sistem Perpustakaan Terpadu.
         </p>
       </div>
