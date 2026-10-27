@@ -132,7 +132,7 @@ export default function Sidebar({
           type="button"
           aria-label="Tutup menu navigasi"
           onClick={onClose}
-          className="print:hidden fixed inset-0 z-40 bg-slate-900/40"
+          className="print:hidden fixed inset-0 z-40 bg-overlay"
         />
       )}
 
@@ -143,7 +143,7 @@ export default function Sidebar({
         aria-label="Navigasi utama"
         aria-hidden={isFullyHidden ? true : undefined}
         inert={isFullyHidden ? true : undefined}
-        className={`print:hidden flex flex-col border-r border-slate-200 bg-white transition-[width] duration-300 ease-in-out ${
+        className={`print:hidden flex flex-col border-r border-border bg-surface text-text-main transition-[width] duration-300 ease-in-out ${
           mobile
             ? `fixed inset-y-0 left-0 z-50 w-72 max-w-[85vw] shadow-xl transition-transform duration-200 ${
                 open ? "translate-x-0" : "-translate-x-full"
@@ -155,7 +155,7 @@ export default function Sidebar({
       >
         {/* Header */}
         <div
-          className={`flex h-16 shrink-0 items-center border-b border-slate-200 ${
+          className={`flex h-16 shrink-0 items-center border-b border-border ${
             isDesktopCollapsed ? "justify-center px-2" : "justify-between px-4 sm:px-5"
           }`}
         >
@@ -166,7 +166,7 @@ export default function Sidebar({
               onClick={onToggle}
               title="Perluas menu samping"
               aria-label="Perluas menu samping"
-              className="group flex h-10 w-10 items-center justify-center rounded-xl transition hover:bg-blue-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500"
+              className="group flex h-10 w-10 items-center justify-center rounded-xl transition hover:bg-brand-soft focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand"
             >
               <img
                 src="/logo-icon.png"
@@ -185,7 +185,12 @@ export default function Sidebar({
                 <img
                   src="/logo.png"
                   alt="BukuFlow Logo"
-                  className="h-8 w-auto object-contain"
+                  className="h-8 w-auto object-contain dark:hidden"
+                />
+                <img
+                  src="/logo-dark.png"
+                  alt="BukuFlow Logo"
+                  className="h-8 w-auto object-contain hidden dark:inline-block"
                 />
               </Link>
 
@@ -196,7 +201,7 @@ export default function Sidebar({
                   type="button"
                   onClick={onClose}
                   aria-label="Tutup menu"
-                  className="flex h-10 w-10 items-center justify-center rounded-lg text-slate-500 transition hover:bg-slate-100 hover:text-slate-900 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-slate-400"
+                  className="flex h-10 w-10 items-center justify-center rounded-lg text-text-muted transition hover:bg-surface-muted hover:text-text-main focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-slate-400"
                 >
                   <CloseIcon />
                 </button>
@@ -206,7 +211,7 @@ export default function Sidebar({
                   onClick={onToggle}
                   title="Tutup menu samping"
                   aria-label="Tutup menu samping"
-                  className="flex h-9 w-9 items-center justify-center rounded-lg text-slate-400 transition hover:bg-slate-100 hover:text-slate-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500"
+                  className="flex h-9 w-9 items-center justify-center rounded-lg text-text-subtle transition hover:bg-surface-muted hover:text-text-secondary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500"
                 >
                   <svg
                     width="20"
@@ -236,7 +241,7 @@ export default function Sidebar({
             <div className="space-y-4">
               <div>
                 {!isDesktopCollapsed && (
-                  <p className="px-3 pb-2 text-xs font-semibold uppercase tracking-wider text-slate-500">
+                  <p className="px-3 pb-2 text-xs font-semibold uppercase tracking-wider text-text-muted">
                     Office Platform
                   </p>
                 )}
@@ -270,9 +275,9 @@ export default function Sidebar({
 
               <div>
                 {isDesktopCollapsed ? (
-                  <div className="my-2.5 mx-2 border-t border-slate-200" title="Support & Audit" />
+                  <div className="my-2.5 mx-2 border-t border-border" title="Support & Audit" />
                 ) : (
-                  <p className="px-3 pb-2 text-xs font-semibold uppercase tracking-wider text-slate-500">
+                  <p className="px-3 pb-2 text-xs font-semibold uppercase tracking-wider text-text-muted">
                     Support & Audit
                   </p>
                 )}
@@ -357,9 +362,9 @@ export default function Sidebar({
               {role && canAccessMasterData(role) && (
                 <div className="mt-7">
                   {isDesktopCollapsed ? (
-                    <div className="my-2 border-t border-slate-200" title="Master Data" />
+                    <div className="my-2 border-t border-border" title="Master Data" />
                   ) : (
-                    <p className="px-3 pb-2 text-xs font-semibold uppercase tracking-wider text-slate-500">
+                    <p className="px-3 pb-2 text-xs font-semibold uppercase tracking-wider text-text-muted">
                       Master Data
                     </p>
                   )}
@@ -390,9 +395,9 @@ export default function Sidebar({
               {role === "COMPANY_ADMIN" && (
                 <div className="mt-7">
                   {isDesktopCollapsed ? (
-                    <div className="my-2 border-t border-slate-200" title="Pengaturan" />
+                    <div className="my-2 border-t border-border" title="Pengaturan" />
                   ) : (
-                    <p className="px-3 pb-2 text-xs font-semibold uppercase tracking-wider text-slate-500">
+                    <p className="px-3 pb-2 text-xs font-semibold uppercase tracking-wider text-text-muted">
                       Pengaturan
                     </p>
                   )}
@@ -423,7 +428,7 @@ export default function Sidebar({
         </nav>
 
         {/* User & Logout */}
-        <div className={`shrink-0 border-t border-slate-200 bg-white ${isDesktopCollapsed ? "p-2.5 space-y-2 pb-6" : "p-4"}`}>
+        <div className={`shrink-0 border-t border-border bg-surface text-text-main ${isDesktopCollapsed ? "p-2.5 space-y-2 pb-6" : "p-4"}`}>
           {session && (
             <Link
               href="/profile"
@@ -432,11 +437,11 @@ export default function Sidebar({
               title={isDesktopCollapsed ? `${session.user.name} (${session.user.role})` : undefined}
               className={`group flex items-center transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 ${
                 isDesktopCollapsed
-                  ? "h-11 w-11 mx-auto justify-center rounded-xl hover:bg-slate-100"
+                  ? "h-11 w-11 mx-auto justify-center rounded-xl hover:bg-surface-muted"
                   : `mb-3 justify-between rounded-xl border p-2.5 ${
                       pathname === "/profile"
                         ? "border-blue-300 bg-blue-50/90 shadow-sm ring-1 ring-blue-200"
-                        : "border-slate-200 bg-slate-50/80 hover:border-blue-200 hover:bg-blue-50/40"
+                        : "border-border bg-surface-subtle hover:border-blue-200 hover:bg-blue-50/40"
                     }`
               }`}
             >
@@ -465,10 +470,10 @@ export default function Sidebar({
                         : "U"}
                     </div>
                     <div className="min-w-0">
-                      <p className="truncate text-sm font-semibold text-slate-900 group-hover:text-blue-600 transition">
+                      <p className="truncate text-sm font-semibold text-text-main group-hover:text-blue-600 transition">
                         {session.user.name}
                       </p>
-                      <p className="truncate text-xs text-slate-700 font-medium">
+                      <p className="truncate text-xs text-text-secondary font-medium">
                         {session.user.role === "SUPER_ADMIN"
                           ? "Super Admin"
                           : session.user.role === "COMPANY_ADMIN"
@@ -477,7 +482,7 @@ export default function Sidebar({
                       </p>
                     </div>
                   </div>
-                  <span className="shrink-0 text-slate-400 group-hover:text-blue-600 group-hover:translate-x-0.5 transition">
+                  <span className="shrink-0 text-text-subtle group-hover:text-blue-600 group-hover:translate-x-0.5 transition">
                     <svg aria-hidden="true" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
                       <polyline points="9 18 15 12 9 6" />
                     </svg>
@@ -494,18 +499,18 @@ export default function Sidebar({
             title={isDesktopCollapsed ? "Keluar dari akun" : undefined}
             className={`flex items-center transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-slate-400 ${
               isDesktopCollapsed
-                ? "h-11 w-11 mx-auto justify-center rounded-xl border border-slate-200 text-slate-600 hover:bg-red-50 hover:text-red-600 hover:border-red-200"
-                : "w-full gap-3 rounded-xl border border-slate-200 px-3 py-3 text-left text-sm font-semibold text-slate-700 hover:bg-slate-50 hover:text-slate-900"
+                ? "h-11 w-11 mx-auto justify-center rounded-xl border border-border text-text-secondary hover:bg-red-50 hover:text-red-600 hover:border-red-200"
+                : "w-full gap-3 rounded-xl border border-border px-3 py-3 text-left text-sm font-semibold text-text-secondary hover:bg-surface-muted hover:text-text-main"
             }`}
           >
-            <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-slate-100">
+            <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-surface-muted">
               <LogoutIcon />
             </span>
 
             {!isDesktopCollapsed && (
               <span>
                 <span className="block">Keluar</span>
-                <span className="mt-0.5 block text-xs font-normal text-slate-500">
+                <span className="mt-0.5 block text-xs font-normal text-text-muted">
                   Keluar dari akun
                 </span>
               </span>
@@ -572,12 +577,12 @@ function NavItem({
       } ${
         active
           ? "bg-blue-50 text-blue-700 font-semibold ring-1 ring-blue-200/80 shadow-xs"
-          : "text-slate-600 hover:bg-slate-100 hover:text-slate-900"
+          : "text-text-secondary hover:bg-surface-muted hover:text-text-main"
       } focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500`}
     >
       <span
         className={`flex h-5 w-5 shrink-0 items-center justify-center transition-colors ${
-          active ? "text-blue-700" : "text-slate-500 group-hover:text-slate-700"
+          active ? "text-blue-700" : "text-text-muted group-hover:text-text-secondary"
         }`}
       >
         <NavIcon name={iconKey} />

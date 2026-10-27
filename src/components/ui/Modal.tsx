@@ -183,8 +183,8 @@ export default function Modal({
     return null;
   }
 
-  const defaultOverlayClass = "fixed inset-0 z-50 flex items-center justify-center overflow-y-auto bg-slate-900/50 p-4";
-  const defaultDialogClass = `w-full max-h-[90vh] overflow-y-auto rounded-xl bg-white shadow-xl outline-none focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand/40 ${SIZE_CLASSES[size]}`;
+  const defaultOverlayClass = "fixed inset-0 z-50 flex items-center justify-center overflow-y-auto bg-overlay p-4";
+  const defaultDialogClass = `w-full max-h-[90vh] overflow-y-auto rounded-xl bg-surface dark:border dark:border-border text-text-main shadow-xl outline-none focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand/40 ${SIZE_CLASSES[size]}`;
 
   const modalContent = (
     <div
@@ -210,15 +210,15 @@ export default function Modal({
         ) : (
           <>
             {(title || showCloseButton) && (
-              <div className="flex items-start justify-between gap-4 border-b border-slate-200 px-5 py-4">
+              <div className="flex items-start justify-between gap-4 border-b border-border px-5 py-4">
                 <div>
                   {title && (
-                    <h3 id={titleId} className="text-lg font-semibold text-slate-900">
+                    <h3 id={titleId} className="text-lg font-semibold text-text-main">
                       {title}
                     </h3>
                   )}
                   {description && (
-                    <p id={descId} className="mt-1 text-sm text-slate-500">
+                    <p id={descId} className="mt-1 text-sm text-text-muted">
                       {description}
                     </p>
                   )}
@@ -229,7 +229,7 @@ export default function Modal({
                     type="button"
                     aria-label="Tutup modal"
                     onClick={onClose}
-                    className="rounded-md p-1.5 text-slate-400 transition hover:bg-slate-100 hover:text-slate-600 focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-500"
+                    className="rounded-md p-1.5 text-text-subtle transition hover:bg-surface-muted hover:text-text-secondary focus:outline-none focus-visible:ring-2 focus-visible:ring-brand"
                   >
                     <svg className="h-5 w-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" aria-hidden="true"><path d="M18 6 6 18M6 6l12 12" /></svg>
                   </button>

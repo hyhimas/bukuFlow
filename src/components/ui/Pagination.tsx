@@ -177,7 +177,7 @@ export default function Pagination({
         aria-label="Navigasi Halaman"
         className={`flex items-center justify-between gap-2 py-1 text-xs ${className}`}
       >
-        <p className="text-xs font-medium text-slate-500 whitespace-nowrap">
+        <p className="text-xs font-medium text-text-muted whitespace-nowrap">
           {totalItems !== undefined && startItem && endItem
             ? `${startItem}-${endItem} dari ${totalItems}`
             : `Halaman ${safeCurrentPage} dari ${totalPages}`}
@@ -190,7 +190,7 @@ export default function Pagination({
               disabled={safeCurrentPage <= 1 || disabled}
               onClick={() => onPageChange(Math.max(1, safeCurrentPage - 1))}
               aria-label="Halaman sebelumnya"
-              className="flex h-10 w-10 min-h-[40px] min-w-[40px] items-center justify-center rounded-lg border border-slate-200 bg-white text-slate-600 transition hover:bg-slate-50 hover:text-slate-900 focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 disabled:cursor-not-allowed disabled:opacity-40"
+              className="flex h-10 w-10 min-h-[40px] min-w-[40px] items-center justify-center rounded-lg border border-border bg-surface text-text-secondary transition hover:bg-surface-muted hover:text-text-main focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 disabled:cursor-not-allowed disabled:opacity-40"
             >
               <svg viewBox="0 0 20 20" fill="currentColor" className="h-4 w-4" aria-hidden="true">
                 <path
@@ -207,7 +207,7 @@ export default function Pagination({
                   return (
                     <span
                       key={`ellipsis-${idx}`}
-                      className="flex h-10 w-4 min-h-[40px] select-none items-center justify-center text-xs font-bold text-slate-500"
+                      className="flex h-10 w-4 min-h-[40px] select-none items-center justify-center text-xs font-bold text-text-muted"
                       aria-hidden="true"
                     >
                       …
@@ -227,7 +227,7 @@ export default function Pagination({
                     className={`flex h-10 min-w-10 min-h-[40px] items-center justify-center rounded-lg px-2 text-xs font-semibold transition focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 ${
                       isCurrent
                         ? "bg-blue-600 text-white shadow-xs"
-                        : "border border-slate-200 bg-white text-slate-700 hover:bg-slate-50"
+                        : "border border-border bg-surface text-text-secondary hover:bg-surface-muted"
                     }`}
                   >
                     {item}
@@ -241,7 +241,7 @@ export default function Pagination({
               disabled={safeCurrentPage >= totalPages || disabled}
               onClick={() => onPageChange(Math.min(totalPages, safeCurrentPage + 1))}
               aria-label="Halaman berikutnya"
-              className="flex h-10 w-10 min-h-[40px] min-w-[40px] items-center justify-center rounded-lg border border-slate-200 bg-white text-slate-600 transition hover:bg-slate-50 hover:text-slate-900 focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 disabled:cursor-not-allowed disabled:opacity-40"
+              className="flex h-10 w-10 min-h-[40px] min-w-[40px] items-center justify-center rounded-lg border border-border bg-surface text-text-secondary transition hover:bg-surface-muted hover:text-text-main focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 disabled:cursor-not-allowed disabled:opacity-40"
             >
               <svg viewBox="0 0 20 20" fill="currentColor" className="h-4 w-4" aria-hidden="true">
                 <path
@@ -260,14 +260,14 @@ export default function Pagination({
   return (
     <nav
       aria-label="Navigasi Halaman"
-      className={`flex flex-wrap items-center justify-between gap-y-2.5 gap-x-3 border-t border-slate-200 bg-white px-3.5 py-3 sm:px-5 sm:py-3.5 rounded-b-xl ${className}`}
+      className={`flex flex-wrap items-center justify-between gap-y-2.5 gap-x-3 border-t border-border bg-surface px-3.5 py-3 sm:px-5 sm:py-3.5 rounded-b-xl ${className}`}
     >
       {/* =========================================================
           KIRI: SIZE SELECTOR & INFO DATA
       ========================================================= */}
-      <div className="flex flex-wrap items-center gap-2 text-xs text-slate-600 sm:text-sm">
+      <div className="flex flex-wrap items-center gap-2 text-xs text-text-secondary sm:text-sm">
         {onPageSizeChange && (
-          <div className="flex items-center gap-1.5 text-xs text-slate-500">
+          <div className="flex items-center gap-1.5 text-xs text-text-muted">
             <span className="font-medium whitespace-nowrap">Tampilkan</span>
             <div ref={sizeContainerRef} className="relative inline-flex items-center">
               <button
@@ -277,15 +277,15 @@ export default function Pagination({
                 aria-haspopup="listbox"
                 aria-expanded={sizeOpen}
                 onClick={handleToggleSize}
-                className={`inline-flex h-8 items-center justify-between gap-1.5 rounded-lg border bg-white px-2.5 text-xs font-semibold text-slate-800 shadow-2xs transition-all ${
+                className={`inline-flex h-8 items-center justify-between gap-1.5 rounded-lg border bg-surface px-2.5 text-xs font-semibold text-text-main shadow-2xs transition-all ${
                   sizeOpen
                     ? "border-blue-600 ring-2 ring-blue-100"
-                    : "border-slate-200 hover:border-slate-300 hover:bg-slate-50"
+                    : "border-border hover:border-border hover:bg-surface-muted"
                 } disabled:cursor-not-allowed disabled:opacity-50`}
               >
                 <span>{pageSize}</span>
                 <svg
-                  className={`h-3.5 w-3.5 text-slate-400 transition-transform duration-200 ${
+                  className={`h-3.5 w-3.5 text-text-subtle transition-transform duration-200 ${
                     sizeOpen ? "rotate-180 text-blue-600" : ""
                   }`}
                   viewBox="0 0 20 20"
@@ -304,7 +304,7 @@ export default function Pagination({
                 <div
                   role="listbox"
                   aria-label="Pilihan jumlah data per halaman"
-                  className={`absolute left-0 z-50 min-w-[76px] overflow-hidden rounded-xl border border-slate-200 bg-white p-1 shadow-xl ring-1 ring-black/5 animate-in fade-in-50 zoom-in-95 duration-100 ${
+                  className={`absolute left-0 z-50 min-w-[76px] overflow-hidden rounded-xl border border-border bg-surface p-1 shadow-xl ring-1 ring-black/5 animate-in fade-in-50 zoom-in-95 duration-100 ${
                     openDirection === "up" ? "bottom-full mb-1.5" : "top-full mt-1.5"
                   }`}
                 >
@@ -323,7 +323,7 @@ export default function Pagination({
                         className={`flex w-full items-center justify-between gap-3 rounded-lg px-2.5 py-1.5 text-left text-xs transition ${
                           isSelected
                             ? "bg-blue-50 font-bold text-blue-600"
-                            : "font-medium text-slate-700 hover:bg-slate-50 hover:text-slate-900"
+                            : "font-medium text-text-secondary hover:bg-surface-muted hover:text-text-main"
                         }`}
                       >
                         <span>{opt}</span>
@@ -345,21 +345,21 @@ export default function Pagination({
                 </div>
               )}
             </div>
-            <span className="hidden sm:inline mx-0.5 text-slate-300 shrink-0 select-none" aria-hidden="true">&bull;</span>
+            <span className="hidden sm:inline mx-0.5 text-text-subtle shrink-0 select-none" aria-hidden="true">&bull;</span>
           </div>
         )}
 
         {totalItems !== undefined && startItem && endItem ? (
-          <p className="leading-5 text-slate-500 whitespace-nowrap text-xs sm:text-sm">
+          <p className="leading-5 text-text-muted whitespace-nowrap text-xs sm:text-sm">
             {onPageSizeChange ? "" : "Menampilkan "}
-            <span className="font-semibold text-slate-700">{startItem}</span> -{" "}
-            <span className="font-semibold text-slate-700">{endItem}</span> dari{" "}
-            <span className="font-semibold text-slate-700">{totalItems}</span> data
+            <span className="font-semibold text-text-secondary">{startItem}</span> -{" "}
+            <span className="font-semibold text-text-secondary">{endItem}</span> dari{" "}
+            <span className="font-semibold text-text-secondary">{totalItems}</span> data
           </p>
         ) : (
-          <p className="leading-5 text-slate-500 whitespace-nowrap text-xs sm:text-sm">
-            Halaman <span className="font-semibold text-slate-700">{safeCurrentPage}</span> dari{" "}
-            <span className="font-semibold text-slate-700">{totalPages}</span>
+          <p className="leading-5 text-text-muted whitespace-nowrap text-xs sm:text-sm">
+            Halaman <span className="font-semibold text-text-secondary">{safeCurrentPage}</span> dari{" "}
+            <span className="font-semibold text-text-secondary">{totalPages}</span>
           </p>
         )}
       </div>
@@ -375,7 +375,7 @@ export default function Pagination({
             disabled={safeCurrentPage <= 1 || disabled}
             onClick={() => onPageChange(Math.max(1, safeCurrentPage - 1))}
             aria-label="Halaman sebelumnya"
-            className="flex h-10 min-w-10 min-h-[40px] sm:h-9 sm:min-w-9 sm:min-h-[36px] items-center justify-center gap-1 rounded-lg border border-slate-200 bg-white px-2 sm:px-2.5 text-xs font-medium text-slate-700 shadow-2xs transition hover:bg-slate-50 hover:text-slate-900 focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 disabled:cursor-not-allowed disabled:opacity-40"
+            className="flex h-10 min-w-10 min-h-[40px] sm:h-9 sm:min-w-9 sm:min-h-[36px] items-center justify-center gap-1 rounded-lg border border-border bg-surface px-2 sm:px-2.5 text-xs font-medium text-text-secondary shadow-2xs transition hover:bg-surface-muted hover:text-text-main focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 disabled:cursor-not-allowed disabled:opacity-40"
           >
             <svg
               viewBox="0 0 20 20"
@@ -399,7 +399,7 @@ export default function Pagination({
                 return (
                   <span
                     key={`m-ellipsis-${idx}`}
-                    className="flex h-10 w-4 min-h-[40px] select-none items-center justify-center text-xs font-bold text-slate-500"
+                    className="flex h-10 w-4 min-h-[40px] select-none items-center justify-center text-xs font-bold text-text-muted"
                     aria-hidden="true"
                   >
                     …
@@ -419,7 +419,7 @@ export default function Pagination({
                   className={`flex h-10 min-w-10 min-h-[40px] items-center justify-center rounded-lg px-2 text-xs font-semibold transition focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 ${
                     isCurrent
                       ? "bg-blue-600 text-white shadow-sm ring-1 ring-blue-600"
-                      : "border border-slate-200 bg-white text-slate-700 hover:border-slate-300 hover:bg-slate-50"
+                      : "border border-border bg-surface text-text-secondary hover:border-border hover:bg-surface-muted"
                   }`}
                 >
                   {item}
@@ -435,7 +435,7 @@ export default function Pagination({
                 return (
                   <span
                     key={`d-ellipsis-${idx}`}
-                    className="flex h-10 w-5 sm:h-9 min-h-[40px] sm:min-h-[36px] select-none items-center justify-center text-xs font-bold text-slate-500 sm:w-6"
+                    className="flex h-10 w-5 sm:h-9 min-h-[40px] sm:min-h-[36px] select-none items-center justify-center text-xs font-bold text-text-muted sm:w-6"
                     aria-hidden="true"
                   >
                     …
@@ -455,7 +455,7 @@ export default function Pagination({
                   className={`flex h-10 min-w-10 min-h-[40px] sm:h-9 sm:min-w-9 sm:min-h-[36px] items-center justify-center rounded-lg px-2 text-xs font-semibold transition focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 ${
                     isCurrent
                       ? "bg-blue-600 text-white shadow-sm ring-1 ring-blue-600"
-                      : "border border-slate-200 bg-white text-slate-700 hover:border-slate-300 hover:bg-slate-50"
+                      : "border border-border bg-surface text-text-secondary hover:border-border hover:bg-surface-muted"
                   }`}
                 >
                   {item}
@@ -470,7 +470,7 @@ export default function Pagination({
             disabled={safeCurrentPage >= totalPages || disabled}
             onClick={() => onPageChange(Math.min(totalPages, safeCurrentPage + 1))}
             aria-label="Halaman berikutnya"
-            className="flex h-10 min-w-10 min-h-[40px] sm:h-9 sm:min-w-9 sm:min-h-[36px] items-center justify-center gap-1 rounded-lg border border-slate-200 bg-white px-2 sm:px-2.5 text-xs font-medium text-slate-700 shadow-2xs transition hover:bg-slate-50 hover:text-slate-900 focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 disabled:cursor-not-allowed disabled:opacity-40"
+            className="flex h-10 min-w-10 min-h-[40px] sm:h-9 sm:min-w-9 sm:min-h-[36px] items-center justify-center gap-1 rounded-lg border border-border bg-surface px-2 sm:px-2.5 text-xs font-medium text-text-secondary shadow-2xs transition hover:bg-surface-muted hover:text-text-main focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 disabled:cursor-not-allowed disabled:opacity-40"
           >
             <span className="hidden 2xl:inline">Berikutnya</span>
             <svg

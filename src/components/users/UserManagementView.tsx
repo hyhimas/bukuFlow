@@ -9,13 +9,17 @@ import Badge from "@/components/ui/Badge";
 import Button from "@/components/ui/Button";
 import Input from "@/components/ui/Input";
 import Dropdown from "@/components/ui/Dropdown";
-import LoadingState from "@/components/ui/LoadingState";
+import Skeleton, { TableSkeleton } from "@/components/ui/Skeleton";
 import ConfirmationDialog from "@/components/ui/ConfirmationDialog";
 import Modal from "@/components/ui/Modal";
 import PageHeader from "@/components/ui/PageHeader";
 import Pagination from "@/components/ui/Pagination";
 import RowActions from "@/components/ui/RowActions";
 import ErrorState from "@/components/ui/ErrorState";
+import InactiveCompanyState, {
+  isCompanyInactiveError,
+  isStoredCompanyInactive,
+} from "@/components/office/InactiveCompanyState";
 import DataTable, { DataTableColumn } from "@/components/ui/DataTable";
 import { useSearchHotkey, useSubmitHotkey } from "@/hooks/useHotkeys";
 import CompanySwitcher, {
@@ -32,6 +36,7 @@ import {
   getOfficeUsersApi,
   createOfficeUserApi,
   updateOfficeUserApi,
+  getCompaniesApi,
   getErrorMessage,
   getFieldErrors,
 } from "@/lib/api";
@@ -133,12 +138,42 @@ export default function UserManagementView({ scope }: UserManagementViewProps) {
   const [selectedCompanyId, setSelectedCompanyId] = useState<string>(() =>
     isOffice ? getStoredOfficeCompanyId() : ""
   );
+  const [companyName, setCompanyName] = useState<string>("");
+  const [companyStatus, setCompanyStatus] = useState<string>("");
+
+  // Sync company name & status for Office Super Admin
+  useEffect(() => {
+    if (!isOffice || !selectedCompanyId) return;
+    let isMounted = true;
+    getCompaniesApi()
+      .then((comps) => {
+        if (!isMounted) return;
+        const match = comps.find((c) => c.id === selectedCompanyId);
+        if (match?.name) {
+          setCompanyName(match.name);
+        }
+        if (match?.status) {
+          setCompanyStatus(match.status);
+        }
+      })
+      .catch(() => {});
+    return () => {
+      isMounted = false;
+    };
+  }, [isOffice, selectedCompanyId]);
 
   // Users & Loading state
   const [users, setUsers] = useState<UserItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [tableLoading, setTableLoading] = useState(false);
   const [error, setError] = useState("");
+
+  const isInactiveCompany =
+    isOffice &&
+    (companyStatus === "INACTIVE" ||
+      companyStatus === "SUSPENDED" ||
+      isStoredCompanyInactive(selectedCompanyId) ||
+      isCompanyInactiveError(error));
 
   // Filters & Pagination
   const [search, setSearch] = useState("");
@@ -166,9 +201,12 @@ export default function UserManagementView({ scope }: UserManagementViewProps) {
   // Confirmation Dialog (Discard Form Changes)
   const [showDiscardConfirm, setShowDiscardConfirm] = useState(false);
 
+  // Fitur pencarian & filter role disembunyikan sementara sampai didukung oleh endpoint BE
+  const SHOW_SEARCH_FILTER = false;
+
   const searchInputRef = useRef<HTMLInputElement>(null);
   useSearchHotkey(searchInputRef, {
-    enabled: !(isOffice && !selectedCompanyId) && !error && !loading,
+    enabled: SHOW_SEARCH_FILTER && !(isOffice && !selectedCompanyId) && !error && !loading,
   });
   useSubmitHotkey(() => void handleSubmit(), {
     enabled: showModal,
@@ -582,14 +620,14 @@ export default function UserManagementView({ scope }: UserManagementViewProps) {
                 className={`flex h-8 w-8 shrink-0 items-center justify-center rounded-full text-xs font-bold ${
                   isActive
                     ? "bg-blue-100 text-blue-700"
-                    : "bg-slate-100 text-slate-500"
+                    : "bg-surface-muted text-text-muted"
                 }`}
               >
                 {(user.name || "?").charAt(0).toUpperCase()}
               </div>
               <div className="min-w-0">
                 <div className="flex items-center gap-1.5">
-                  <p className="truncate font-semibold text-slate-900">
+                  <p className="truncate font-semibold text-text-main">
                     {user.name}
                   </p>
                   {isSelf && (
@@ -607,7 +645,7 @@ export default function UserManagementView({ scope }: UserManagementViewProps) {
         key: "email",
         header: "Email (Identitas Login)",
         render: (user) => (
-          <span className="font-mono text-xs text-slate-600">
+          <span className="font-mono text-xs text-text-secondary">
             {user.email || "-"}
           </span>
         ),
@@ -650,14 +688,26 @@ export default function UserManagementView({ scope }: UserManagementViewProps) {
 
   if (!isAuthorized) {
     return (
-      <div className="min-h-screen bg-slate-50">
-        <LoadingState label="Memeriksa otorisasi pengguna..." />
+      <div className="min-h-screen bg-surface-subtle" role="status" aria-label="Memeriksa otorisasi pengguna...">
+        <div className="page-container py-6 space-y-4">
+          <Skeleton className="h-4 w-44 rounded" />
+          <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 mt-4 mb-5">
+            <div className="space-y-2">
+              <Skeleton className="h-8 w-56 rounded-lg" />
+              <Skeleton className="h-4 w-96 max-w-full rounded" />
+            </div>
+            <Skeleton className="h-9 w-36 rounded-lg" />
+          </div>
+          <Card className="overflow-hidden">
+            <TableSkeleton rows={5} cols={5} />
+          </Card>
+        </div>
       </div>
     );
   }
 
   return (
-    <div className="min-h-screen bg-slate-50">
+    <div className="min-h-screen bg-surface-subtle">
       <div className="page-container py-6">
         <BackLink href={isOffice ? "/office/dashboard" : "/dashboard"}>
           {isOffice ? "Kembali ke Office Dashboard" : "Kembali ke Dashboard"}
@@ -691,7 +741,7 @@ export default function UserManagementView({ scope }: UserManagementViewProps) {
                   type="button"
                   variant="primary"
                   onClick={openCreateModal}
-                  disabled={(isOffice && !selectedCompanyId) || Boolean(error) || loading}
+                  disabled={(isOffice && !selectedCompanyId) || isInactiveCompany || Boolean(error) || loading}
                   className="w-full sm:w-auto text-xs h-9 px-3.5 font-semibold text-center whitespace-nowrap"
                 >
                   + Tambah Pengguna
@@ -707,64 +757,72 @@ export default function UserManagementView({ scope }: UserManagementViewProps) {
             <div className="mx-auto flex h-14 w-14 items-center justify-center rounded-2xl bg-blue-50">
               <CompanyEmptyIcon />
             </div>
-            <h2 className="mt-4 text-lg font-semibold text-slate-900">
+            <h2 className="mt-4 text-lg font-semibold text-text-main">
               Pilih Instansi Terlebih Dahulu
             </h2>
-            <p className="mx-auto mt-2 max-w-md text-sm text-slate-500">
+            <p className="mx-auto mt-2 max-w-md text-sm text-text-muted">
               Sebelum memuat data pengguna, silakan pilih salah satu instansi melalui pemilih instansi di atas.
             </p>
           </Card>
         ) : (
           <>
-            {/* FILTER & PENCARIAN */}
-            <Card className="mt-6 p-4">
-              <div className="grid gap-3 sm:grid-cols-[minmax(0,1fr)_220px] sm:items-end">
-                <div>
-                  <Input
-                    ref={searchInputRef}
-                    id="user-search"
-                    label="Cari Pengguna"
-                    type="text"
-                    value={search}
-                    disabled={(isOffice && !selectedCompanyId) || Boolean(error) || loading}
-                    onChange={(e) => {
-                      savedTotalRef.current = 0;
-                      setSearch(e.target.value);
-                      setPage(1);
-                    }}
-                    placeholder="Cari berdasarkan nama atau email login... (tekan /)"
-                  />
-                </div>
+            {/* FILTER & PENCARIAN (Disembunyikan sementara sampai didukung endpoint BE) */}
+            {SHOW_SEARCH_FILTER && (
+              <Card className="mt-6 p-4">
+                <div className="grid gap-3 sm:grid-cols-[minmax(0,1fr)_220px] sm:items-end">
+                  <div>
+                    <Input
+                      ref={searchInputRef}
+                      id="user-search"
+                      label="Cari Pengguna"
+                      type="text"
+                      value={search}
+                      disabled={(isOffice && !selectedCompanyId) || Boolean(error) || loading}
+                      onChange={(e) => {
+                        savedTotalRef.current = 0;
+                        setSearch(e.target.value);
+                        setPage(1);
+                      }}
+                      placeholder="Cari berdasarkan nama atau email login... (tekan /)"
+                    />
+                  </div>
 
-                <div>
-                  <label
-                    htmlFor="user-role-filter"
-                    className="block text-sm font-medium text-slate-700 mb-1.5"
-                  >
-                    Role Pengguna
-                  </label>
-                  <Dropdown
-                    id="user-role-filter"
-                    value={roleFilter}
-                    disabled={(isOffice && !selectedCompanyId) || Boolean(error) || loading}
-                    onChange={(val) => {
-                      savedTotalRef.current = 0;
-                      setRoleFilter(val);
-                      setPage(1);
-                    }}
-                    ariaLabel="Filter role pengguna"
-                    options={[
-                      { value: "ALL", label: "Semua Role" },
-                      { value: "COMPANY_ADMIN", label: "Admin Instansi" },
-                      { value: "STAFF", label: "Staf" },
-                    ]}
-                  />
+                  <div>
+                    <label
+                      htmlFor="user-role-filter"
+                      className="block text-sm font-medium text-text-secondary mb-1.5"
+                    >
+                      Role Pengguna
+                    </label>
+                    <Dropdown
+                      id="user-role-filter"
+                      value={roleFilter}
+                      disabled={(isOffice && !selectedCompanyId) || Boolean(error) || loading}
+                      onChange={(val) => {
+                        savedTotalRef.current = 0;
+                        setRoleFilter(val);
+                        setPage(1);
+                      }}
+                      ariaLabel="Filter role pengguna"
+                      options={[
+                        { value: "ALL", label: "Semua Role" },
+                        { value: "COMPANY_ADMIN", label: "Admin Instansi" },
+                        { value: "STAFF", label: "Staf" },
+                      ]}
+                    />
+                  </div>
                 </div>
-              </div>
-            </Card>
+              </Card>
+            )}
 
             {/* ERROR ALERT vs TABLE / LIST */}
-            {error ? (
+            {isInactiveCompany ? (
+              <InactiveCompanyState
+                companyName={companyName}
+                description="Pengelolaan akun pengguna dan staf ditangguhkan karena instansi ini sedang dalam status nonaktif."
+                className="mt-4"
+              />
+            ) : error ? (
               <ErrorState
                 title="Gagal Memuat Data Pengguna"
                 message={error}
@@ -780,20 +838,20 @@ export default function UserManagementView({ scope }: UserManagementViewProps) {
                   loading={loading || tableLoading}
                   loadingMessage="Memperbarui data pengguna..."
                   mobileBreakpoint="xl"
-                  cardGridClassName="bg-slate-50/60 p-3 sm:p-4"
+                  cardGridClassName="bg-surface-subtle/60 p-3 sm:p-4"
                   className="border-0 shadow-none rounded-none"
                   emptyState={
                     <div className="p-12 text-center">
-                      <div className="mx-auto flex h-12 w-12 items-center justify-center rounded-full bg-slate-100 text-slate-400">
-                        <svg className="h-6 w-6 text-slate-400" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                      <div className="mx-auto flex h-12 w-12 items-center justify-center rounded-full bg-surface-muted text-text-subtle">
+                        <svg className="h-6 w-6 text-text-subtle" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
                           <path d="M19 21v-2a4 4 0 0 0-4-4H9a4 4 0 0 0-4 4v2" />
                           <circle cx="12" cy="7" r="4" />
                         </svg>
                       </div>
-                      <h3 className="mt-3 text-sm font-semibold text-slate-900">
+                      <h3 className="mt-3 text-sm font-semibold text-text-main">
                         Pengguna tidak ditemukan
                       </h3>
-                      <p className="mt-1 text-xs text-slate-500">
+                      <p className="mt-1 text-xs text-text-muted">
                         {search
                           ? "Coba ubah kata kunci pencarian Anda."
                           : "Belum ada data pengguna yang terdaftar."}
@@ -821,7 +879,7 @@ export default function UserManagementView({ scope }: UserManagementViewProps) {
                     return (
                       <Card
                         key={user.id}
-                        className="p-3.5 shadow-xs transition flex flex-col justify-between h-full hover:border-slate-300"
+                        className="p-3.5 shadow-xs transition flex flex-col justify-between h-full hover:border-border"
                       >
                         <div>
                           {/* TOP: AVATAR, NAME, SELF BADGE, STATUS BADGE */}
@@ -831,7 +889,7 @@ export default function UserManagementView({ scope }: UserManagementViewProps) {
                                 className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-full text-sm font-bold ${
                                   isActive
                                     ? "bg-blue-50 text-blue-600"
-                                    : "bg-slate-100 text-slate-500"
+                                    : "bg-surface-muted text-text-muted"
                                 }`}
                               >
                                 {(user.name || "?").charAt(0).toUpperCase()}
@@ -840,7 +898,7 @@ export default function UserManagementView({ scope }: UserManagementViewProps) {
                               <div className="min-w-0">
                                 <div className="flex items-center gap-1.5">
                                   <p
-                                    className="truncate text-sm font-semibold text-slate-900"
+                                    className="truncate text-sm font-semibold text-text-main"
                                     title={user.name}
                                   >
                                     {user.name}
@@ -852,7 +910,7 @@ export default function UserManagementView({ scope }: UserManagementViewProps) {
                                   )}
                                 </div>
                                 <p
-                                  className="truncate text-xs text-slate-500 font-mono"
+                                  className="truncate text-xs text-text-muted font-mono"
                                   title={user.email}
                                 >
                                   {user.email || "-"}
@@ -867,8 +925,8 @@ export default function UserManagementView({ scope }: UserManagementViewProps) {
 
                           {/* INFORMATION */}
                           <div className="mt-3 grid grid-cols-2 gap-2">
-                            <div className="rounded-lg border border-slate-100 bg-slate-50 px-3 py-2">
-                              <p className="text-[11px] font-semibold uppercase tracking-wide text-slate-500">
+                            <div className="rounded-lg border border-border-subtle bg-surface-subtle px-3 py-2">
+                              <p className="text-[11px] font-semibold uppercase tracking-wide text-text-muted">
                                 Role Akses
                               </p>
                               <div className="mt-1">
@@ -878,12 +936,12 @@ export default function UserManagementView({ scope }: UserManagementViewProps) {
                               </div>
                             </div>
 
-                            <div className="rounded-lg border border-slate-100 bg-slate-50 px-3 py-2">
-                              <p className="text-[11px] font-semibold uppercase tracking-wide text-slate-500">
+                            <div className="rounded-lg border border-border-subtle bg-surface-subtle px-3 py-2">
+                              <p className="text-[11px] font-semibold uppercase tracking-wide text-text-muted">
                                 Terdaftar Sejak
                               </p>
                               <p
-                                className="mt-1 truncate text-xs font-medium text-slate-700"
+                                className="mt-1 truncate text-xs font-medium text-text-secondary"
                                 title={formatDate(user.createdAt)}
                               >
                                 {formatDate(user.createdAt)}
@@ -893,8 +951,8 @@ export default function UserManagementView({ scope }: UserManagementViewProps) {
                         </div>
 
                         {/* BOTTOM ACTIONS */}
-                        <div className="mt-3.5 flex items-center justify-between border-t border-slate-100 pt-2.5">
-                          <span className="text-xs font-medium text-slate-500">
+                        <div className="mt-3.5 flex items-center justify-between border-t border-border-subtle pt-2.5">
+                          <span className="text-xs font-medium text-text-muted">
                             Pilihan Aksi
                           </span>
                           <RowActions actions={getUserActions(user)} />
@@ -1000,7 +1058,7 @@ export default function UserManagementView({ scope }: UserManagementViewProps) {
             <div>
               <label
                 htmlFor="user-form-role"
-                className="block text-sm font-medium text-app-text-muted mb-1.5"
+                className="block text-sm font-medium text-text-muted mb-1.5"
               >
                 Hak Akses / Role <span className="text-danger">*</span>
               </label>

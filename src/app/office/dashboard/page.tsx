@@ -6,9 +6,13 @@ import Link from "next/link";
 
 import Card from "@/components/ui/Card";
 import Badge from "@/components/ui/Badge";
-import LoadingState from "@/components/ui/LoadingState";
+import Skeleton, { TableSkeleton } from "@/components/ui/Skeleton";
 import ErrorState from "@/components/ui/ErrorState";
 import PageHeader from "@/components/ui/PageHeader";
+import InactiveCompanyState, {
+  isCompanyInactiveError,
+  isStoredCompanyInactive,
+} from "@/components/office/InactiveCompanyState";
 import CompanySwitcher, {
   getStoredOfficeCompanyId,
   setStoredOfficeCompanyId,
@@ -54,21 +58,46 @@ function DashboardStatCard({
   label,
   value,
   icon,
+  variant = "default",
+  loading = false,
+  href,
   className = "",
 }: {
   label: string;
   value: number | string | null | undefined;
   icon: React.ReactNode;
+  variant?: "default" | "danger";
+  loading?: boolean;
+  href?: string;
   className?: string;
 }) {
-  return (
-    <Card className={`p-5 ${className}`}>
+  const isDanger = variant === "danger" && typeof value === "number" && value > 0;
+  const isInteractive = Boolean(href && !loading && value !== null && value !== undefined);
+
+  const cardElement = (
+    <Card
+      className={`p-5 transition-all duration-200 ${
+        isInteractive
+          ? isDanger
+            ? "cursor-pointer hover:border-red-400 hover:shadow-md active:scale-[0.99]"
+            : "cursor-pointer hover:border-blue-300 hover:shadow-md active:scale-[0.99]"
+          : "cursor-default"
+      } ${
+        isDanger ? "border-red-200 bg-red-50/25" : ""
+      } ${className}`}
+    >
       <div className="flex items-center justify-between gap-4">
         <div>
-          <p className="text-sm text-slate-500">{label}</p>
-          <div className="mt-2 text-2xl sm:text-3xl font-bold text-slate-900">
-            {value === null || value === undefined ? (
-              <span className="text-slate-500 font-normal text-xl">
+          <p className="text-sm text-text-muted">{label}</p>
+          <div
+            className={`mt-2 text-2xl sm:text-3xl font-bold ${
+              isDanger ? "text-red-600" : "text-text-main"
+            }`}
+          >
+            {loading ? (
+              <Skeleton className="h-8 w-16 rounded" />
+            ) : value === null || value === undefined ? (
+              <span className="text-text-muted font-normal text-xl">
                 -
               </span>
             ) : (
@@ -76,12 +105,36 @@ function DashboardStatCard({
             )}
           </div>
         </div>
-        <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-blue-50 text-blue-600">
+        <div
+          className={`flex h-11 w-11 shrink-0 items-center justify-center rounded-xl transition-colors duration-200 ${
+            isDanger
+              ? isInteractive
+                ? "bg-red-100 text-red-600 group-hover:bg-red-200/80"
+                : "bg-red-100 text-red-600"
+              : isInteractive
+              ? "bg-blue-50 text-blue-600 group-hover:bg-blue-100"
+              : "bg-blue-50 text-blue-600"
+          }`}
+        >
           {icon}
         </div>
       </div>
     </Card>
   );
+
+  if (isInteractive && href) {
+    return (
+      <Link
+        href={href}
+        className="group block rounded-xl focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand"
+        aria-label={`${label}: ${value ?? ""}. Buka daftar.`}
+      >
+        {cardElement}
+      </Link>
+    );
+  }
+
+  return cardElement;
 }
 
 function QuickAccessCard({
@@ -100,7 +153,7 @@ function QuickAccessCard({
   return (
     <Link
       href={href}
-      className={`group rounded-xl border border-slate-200 bg-white p-5 shadow-xs transition hover:-translate-y-0.5 hover:border-blue-300 hover:shadow-md focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 ${className}`}
+      className={`group rounded-xl border border-border bg-surface p-5 shadow-xs transition hover:-translate-y-0.5 hover:border-blue-300 hover:shadow-md focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 ${className}`}
     >
       <div className="flex gap-4">
         <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-blue-50 text-blue-600 transition group-hover:bg-blue-100">
@@ -108,8 +161,8 @@ function QuickAccessCard({
         </div>
 
         <div className="min-w-0">
-          <h3 className="font-semibold text-slate-900 group-hover:text-blue-600 transition">{title}</h3>
-          <p className="mt-1 text-sm text-slate-500">{description}</p>
+          <h3 className="font-semibold text-text-main group-hover:text-blue-600 transition">{title}</h3>
+          <p className="mt-1 text-sm text-text-muted">{description}</p>
         </div>
       </div>
     </Link>
@@ -138,6 +191,14 @@ export default function OfficeDashboardPage() {
   const [loansLoading, setLoansLoading] = useState(false);
   const [error, setError] = useState("");
   const [reloadKey, setReloadKey] = useState(0);
+
+  const selectedCompany = companies.find((c) => c.id === selectedCompanyId);
+  const selectedCompanyName = selectedCompany?.name || "Instansi ini";
+  const isInactiveCompany =
+    selectedCompany?.status === "INACTIVE" ||
+    selectedCompany?.status === "SUSPENDED" ||
+    isStoredCompanyInactive(selectedCompanyId) ||
+    isCompanyInactiveError(error);
 
   // 1. Guard Authentication
   useEffect(() => {
@@ -225,14 +286,72 @@ export default function OfficeDashboardPage() {
 
   if (checkingAuth) {
     return (
-      <div className="min-h-screen bg-slate-50">
-        <LoadingState label="Memeriksa otorisasi Super Admin..." />
+      <div className="min-h-screen bg-surface-subtle" role="status" aria-label="Memeriksa otorisasi Super Admin...">
+        <div className="mx-auto max-w-7xl px-4 py-6 sm:px-6 lg:px-8 space-y-6">
+          {/* Header Skeleton */}
+          <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+            <div className="space-y-2">
+              <Skeleton className="h-8 w-64 rounded-lg" />
+              <Skeleton className="h-4 w-96 max-w-full rounded" />
+            </div>
+            <Skeleton className="h-10 w-48 rounded-xl shrink-0" />
+          </div>
+
+          {/* Stats Skeleton */}
+          <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+            {Array.from({ length: 3 }).map((_, i) => (
+              <Card key={i} className="p-5">
+                <div className="flex items-center justify-between gap-4">
+                  <div className="space-y-2">
+                    <Skeleton className="h-4 w-28 rounded" />
+                    <Skeleton className="h-8 w-20 rounded" />
+                  </div>
+                  <Skeleton className="h-11 w-11 rounded-xl shrink-0" />
+                </div>
+              </Card>
+            ))}
+          </div>
+
+          {/* Quick Access Skeleton */}
+          <div className="space-y-3">
+            <Skeleton className="h-6 w-48 rounded" />
+            <div className="grid gap-4 sm:grid-cols-2">
+              <Card className="p-5">
+                <div className="flex items-start gap-4">
+                  <Skeleton className="h-11 w-11 rounded-xl shrink-0" />
+                  <div className="flex-1 space-y-2">
+                    <Skeleton className="h-5 w-36 rounded" />
+                    <Skeleton className="h-4 w-full rounded" />
+                  </div>
+                </div>
+              </Card>
+              <Card className="p-5">
+                <div className="flex items-start gap-4">
+                  <Skeleton className="h-11 w-11 rounded-xl shrink-0" />
+                  <div className="flex-1 space-y-2">
+                    <Skeleton className="h-5 w-36 rounded" />
+                    <Skeleton className="h-4 w-full rounded" />
+                  </div>
+                </div>
+              </Card>
+            </div>
+          </div>
+
+          {/* Table Skeleton */}
+          <Card className="overflow-hidden">
+            <div className="flex items-center justify-between border-b border-border px-5 py-4">
+              <Skeleton className="h-5 w-44 rounded" />
+              <Skeleton className="h-4 w-20 rounded" />
+            </div>
+            <TableSkeleton rows={4} cols={6} />
+          </Card>
+        </div>
       </div>
     );
   }
 
   return (
-    <div className="min-h-screen bg-slate-50">
+    <div className="min-h-screen bg-surface-subtle">
       <div className="mx-auto max-w-7xl px-4 py-6 sm:px-6 lg:px-8">
         {/* ===================================================
             HEADER & CUSTOM COMPANY SELECTOR
@@ -264,11 +383,17 @@ export default function OfficeDashboardPage() {
             <div className="mx-auto flex h-14 w-14 items-center justify-center rounded-2xl bg-blue-50 text-blue-600">
               <CompanyIcon />
             </div>
-            <h2 className="mt-4 text-lg font-semibold text-slate-900">Pilih Instansi Terlebih Dahulu</h2>
-            <p className="mx-auto mt-2 max-w-md text-sm text-slate-500">
+            <h2 className="mt-4 text-lg font-semibold text-text-main">Pilih Instansi Terlebih Dahulu</h2>
+            <p className="mx-auto mt-2 max-w-md text-sm text-text-muted">
               Sebelum memuat ringkasan operasional, silakan pilih salah satu instansi melalui pemilih instansi di atas.
             </p>
           </Card>
+        ) : isInactiveCompany ? (
+          <InactiveCompanyState
+            companyName={selectedCompanyName}
+            description="Ringkasan operasional dan statistik ditangguhkan karena instansi ini sedang dalam status nonaktif."
+            className="mt-6"
+          />
         ) : error ? (
           <ErrorState
             title="Gagal Memuat Dashboard Office"
@@ -287,20 +412,27 @@ export default function OfficeDashboardPage() {
             >
               <DashboardStatCard
                 label="Buku Tersedia"
-                value={loading ? "..." : (dashboardData ? dashboardData.booksAvailable : null)}
+                value={dashboardData ? dashboardData.booksAvailable : null}
+                loading={loading}
                 icon={<BookIcon />}
+                href={selectedCompanyId ? "/office/books" : undefined}
               />
 
               <DashboardStatCard
                 label="Peminjaman Aktif"
-                value={loading ? "..." : (dashboardData ? dashboardData.activeLoans : null)}
+                value={dashboardData ? dashboardData.activeLoans : null}
+                loading={loading}
                 icon={<TransactionIcon />}
+                href={selectedCompanyId ? "/office/loans?status=ACTIVE" : undefined}
               />
 
               <DashboardStatCard
                 label="Peminjaman Terlambat"
-                value={loading ? "..." : (dashboardData ? dashboardData.overdueLoans : null)}
+                value={dashboardData ? dashboardData.overdueLoans : null}
+                variant={typeof dashboardData?.overdueLoans === "number" && dashboardData.overdueLoans > 0 ? "danger" : "default"}
+                loading={loading}
                 icon={<ClockIcon />}
+                href={selectedCompanyId ? "/office/loans?status=OVERDUE" : undefined}
                 className="sm:col-span-2 lg:col-span-1"
               />
             </section>
@@ -309,10 +441,10 @@ export default function OfficeDashboardPage() {
                 PENGELOLAAN PLATFORM
             ==================================================== */}
             <section className="mt-6">
-              <h2 className="text-lg font-semibold text-slate-900">
+              <h2 className="text-lg font-semibold text-text-main">
                 Pusat Kendali & Otorisasi Khusus
               </h2>
-              <p className="mt-0.5 text-xs text-slate-500">
+              <p className="mt-0.5 text-xs text-text-muted">
                 Akses cepat manajemen platform dan audit teknis per instansi.
               </p>
 
@@ -337,8 +469,8 @@ export default function OfficeDashboardPage() {
                 AKTIVITAS TRANSAKSI TERBARU
             ==================================================== */}
             <Card className="mt-6 overflow-hidden">
-              <div className="flex items-center justify-between border-b border-slate-200 px-5 py-4">
-                <h2 className="font-semibold text-slate-900">
+              <div className="flex items-center justify-between border-b border-border px-5 py-4">
+                <h2 className="font-semibold text-text-main">
                   Riwayat Transaksi Terbaru
                 </h2>
 
@@ -353,37 +485,32 @@ export default function OfficeDashboardPage() {
               </div>
 
               {loansLoading ? (
-                <div className="p-8 text-center text-sm text-slate-500">
-                  <div className="flex items-center justify-center gap-2">
-                    <span className="inline-block h-4 w-4 animate-spin rounded-full border-2 border-current border-t-transparent" />
-                    <span>Memuat aktivitas transaksi terbaru...</span>
-                  </div>
-                </div>
+                <TableSkeleton rows={4} cols={6} />
               ) : recentLoans.length === 0 ? (
                 <div className="p-8 text-center">
-                  <p className="font-medium text-slate-700">
+                  <p className="font-medium text-text-secondary">
                     Belum ada aktivitas transaksi
                   </p>
-                  <p className="mt-1 text-sm text-slate-500">
+                  <p className="mt-1 text-sm text-text-muted">
                     Aktivitas transaksi terbaru instansi ini akan muncul di sini.
                   </p>
                 </div>
               ) : (
                 <div>
                   {/* Tampilan Mobile (< md): 100% Fluid Width, Status Badge selalu terlihat di kanan */}
-                  <div className="divide-y divide-slate-100 md:hidden">
+                  <div className="divide-y divide-border-subtle md:hidden">
                     {recentLoans.slice(0, 10).map((loan) => (
-                      <div key={loan.id} className="flex flex-col gap-1.5 p-4 transition hover:bg-slate-50/70">
+                      <div key={loan.id} className="flex flex-col gap-1.5 p-4 transition hover:bg-surface-subtle">
                         {/* Baris 1: No Transaksi (Kiri) & Nama Member (Kanan) */}
                         <div className="flex items-center justify-between gap-3">
                           <span
-                            className="shrink-0 font-mono text-sm font-bold text-slate-900"
+                            className="shrink-0 font-mono text-sm font-bold text-text-main"
                             title={loan.rawLoanNumber ? `ID Sistem: ${loan.rawLoanNumber}` : loan.loanNumber}
                           >
                             {loan.loanNumber}
                           </span>
                           <span
-                            className="truncate text-right text-sm font-medium text-slate-700 max-w-[55%]"
+                            className="truncate text-right text-sm font-medium text-text-secondary max-w-[55%]"
                             title={loan.memberName || (loan.memberNumber ? `No. Anggota: ${loan.memberNumber}` : loan.memberId !== "-" ? `ID Anggota: ${loan.memberId}` : "Anggota")}
                           >
                             {loan.memberName || (loan.memberNumber ? `Anggota (${loan.memberNumber})` : "Anggota")}
@@ -391,13 +518,13 @@ export default function OfficeDashboardPage() {
                         </div>
 
                         {/* Baris 2: Tgl Pinjam (Kiri) & Jatuh Tempo (Kanan) */}
-                        <div className="flex items-center justify-between gap-3 text-xs text-slate-500">
+                        <div className="flex items-center justify-between gap-3 text-xs text-text-muted">
                           <span className="truncate">
-                            <span className="font-medium text-slate-500">Pinjam: </span>
+                            <span className="font-medium text-text-muted">Pinjam: </span>
                             {formatDate(loan.borrowedAt)}
                           </span>
                           <span className="shrink-0 text-right">
-                            <span className="font-medium text-slate-500">Jatuh Tempo: </span>
+                            <span className="font-medium text-text-muted">Jatuh Tempo: </span>
                             <span className={loan.status === "OVERDUE" ? "font-semibold text-red-600" : ""}>
                               {formatDate(loan.dueAt)}
                             </span>
@@ -406,8 +533,8 @@ export default function OfficeDashboardPage() {
 
                         {/* Baris 3: Tgl Kembali (Kiri) & Badge Status (Kanan) */}
                         <div className="flex items-center justify-between gap-3 text-xs pt-0.5">
-                          <span className="truncate text-slate-500">
-                            <span className="font-medium text-slate-500">Kembali: </span>
+                          <span className="truncate text-text-muted">
+                            <span className="font-medium text-text-muted">Kembali: </span>
                             {loan.status === "COMPLETED" && loan.returnedAt
                               ? formatDate(loan.returnedAt)
                               : "-"}
@@ -426,7 +553,7 @@ export default function OfficeDashboardPage() {
                   <div className="hidden md:block overflow-x-auto">
                     <div className="min-w-[660px]">
                       {/* Table Header: Nomor Transaksi, Anggota, Tgl Pinjam, Jatuh Tempo, Dikembalikan, Status */}
-                      <div className="grid grid-cols-[minmax(115px,1.2fr)_minmax(115px,1.2fr)_minmax(92px,1fr)_minmax(92px,1fr)_minmax(92px,1fr)_85px] items-center gap-x-3 border-b border-slate-100 bg-slate-50/80 px-4 sm:px-5 py-2.5 text-[11px] font-semibold uppercase tracking-wider text-slate-500">
+                      <div className="grid grid-cols-[minmax(115px,1.2fr)_minmax(115px,1.2fr)_minmax(92px,1fr)_minmax(92px,1fr)_minmax(92px,1fr)_85px] items-center gap-x-3 border-b border-border-subtle bg-surface-subtle px-4 sm:px-5 py-2.5 text-[11px] font-semibold uppercase tracking-wider text-text-muted">
                         <div>Nomor Peminjaman</div>
                         <div>Anggota</div>
                         <div>Tgl Pinjam</div>
@@ -435,16 +562,16 @@ export default function OfficeDashboardPage() {
                         <div className="text-right">Status</div>
                       </div>
 
-                      <div className="divide-y divide-slate-100">
+                      <div className="divide-y divide-border-subtle">
                         {recentLoans.slice(0, 10).map((loan) => (
                           <div
                             key={loan.id}
-                            className="grid grid-cols-[minmax(115px,1.2fr)_minmax(115px,1.2fr)_minmax(92px,1fr)_minmax(92px,1fr)_minmax(92px,1fr)_85px] items-center gap-x-3 px-4 sm:px-5 py-3 transition hover:bg-slate-50/70"
+                            className="grid grid-cols-[minmax(115px,1.2fr)_minmax(115px,1.2fr)_minmax(92px,1fr)_minmax(92px,1fr)_minmax(92px,1fr)_85px] items-center gap-x-3 px-4 sm:px-5 py-3 transition hover:bg-surface-subtle"
                           >
                             {/* 1. Nomor transaksi */}
                             <div className="min-w-0">
                               <p
-                                className="whitespace-nowrap text-sm font-semibold text-slate-900 font-mono"
+                                className="whitespace-nowrap text-sm font-semibold text-text-main font-mono"
                                 title={loan.rawLoanNumber ? `ID Sistem: ${loan.rawLoanNumber}` : loan.loanNumber}
                               >
                                 {loan.loanNumber}
@@ -454,7 +581,7 @@ export default function OfficeDashboardPage() {
                             {/* 2. Nama member */}
                             <div className="min-w-0">
                               <p
-                                className="truncate text-xs sm:text-sm text-slate-600"
+                                className="truncate text-xs sm:text-sm text-text-secondary"
                                 title={loan.memberName || (loan.memberNumber ? `No. Anggota: ${loan.memberNumber}` : loan.memberId !== "-" ? `ID Anggota: ${loan.memberId}` : "Anggota")}
                               >
                                 {loan.memberName || (loan.memberNumber ? `Anggota (${loan.memberNumber})` : "Anggota")}
@@ -463,21 +590,21 @@ export default function OfficeDashboardPage() {
 
                             {/* 3. Tanggal Pinjam */}
                             <div className="min-w-0">
-                              <span className="whitespace-nowrap text-xs sm:text-sm text-slate-600">
+                              <span className="whitespace-nowrap text-xs sm:text-sm text-text-secondary">
                                 {formatDate(loan.borrowedAt)}
                               </span>
                             </div>
 
                             {/* 4. Jatuh Tempo */}
                             <div className="min-w-0">
-                              <span className={`whitespace-nowrap text-xs sm:text-sm ${loan.status === "OVERDUE" ? "font-semibold text-red-600" : "text-slate-600"}`}>
+                              <span className={`whitespace-nowrap text-xs sm:text-sm ${loan.status === "OVERDUE" ? "font-semibold text-red-600" : "text-text-secondary"}`}>
                                 {formatDate(loan.dueAt)}
                               </span>
                             </div>
 
                             {/* 5. Dikembalikan */}
                             <div className="min-w-0">
-                              <span className="whitespace-nowrap text-xs sm:text-sm text-slate-600">
+                              <span className="whitespace-nowrap text-xs sm:text-sm text-text-secondary">
                                 {loan.status === "COMPLETED" && loan.returnedAt
                                   ? formatDate(loan.returnedAt)
                                   : "-"}

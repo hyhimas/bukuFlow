@@ -16,7 +16,7 @@ export default function LogoSpinner({
       <div className="relative flex h-16 w-16 items-center justify-center">
         {/* Outer Spinner Ring */}
         <div
-          className="absolute inset-0 animate-spin rounded-full border-2 border-blue-100 border-t-blue-600"
+          className="absolute inset-0 animate-spin rounded-full border-2 border-brand-soft border-t-brand"
           aria-hidden="true"
         />
 
@@ -32,7 +32,7 @@ export default function LogoSpinner({
       </div>
 
       {label && (
-        <p className="mt-3 text-xs font-medium text-slate-500">{label}</p>
+        <p className="mt-3 text-xs font-medium text-text-muted">{label}</p>
       )}
     </div>
   );

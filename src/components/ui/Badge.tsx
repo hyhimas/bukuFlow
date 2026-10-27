@@ -14,11 +14,11 @@ export default function Badge({
   className = "",
 }: BadgeProps) {
   const styles = {
-    success: "bg-success-surface text-success border-success-border",
-    warning: "bg-warning-surface text-warning border-warning-border",
-    danger: "bg-danger-surface text-danger border-danger-border",
-    neutral: "bg-neutral-surface text-app-text-muted border-neutral-border",
-    info: "bg-info-surface text-info border-info-border",
+    success: "bg-success-soft text-success-text border-success-border",
+    warning: "bg-warning-soft text-warning-text border-warning-border",
+    danger: "bg-danger-soft text-danger-text border-danger-border",
+    neutral: "bg-surface-muted text-text-secondary border-border",
+    info: "bg-info-soft text-info-text border-info-border",
   };
 
   return (

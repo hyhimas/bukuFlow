@@ -19,6 +19,10 @@ import Modal from "@/components/ui/Modal";
 import PageHeader from "@/components/ui/PageHeader";
 import RowActions, { type RowActionItem } from "@/components/ui/RowActions";
 import ErrorState from "@/components/ui/ErrorState";
+import InactiveCompanyState, {
+  isCompanyInactiveError,
+  isStoredCompanyInactive,
+} from "@/components/office/InactiveCompanyState";
 import DataTable, { DataTableColumn } from "@/components/ui/DataTable";
 import { useSearchHotkey, useSubmitHotkey } from "@/hooks/useHotkeys";
 import CompanySwitcher, {
@@ -187,6 +191,14 @@ export default function MemberManagementView({ scope }: MemberManagementViewProp
       "Perpustakaan"
     );
   });
+  const [companyStatus, setCompanyStatus] = useState<string>("");
+
+  const isInactiveCompany =
+    isOffice &&
+    (companyStatus === "INACTIVE" ||
+      companyStatus === "SUSPENDED" ||
+      isStoredCompanyInactive(selectedCompanyId) ||
+      isCompanyInactiveError(error));
   const [bulkPrintModalOpen, setBulkPrintModalOpen] = useState(false);
   const [bulkPrintItems, setBulkPrintItems] = useState<PrintableBookItem[]>([]);
   const [bulkPrintTitle, setBulkPrintTitle] = useState("Cetak Kartu Anggota");
@@ -269,6 +281,9 @@ export default function MemberManagementView({ scope }: MemberManagementViewProp
         const match = comps.find((c) => c.id === selectedCompanyId);
         if (match?.name) {
           setCompanyName(match.name);
+        }
+        if (match?.status) {
+          setCompanyStatus(match.status);
         }
       })
       .catch(() => {});
@@ -419,7 +434,7 @@ export default function MemberManagementView({ scope }: MemberManagementViewProp
 
     const nextErrors: MemberFormErrors = {
       name: cleanName ? "" : "Nama wajib diisi.",
-      memberNumber: cleanNumber ? "" : "Nomor anggota wajib diisi.",
+      memberNumber: "",
       phone: cleanPhone ? "" : "Nomor HP wajib diisi.",
       identityNumber: cleanNik ? "" : "NIK wajib diisi.",
       email: "",
@@ -427,7 +442,6 @@ export default function MemberManagementView({ scope }: MemberManagementViewProp
 
     if (
       nextErrors.name ||
-      nextErrors.memberNumber ||
       nextErrors.phone ||
       nextErrors.identityNumber
     ) {
@@ -443,7 +457,7 @@ export default function MemberManagementView({ scope }: MemberManagementViewProp
         if (isOffice) {
           await updateOfficeMemberApi(selectedCompanyId, editingMember.id, {
             name: cleanName,
-            member_number: cleanNumber || editingMember.memberNumber,
+            member_number: editingMember.memberNumber,
             phone: cleanPhone,
             identity_number: cleanNik,
             email: cleanEmail || undefined,
@@ -462,7 +476,6 @@ export default function MemberManagementView({ scope }: MemberManagementViewProp
         if (isOffice) {
           await createOfficeMemberApi(selectedCompanyId, {
             name: cleanName,
-            member_number: cleanNumber,
             phone: cleanPhone,
             identity_number: cleanNik,
             email: cleanEmail || undefined,
@@ -470,7 +483,6 @@ export default function MemberManagementView({ scope }: MemberManagementViewProp
         } else {
           await masterDataRepository.createMember({
             name: cleanName,
-            memberNumber: cleanNumber,
             phone: cleanPhone,
             identityNumber: cleanNik,
             email: cleanEmail || undefined,
@@ -889,7 +901,7 @@ export default function MemberManagementView({ scope }: MemberManagementViewProp
         header: "No. Anggota",
         width: "150px",
         render: (member) => (
-          <span className="font-mono text-xs font-semibold text-slate-800">
+          <span className="font-mono text-xs font-semibold text-text-main">
             {member.memberNumber || "-"}
           </span>
         ),
@@ -904,10 +916,10 @@ export default function MemberManagementView({ scope }: MemberManagementViewProp
               {getInitial(member.name)}
             </div>
             <div className="min-w-0">
-              <p className="truncate font-semibold text-slate-900">
+              <p className="truncate font-semibold text-text-main">
                 {member.name}
               </p>
-              <p className="truncate text-xs text-slate-500">
+              <p className="truncate text-xs text-text-muted">
                 {member.email || "-"}
               </p>
             </div>
@@ -919,7 +931,7 @@ export default function MemberManagementView({ scope }: MemberManagementViewProp
         header: "NIK",
         width: "140px",
         render: (member) => (
-          <span className="font-mono text-xs text-slate-600">
+          <span className="font-mono text-xs text-text-secondary">
             {maskNik(member.identityNumber)}
           </span>
         ),
@@ -929,7 +941,7 @@ export default function MemberManagementView({ scope }: MemberManagementViewProp
         header: "No. HP",
         width: "130px",
         render: (member) => (
-          <span className="text-xs text-slate-600">
+          <span className="text-xs text-text-secondary">
             {member.phone || "-"}
           </span>
         ),
@@ -960,14 +972,14 @@ export default function MemberManagementView({ scope }: MemberManagementViewProp
 
   if (!isAuthorized) {
     return (
-      <div className="min-h-screen bg-slate-50">
+      <div className="min-h-screen bg-surface-subtle">
         <LoadingState label="Memeriksa otorisasi pengguna..." />
       </div>
     );
   }
 
   return (
-    <div className="min-h-screen bg-slate-50">
+    <div className="min-h-screen bg-surface-subtle">
       <div className="page-container py-6">
         <BackLink href={isOffice ? "/office/dashboard" : "/dashboard"}>
           {isOffice ? "Kembali ke Office Dashboard" : "Kembali ke Dashboard"}
@@ -1063,10 +1075,10 @@ export default function MemberManagementView({ scope }: MemberManagementViewProp
             <div className="mx-auto flex h-14 w-14 items-center justify-center rounded-2xl bg-blue-50">
               <CompanyEmptyIcon />
             </div>
-            <h2 className="mt-4 text-lg font-semibold text-slate-900">
+            <h2 className="mt-4 text-lg font-semibold text-text-main">
               Pilih Instansi Terlebih Dahulu
             </h2>
-            <p className="mx-auto mt-2 max-w-md text-sm text-slate-500">
+            <p className="mx-auto mt-2 max-w-md text-sm text-text-muted">
               Sebelum memuat data anggota, silakan pilih salah satu instansi melalui pemilih instansi di atas.
             </p>
           </Card>
@@ -1096,7 +1108,7 @@ export default function MemberManagementView({ scope }: MemberManagementViewProp
                 <div className="min-w-0 xl:hidden">
                   <label
                     htmlFor="member-sort"
-                    className="mb-1.5 block text-xs sm:text-sm font-medium text-slate-700 truncate"
+                    className="mb-1.5 block text-xs sm:text-sm font-medium text-text-secondary truncate"
                   >
                     Urutan
                   </label>
@@ -1119,8 +1131,14 @@ export default function MemberManagementView({ scope }: MemberManagementViewProp
                 </div>
               </div>
             </Card>
-            {/* ERROR ALERT vs TABLE / LIST */}
-            {error ? (
+            {/* INACTIVE STATE vs ERROR ALERT vs TABLE / LIST */}
+            {isInactiveCompany ? (
+              <InactiveCompanyState
+                companyName={companyName}
+                description="Pengelolaan dan inspeksi data anggota ditangguhkan karena instansi ini sedang dalam status nonaktif."
+                className="mb-4"
+              />
+            ) : error ? (
               <ErrorState
                 title="Gagal Memuat Data Anggota"
                 message={error}
@@ -1139,17 +1157,17 @@ export default function MemberManagementView({ scope }: MemberManagementViewProp
                   order={sortOrder}
                   onSortChange={handleSortChange}
                   mobileBreakpoint="xl"
-                  cardGridClassName="bg-slate-50/60 p-3 sm:p-4"
+                  cardGridClassName="bg-surface-subtle/60 p-3 sm:p-4"
                   className="border-0 shadow-none rounded-none"
                   emptyState={
                     <div className="p-12 text-center">
-                      <div className="mx-auto flex h-12 w-12 items-center justify-center rounded-full bg-slate-100 text-slate-400">
+                      <div className="mx-auto flex h-12 w-12 items-center justify-center rounded-full bg-surface-muted text-text-subtle">
                         ?
                       </div>
-                      <h3 className="mt-3 text-sm font-semibold text-slate-900">
+                      <h3 className="mt-3 text-sm font-semibold text-text-main">
                         Anggota tidak ditemukan
                       </h3>
-                      <p className="mt-1 text-xs text-slate-500">
+                      <p className="mt-1 text-xs text-text-muted">
                         {search
                           ? "Coba ubah kata kunci pencarian Anda."
                           : "Belum ada data anggota yang terdaftar."}
@@ -1174,7 +1192,7 @@ export default function MemberManagementView({ scope }: MemberManagementViewProp
                     return (
                       <Card
                         key={member.id}
-                        className="p-3.5 shadow-xs transition flex flex-col justify-between h-full hover:border-slate-300"
+                        className="p-3.5 shadow-xs transition flex flex-col justify-between h-full hover:border-border"
                       >
                         <div>
                           {/* TOP */}
@@ -1184,19 +1202,19 @@ export default function MemberManagementView({ scope }: MemberManagementViewProp
                                 className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-full text-sm font-bold ${
                                   isActive
                                     ? "bg-blue-50 text-blue-600"
-                                    : "bg-slate-100 text-slate-500"
+                                    : "bg-surface-muted text-text-muted"
                                 }`}
                               >
                                 {getInitial(member.name)}
                               </div>
 
                               <div className="min-w-0">
-                                <p className="text-xs font-medium text-slate-500 font-mono">
+                                <p className="text-xs font-medium text-text-muted font-mono">
                                   {member.memberNumber || "-"}
                                 </p>
 
                                 <p
-                                  className="truncate text-sm font-semibold text-slate-900"
+                                  className="truncate text-sm font-semibold text-text-main"
                                   title={member.name}
                                 >
                                   {member.name}
@@ -1211,36 +1229,36 @@ export default function MemberManagementView({ scope }: MemberManagementViewProp
 
                           {/* INFORMATION */}
                           <div className="mt-3 grid grid-cols-2 gap-2">
-                            <div className="rounded-lg border border-slate-100 bg-slate-50 px-3 py-2">
-                              <p className="text-[11px] font-semibold uppercase tracking-wide text-slate-500">
+                            <div className="rounded-lg border border-border-subtle bg-surface-subtle px-3 py-2">
+                              <p className="text-[11px] font-semibold uppercase tracking-wide text-text-muted">
                                 NIK
                               </p>
                               <p
-                                className="mt-0.5 truncate text-xs font-medium text-slate-700 font-mono"
+                                className="mt-0.5 truncate text-xs font-medium text-text-secondary font-mono"
                                 title={maskNik(member.identityNumber)}
                               >
                                 {maskNik(member.identityNumber)}
                               </p>
                             </div>
 
-                            <div className="rounded-lg border border-slate-100 bg-slate-50 px-3 py-2">
-                              <p className="text-[11px] font-semibold uppercase tracking-wide text-slate-500">
+                            <div className="rounded-lg border border-border-subtle bg-surface-subtle px-3 py-2">
+                              <p className="text-[11px] font-semibold uppercase tracking-wide text-text-muted">
                                 No. HP
                               </p>
                               <p
-                                className="mt-0.5 truncate text-xs font-medium text-slate-700"
+                                className="mt-0.5 truncate text-xs font-medium text-text-secondary"
                                 title={member.phone || "-"}
                               >
                                 {member.phone || "-"}
                               </p>
                             </div>
 
-                            <div className="col-span-2 rounded-lg border border-slate-100 bg-slate-50 px-3 py-2">
-                              <p className="text-[11px] font-semibold uppercase tracking-wide text-slate-500">
+                            <div className="col-span-2 rounded-lg border border-border-subtle bg-surface-subtle px-3 py-2">
+                              <p className="text-[11px] font-semibold uppercase tracking-wide text-text-muted">
                                 Email
                               </p>
                               <p
-                                className="mt-0.5 truncate text-xs font-medium text-slate-700"
+                                className="mt-0.5 truncate text-xs font-medium text-text-secondary"
                                 title={member.email || "-"}
                               >
                                 {member.email || "-"}
@@ -1250,8 +1268,8 @@ export default function MemberManagementView({ scope }: MemberManagementViewProp
                         </div>
 
                         {/* BOTTOM ACTIONS */}
-                        <div className="mt-3.5 flex items-center justify-between border-t border-slate-100 pt-2.5">
-                          <span className="text-xs font-medium text-slate-500">
+                        <div className="mt-3.5 flex items-center justify-between border-t border-border-subtle pt-2.5">
+                          <span className="text-xs font-medium text-text-muted">
                             Pilihan Aksi
                           </span>
                           <RowActions actions={getMemberActions(member)} />
@@ -1303,28 +1321,6 @@ export default function MemberManagementView({ scope }: MemberManagementViewProp
               }}
               placeholder="Contoh: Ahmad Dahlan"
               error={formErrors.name}
-            />
-
-            <Input
-              id="input-member-number"
-              label="Nomor Anggota"
-              required
-              type="text"
-              value={memberNumber}
-              disabled={editingMember !== null}
-              onChange={(e) => {
-                setMemberNumber(e.target.value);
-                if (formErrors.memberNumber) {
-                  setFormErrors((prev) => ({ ...prev, memberNumber: "" }));
-                }
-              }}
-              placeholder="Contoh: MBR-001 (Wajib diisi)"
-              error={formErrors.memberNumber}
-              helperText={
-                editingMember
-                  ? "Nomor anggota tidak dapat diubah setelah dibuat."
-                  : undefined
-              }
             />
 
             <Input
@@ -1411,15 +1407,15 @@ export default function MemberManagementView({ scope }: MemberManagementViewProp
                 </div>
               )}
 
-              <div className="flex items-center gap-3.5 border-b border-slate-100 pb-4">
+              <div className="flex items-center gap-3.5 border-b border-border-subtle pb-4">
                 <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-full bg-blue-100 text-base font-bold text-blue-700">
                   {getInitial(detailMember.name)}
                 </div>
                 <div className="min-w-0 flex-1">
-                  <p className="font-mono text-xs font-medium text-slate-500">
+                  <p className="font-mono text-xs font-medium text-text-muted">
                     {detailMember.memberNumber || "-"}
                   </p>
-                  <h3 className="truncate text-lg font-bold text-slate-900">
+                  <h3 className="truncate text-lg font-bold text-text-main">
                     {detailMember.name}
                   </h3>
                   <div className="mt-1">
@@ -1431,64 +1427,64 @@ export default function MemberManagementView({ scope }: MemberManagementViewProp
               </div>
 
               <div className="grid gap-3 sm:grid-cols-2">
-                <div className="rounded-xl border border-slate-200 bg-white px-4 py-3">
-                  <p className="text-[11px] font-semibold uppercase tracking-wide text-slate-500">
+                <div className="rounded-xl border border-border bg-surface px-4 py-3">
+                  <p className="text-[11px] font-semibold uppercase tracking-wide text-text-muted">
                     Nama Lengkap
                   </p>
-                  <p className="mt-1 text-sm font-semibold text-slate-800">
+                  <p className="mt-1 text-sm font-semibold text-text-main">
                     {detailMember.name}
                   </p>
                 </div>
 
-                <div className="rounded-xl border border-slate-200 bg-white px-4 py-3">
-                  <p className="text-[11px] font-semibold uppercase tracking-wide text-slate-500">
+                <div className="rounded-xl border border-border bg-surface px-4 py-3">
+                  <p className="text-[11px] font-semibold uppercase tracking-wide text-text-muted">
                     Nomor Anggota
                   </p>
-                  <p className="mt-1 font-mono text-sm font-semibold text-slate-800">
+                  <p className="mt-1 font-mono text-sm font-semibold text-text-main">
                     {detailMember.memberNumber || "-"}
                   </p>
                 </div>
 
-                <div className="rounded-xl border border-slate-200 bg-white px-4 py-3">
-                  <p className="text-[11px] font-semibold uppercase tracking-wide text-slate-500">
+                <div className="rounded-xl border border-border bg-surface px-4 py-3">
+                  <p className="text-[11px] font-semibold uppercase tracking-wide text-text-muted">
                     NIK
                   </p>
-                  <p className="mt-1 font-mono text-sm font-semibold text-slate-800">
+                  <p className="mt-1 font-mono text-sm font-semibold text-text-main">
                     {canManage
                       ? detailMember.identityNumber || "-"
                       : maskNik(detailMember.identityNumber)}
                   </p>
                 </div>
 
-                <div className="rounded-xl border border-slate-200 bg-white px-4 py-3">
-                  <p className="text-[11px] font-semibold uppercase tracking-wide text-slate-500">
+                <div className="rounded-xl border border-border bg-surface px-4 py-3">
+                  <p className="text-[11px] font-semibold uppercase tracking-wide text-text-muted">
                     Nomor HP
                   </p>
-                  <p className="mt-1 text-sm font-semibold text-slate-800">
+                  <p className="mt-1 text-sm font-semibold text-text-main">
                     {detailMember.phone || "-"}
                   </p>
                 </div>
 
-                <div className="rounded-xl border border-slate-200 bg-white px-4 py-3 sm:col-span-2">
-                  <p className="text-[11px] font-semibold uppercase tracking-wide text-slate-500">
+                <div className="rounded-xl border border-border bg-surface px-4 py-3 sm:col-span-2">
+                  <p className="text-[11px] font-semibold uppercase tracking-wide text-text-muted">
                     Email
                   </p>
-                  <p className="mt-1 truncate text-sm font-semibold text-slate-800">
+                  <p className="mt-1 truncate text-sm font-semibold text-text-main">
                     {detailMember.email || "-"}
                   </p>
                 </div>
 
-                <div className="rounded-xl border border-slate-200 bg-white px-4 py-3">
-                  <p className="text-[11px] font-semibold uppercase tracking-wide text-slate-500">
+                <div className="rounded-xl border border-border bg-surface px-4 py-3">
+                  <p className="text-[11px] font-semibold uppercase tracking-wide text-text-muted">
                     Tipe Anggota
                   </p>
-                  <p className="mt-1 text-sm font-semibold text-slate-800">
+                  <p className="mt-1 text-sm font-semibold text-text-main">
                     {detailMember.memberType || "Umum"}
                   </p>
                 </div>
 
-                <div className="rounded-xl border border-slate-200 bg-white px-4 py-3">
-                  <p className="text-[11px] font-semibold uppercase tracking-wide text-slate-500">
+                <div className="rounded-xl border border-border bg-surface px-4 py-3">
+                  <p className="text-[11px] font-semibold uppercase tracking-wide text-text-muted">
                     Status
                   </p>
                   <div className="mt-1">
@@ -1498,17 +1494,17 @@ export default function MemberManagementView({ scope }: MemberManagementViewProp
                   </div>
                 </div>
 
-                <div className="rounded-xl border border-slate-200 bg-white px-4 py-3 sm:col-span-2">
-                  <p className="text-[11px] font-semibold uppercase tracking-wide text-slate-500">
+                <div className="rounded-xl border border-border bg-surface px-4 py-3 sm:col-span-2">
+                  <p className="text-[11px] font-semibold uppercase tracking-wide text-text-muted">
                     Bergabung Pada
                   </p>
-                  <p className="mt-1 text-sm font-semibold text-slate-800">
+                  <p className="mt-1 text-sm font-semibold text-text-main">
                     {formatDate(detailMember.createdAt)}
                   </p>
                 </div>
               </div>
 
-              <div className="flex flex-col-reverse sm:flex-row sm:justify-end gap-2 border-t border-slate-200 pt-4">
+              <div className="flex flex-col-reverse sm:flex-row sm:justify-end gap-2 border-t border-border pt-4">
                 <Button
                   type="button"
                   variant="secondary"

@@ -62,13 +62,13 @@ export default function Button({
       "bg-brand text-white hover:bg-brand-strong",
 
     secondary:
-      "border border-app-border bg-app-surface text-app-text-muted hover:bg-neutral-surface",
+      "border border-border bg-surface text-text-muted hover:bg-surface-muted",
 
     destructive:
       "bg-danger text-white hover:bg-danger-strong",
 
     ghost:
-      "bg-transparent text-app-text-muted hover:bg-neutral-surface hover:text-app-text",
+      "bg-transparent text-text-muted hover:bg-surface-muted hover:text-text-main",
   };
 
   const sizeClass = {

@@ -82,7 +82,7 @@ function getOverdueDays(loan: Loan): number {
 function RemoveFilterIcon() {
   return (
     <svg
-      className="ml-1 h-3.5 w-3.5 text-slate-400 hover:text-slate-600 shrink-0 inline"
+      className="ml-1 h-3.5 w-3.5 text-text-subtle hover:text-text-secondary shrink-0 inline"
       viewBox="0 0 20 20"
       fill="currentColor"
       aria-hidden="true"
@@ -360,7 +360,7 @@ function TransactionsContent() {
         sortKey: "loanNumber",
         render: (t) => (
           <p
-            className="truncate whitespace-nowrap font-semibold tracking-tight text-slate-900 font-mono text-xs tabular-nums"
+            className="truncate whitespace-nowrap font-semibold tracking-tight text-text-main font-mono text-xs tabular-nums"
             title={t.loan.loanNumber}
           >
             {t.loan.loanNumber}
@@ -373,7 +373,7 @@ function TransactionsContent() {
         width: "120px",
         render: (t) => (
           <p
-            className="truncate text-slate-800 font-medium text-xs 2xl:text-sm"
+            className="truncate text-text-main font-medium text-xs 2xl:text-sm"
             title={t.member?.name ?? "-"}
           >
             {t.member?.name ?? "-"}
@@ -385,7 +385,7 @@ function TransactionsContent() {
         header: "Buku",
         render: (t) =>
           t.items.length === 0 ? (
-            <span className="text-slate-500">-</span>
+            <span className="text-text-muted">-</span>
           ) : (
             <ul className="min-w-0 space-y-0.5">
               {t.items.map(({ book, bookCopy }) => (
@@ -393,18 +393,18 @@ function TransactionsContent() {
                   key={`${t.loan.id}-${book?.id ?? "book"}-${bookCopy?.id ?? "copy"}`}
                   className="grid min-w-0 grid-cols-[10px_minmax(0,1fr)]"
                 >
-                  <span className="text-slate-600 select-none" aria-hidden="true">
+                  <span className="text-text-secondary select-none" aria-hidden="true">
                     &bull;
                   </span>
                   <span
-                    className="min-w-0 leading-5 text-slate-700 text-xs"
+                    className="min-w-0 leading-5 text-text-secondary text-xs"
                     title={`${book?.title ?? "-"}${bookCopy?.code ? ` (${bookCopy.code})` : ""}`}
                   >
-                    <span className="font-medium text-slate-800">
+                    <span className="font-medium text-text-main">
                       {book?.title ?? "-"}
                     </span>
                     {bookCopy?.code && (
-                      <span className="ml-1 text-slate-500 text-xs font-mono">
+                      <span className="ml-1 text-text-muted text-xs font-mono">
                         ({bookCopy.code})
                       </span>
                     )}
@@ -420,7 +420,7 @@ function TransactionsContent() {
         width: "90px",
         render: (t) => (
           <p
-            className="truncate text-slate-600 text-xs 2xl:text-sm font-medium"
+            className="truncate text-text-secondary text-xs 2xl:text-sm font-medium"
             title={t.user?.name ?? "-"}
           >
             {t.user?.name ?? "-"}
@@ -435,7 +435,7 @@ function TransactionsContent() {
         sortKey: "borrowedAt",
         isNumeric: true,
         render: (t) => (
-          <span className="whitespace-nowrap text-slate-700 tabular-nums text-xs font-medium">
+          <span className="whitespace-nowrap text-text-secondary tabular-nums text-xs font-medium">
             {formatDate(t.loan.borrowedAt)}
           </span>
         ),
@@ -448,7 +448,7 @@ function TransactionsContent() {
         sortKey: "dueAt",
         isNumeric: true,
         render: (t) => (
-          <span className="whitespace-nowrap text-slate-700 tabular-nums text-xs font-medium">
+          <span className="whitespace-nowrap text-text-secondary tabular-nums text-xs font-medium">
             {formatDate(t.loan.dueAt)}
           </span>
         ),
@@ -459,7 +459,7 @@ function TransactionsContent() {
         width: "105px",
         isNumeric: true,
         render: (t) => (
-          <span className="whitespace-nowrap text-slate-700 tabular-nums text-xs font-medium">
+          <span className="whitespace-nowrap text-text-secondary tabular-nums text-xs font-medium">
             {formatDate(t.loan.returnedAt)}
           </span>
         ),
@@ -500,7 +500,7 @@ function TransactionsContent() {
                     Denda: Menunggu konfigurasi
                   </span>
                 ) : (
-                  <span className="mt-0.5 block text-xs font-medium text-slate-500 tabular-nums whitespace-nowrap">
+                  <span className="mt-0.5 block text-xs font-medium text-text-muted tabular-nums whitespace-nowrap">
                     Denda: Rp {getLoanFine(t.loan, t.items.length)!.toLocaleString("id-ID")}
                   </span>
                 ))}
@@ -911,7 +911,7 @@ function TransactionsContent() {
   // =========================================================
 
   return (
-    <div className="min-h-screen bg-slate-50">
+    <div className="min-h-screen bg-surface-subtle">
       <div className="page-container py-5 sm:py-6">
         {/* HEADER */}
         <PageHeader
@@ -1131,7 +1131,7 @@ function TransactionsContent() {
                 variant="ghost"
                 size="sm"
                 onClick={resetFilters}
-                className="text-slate-500 hover:text-slate-900"
+                className="text-text-muted hover:text-text-main"
               >
                 <svg
                   viewBox="0 0 24 24"
@@ -1159,22 +1159,22 @@ function TransactionsContent() {
           onClose={closeFilter}
           raw
           ariaLabelledBy="filter-title"
-          overlayClassName={`fixed inset-0 z-50 overflow-hidden bg-slate-900/40 backdrop-blur-[2px] transition-opacity duration-200 ease-out ${
+          overlayClassName={`fixed inset-0 z-50 overflow-hidden bg-overlay backdrop-blur-[2px] transition-opacity duration-200 ease-out ${
             isFilterOpen ? "opacity-100" : "opacity-0"
           }`}
-          className={`fixed inset-y-0 right-0 flex h-full w-full max-w-md flex-col bg-white shadow-2xl transition-transform duration-200 ease-out ${
+          className={`fixed inset-y-0 right-0 flex h-full w-full max-w-md flex-col bg-surface shadow-2xl transition-transform duration-200 ease-out ${
             isFilterOpen ? "translate-x-0" : "translate-x-full"
           }`}
         >
-              <div className="flex items-start justify-between border-b border-slate-200 px-5 py-4 sm:px-6">
+              <div className="flex items-start justify-between border-b border-border px-5 py-4 sm:px-6">
                 <div>
                   <h2
                     id="filter-title"
-                    className="text-lg font-semibold tracking-tight text-slate-900"
+                    className="text-lg font-semibold tracking-tight text-text-main"
                   >
                     Filter Transaksi
                   </h2>
-                  <p className="mt-1 text-sm leading-5 text-slate-500">
+                  <p className="mt-1 text-sm leading-5 text-text-muted">
                     Filter berdasarkan rentang tanggal peminjaman dan status.
                   </p>
                 </div>
@@ -1185,7 +1185,7 @@ function TransactionsContent() {
                   size="sm"
                   onClick={closeFilter}
                   aria-label="Tutup filter"
-                  className="min-h-[32px] min-w-[32px] p-2 text-slate-500 hover:bg-slate-100 hover:text-slate-900"
+                  className="min-h-[32px] min-w-[32px] p-2 text-text-muted hover:bg-surface-muted hover:text-text-main"
                 >
                   <svg
                     viewBox="0 0 24 24"
@@ -1206,7 +1206,7 @@ function TransactionsContent() {
               <div className="flex-1 overflow-y-auto px-5 py-5 sm:px-6 sm:py-6">
                 {/* STATUS FILTER */}
                 <section>
-                  <h3 className="text-sm font-semibold text-slate-900">
+                  <h3 className="text-sm font-semibold text-text-main">
                     Status Transaksi
                   </h3>
 
@@ -1231,14 +1231,14 @@ function TransactionsContent() {
                   </div>
                 </section>
 
-                <div className="my-6 border-t border-slate-100" />
+                <div className="my-6 border-t border-border-subtle" />
 
                 {/* RENTANG TANGGAL PEMINJAMAN */}
                 <section>
-                  <h3 className="text-sm font-semibold text-slate-900">
+                  <h3 className="text-sm font-semibold text-text-main">
                     Rentang Tanggal Pinjam
                   </h3>
-                  <p className="mt-1 text-sm text-slate-500">
+                  <p className="mt-1 text-sm text-text-muted">
                     Filter transaksi berdasarkan tanggal peminjaman buku (borrowedAt).
                   </p>
 
@@ -1273,14 +1273,14 @@ function TransactionsContent() {
                   </div>
                 </section>
 
-                <div className="my-6 border-t border-slate-100" />
+                <div className="my-6 border-t border-border-subtle" />
 
                 {/* RENTANG TANGGAL JATUH TEMPO */}
                 <section>
-                  <h3 className="text-sm font-semibold text-slate-900">
+                  <h3 className="text-sm font-semibold text-text-main">
                     Rentang Tanggal Jatuh Tempo
                   </h3>
-                  <p className="mt-1 text-sm text-slate-500">
+                  <p className="mt-1 text-sm text-text-muted">
                     Filter transaksi berdasarkan batas waktu jatuh tempo pengembalian.
                   </p>
 
@@ -1315,14 +1315,14 @@ function TransactionsContent() {
                   </div>
                 </section>
 
-                <div className="my-6 border-t border-slate-100" />
+                <div className="my-6 border-t border-border-subtle" />
 
                 {/* RENTANG TANGGAL PENGEMBALIAN */}
                 <section>
-                  <h3 className="text-sm font-semibold text-slate-900">
+                  <h3 className="text-sm font-semibold text-text-main">
                     Rentang Tanggal Pengembalian
                   </h3>
-                  <p className="mt-1 text-sm text-slate-500">
+                  <p className="mt-1 text-sm text-text-muted">
                     Filter transaksi berdasarkan tanggal pengembalian buku.
                   </p>
 
@@ -1358,7 +1358,7 @@ function TransactionsContent() {
                 </section>
               </div>
 
-              <div className="border-t border-slate-200 bg-white px-5 py-4 sm:px-6">
+              <div className="border-t border-border bg-surface px-5 py-4 sm:px-6">
                 <div className="flex gap-2.5 sm:gap-3">
                   <Button
                     type="button"
@@ -1387,24 +1387,24 @@ function TransactionsContent() {
           raw
           size="md"
           ariaLabelledBy="export-title"
-          overlayClassName={`fixed inset-0 z-50 flex min-h-full items-center justify-center p-4 overflow-y-auto bg-slate-900/40 backdrop-blur-[2px] transition-opacity duration-200 ease-out ${
+          overlayClassName={`fixed inset-0 z-50 flex min-h-full items-center justify-center p-4 overflow-y-auto bg-overlay backdrop-blur-[2px] transition-opacity duration-200 ease-out ${
             isExportOpen ? "opacity-100" : "opacity-0"
           }`}
-          className={`w-full max-w-md rounded-xl bg-white shadow-2xl transition-all duration-200 ease-out ${
+          className={`w-full max-w-md rounded-xl bg-surface shadow-2xl transition-all duration-200 ease-out ${
             isExportOpen
               ? "opacity-100 scale-100 translate-y-0"
               : "opacity-0 scale-95 translate-y-2"
           }`}
         >
-                <div className="flex items-start justify-between border-b border-slate-200 px-5 py-4 sm:px-6">
+                <div className="flex items-start justify-between border-b border-border px-5 py-4 sm:px-6">
                   <div>
                     <h2
                       id="export-title"
-                      className="text-lg font-semibold tracking-tight text-slate-900"
+                      className="text-lg font-semibold tracking-tight text-text-main"
                     >
                       Ekspor Excel
                     </h2>
-                    <p className="mt-1 text-sm leading-5 text-slate-500">
+                    <p className="mt-1 text-sm leading-5 text-text-muted">
                       Pilih periode transaksi yang ingin diekspor.
                     </p>
                   </div>
@@ -1415,7 +1415,7 @@ function TransactionsContent() {
                     size="sm"
                     onClick={closeExport}
                     aria-label="Tutup ekspor"
-                    className="min-h-[32px] min-w-[32px] p-2 text-slate-500 hover:bg-slate-100 hover:text-slate-900"
+                    className="min-h-[32px] min-w-[32px] p-2 text-text-muted hover:bg-surface-muted hover:text-text-main"
                   >
                     <svg
                       viewBox="0 0 24 24"
@@ -1454,18 +1454,18 @@ function TransactionsContent() {
                             "w-full h-auto flex items-center justify-start gap-3 rounded-lg border px-4 py-3 text-left text-sm font-normal transition",
                             selected
                               ? "border-blue-600 bg-blue-50 text-blue-700"
-                              : "border-slate-200 bg-white text-slate-700 hover:border-slate-300 hover:bg-slate-50",
+                              : "border-border bg-surface text-text-secondary hover:border-border hover:bg-surface-subtle",
                           ].join(" ")}
                         >
                           <span
                             className={`flex h-4 w-4 shrink-0 items-center justify-center rounded-full border ${
                               selected
                                 ? "border-blue-600 bg-blue-600 text-white"
-                                : "border-slate-300 bg-white"
+                                : "border-border bg-surface"
                             }`}
                           >
                             {selected && (
-                              <span className="h-1.5 w-1.5 rounded-full bg-white" />
+                              <span className="h-1.5 w-1.5 rounded-full bg-surface" />
                             )}
                           </span>
                           <span className="font-medium">{option.label}</span>
@@ -1493,7 +1493,7 @@ function TransactionsContent() {
                   )}
                 </div>
 
-                <div className="border-t border-slate-200 bg-slate-50/70 px-5 py-4 sm:px-6">
+                <div className="border-t border-border bg-surface-subtle px-5 py-4 sm:px-6">
                   <div className="flex justify-end gap-2.5">
                     <Button
                       type="button"
@@ -1540,7 +1540,7 @@ function TransactionsContent() {
                   transaction.loan.status === "OVERDUE" || overdueDays > 0;
                 return isOverdue
                   ? "border-l-4 border-l-red-500 bg-red-50/35 hover:bg-red-50/60"
-                  : "hover:bg-slate-50/70";
+                  : "hover:bg-surface-subtle";
               }}
               emptyState={
                 <Card className="p-4 sm:p-5">
@@ -1569,7 +1569,7 @@ function TransactionsContent() {
                     className={`p-3.5 sm:p-4 shadow-xs transition flex flex-col justify-between h-full ${
                       isOverdue
                         ? "border-l-4 border-l-red-500 border-red-200 bg-red-50/20"
-                        : "hover:border-slate-300"
+                        : "hover:border-border"
                     }`}
                   >
                     <div>
@@ -1577,14 +1577,14 @@ function TransactionsContent() {
                       <div className="flex items-start justify-between gap-2.5">
                         <div className="min-w-0 flex-1">
                           <p
-                            className="truncate text-sm font-bold tracking-tight text-slate-900 sm:text-base font-mono tabular-nums"
+                            className="truncate text-sm font-bold tracking-tight text-text-main sm:text-base font-mono tabular-nums"
                             title={transaction.loan.loanNumber}
                           >
                             {transaction.loan.loanNumber}
                           </p>
 
                           <p
-                            className="mt-0.5 truncate text-xs text-slate-600 sm:text-sm font-medium"
+                            className="mt-0.5 truncate text-xs text-text-secondary sm:text-sm font-medium"
                             title={transaction.member?.name ?? "-"}
                           >
                             {transaction.member?.name ?? "-"}
@@ -1622,7 +1622,7 @@ function TransactionsContent() {
                                     Denda: Menunggu konfigurasi
                                   </span>
                                 ) : (
-                                  <span className="mt-0.5 block text-xs font-medium text-slate-500 tabular-nums">
+                                  <span className="mt-0.5 block text-xs font-medium text-text-muted tabular-nums">
                                     Denda: Rp {getLoanFine(transaction.loan, transaction.items.length)!.toLocaleString("id-ID")}
                                   </span>
                                 )
@@ -1633,15 +1633,15 @@ function TransactionsContent() {
                       </div>
 
                       {/* BUKU */}
-                      <div className="mt-2.5 rounded-lg bg-slate-50 px-3 py-2">
-                        <p className="text-xs font-semibold text-slate-500">
+                      <div className="mt-2.5 rounded-lg bg-surface-subtle px-3 py-2">
+                        <p className="text-xs font-semibold text-text-muted">
                           Buku Dipinjam ({transaction.items.length})
                         </p>
 
                         {transaction.items.length === 0 ? (
-                          <p className="mt-0.5 text-xs text-slate-900">-</p>
+                          <p className="mt-0.5 text-xs text-text-main">-</p>
                         ) : (
-                          <ul className="mt-1 space-y-0.5 text-xs text-slate-900 sm:text-sm">
+                          <ul className="mt-1 space-y-0.5 text-xs text-text-main sm:text-sm">
                             {transaction.items.map(({ book, bookCopy }) => (
                               <li
                                 key={`${transaction.loan.id}-${book?.id ?? "book"}-${bookCopy?.id ?? "copy"}`}
@@ -1649,17 +1649,17 @@ function TransactionsContent() {
                               >
                                 <span
                                   aria-hidden="true"
-                                  className="mr-1.5 text-slate-600 select-none"
+                                  className="mr-1.5 text-text-secondary select-none"
                                 >
                                   &bull;
                                 </span>
 
-                                <span className="font-medium text-slate-800">
+                                <span className="font-medium text-text-main">
                                   {book?.title ?? "-"}
                                 </span>
 
                                 {bookCopy?.code && (
-                                  <span className="ml-1.5 font-mono text-xs text-slate-500">
+                                  <span className="ml-1.5 font-mono text-xs text-text-muted">
                                     ({bookCopy.code})
                                   </span>
                                 )}
@@ -1671,49 +1671,49 @@ function TransactionsContent() {
                     </div>
 
                     {/* DATES & PETUGAS GRID (2x2 Grid) */}
-                    <div className="mt-3 grid grid-cols-2 gap-2 border-t border-slate-100 pt-2.5 text-xs">
-                      <div className="rounded-lg border border-slate-100 bg-slate-50/70 px-2.5 py-1.5">
-                        <span className="text-[11px] font-semibold uppercase tracking-wide text-slate-500 block">
+                    <div className="mt-3 grid grid-cols-2 gap-2 border-t border-border-subtle pt-2.5 text-xs">
+                      <div className="rounded-lg border border-border-subtle bg-surface-subtle px-2.5 py-1.5">
+                        <span className="text-[11px] font-semibold uppercase tracking-wide text-text-muted block">
                           Petugas
                         </span>
                         <p
-                          className="mt-0.5 truncate font-semibold text-slate-700"
+                          className="mt-0.5 truncate font-semibold text-text-secondary"
                           title={transaction.user?.name ?? "-"}
                         >
                           {transaction.user?.name ?? "-"}
                         </p>
                       </div>
 
-                      <div className="rounded-lg border border-slate-100 bg-slate-50/70 px-2.5 py-1.5">
-                        <span className="text-[11px] font-semibold uppercase tracking-wide text-slate-500 block">
+                      <div className="rounded-lg border border-border-subtle bg-surface-subtle px-2.5 py-1.5">
+                        <span className="text-[11px] font-semibold uppercase tracking-wide text-text-muted block">
                           Pinjam
                         </span>
                         <p
-                          className="mt-0.5 truncate font-semibold text-slate-700 tabular-nums"
+                          className="mt-0.5 truncate font-semibold text-text-secondary tabular-nums"
                           title={formatDate(transaction.loan.borrowedAt)}
                         >
                           {formatDate(transaction.loan.borrowedAt)}
                         </p>
                       </div>
 
-                      <div className="rounded-lg border border-slate-100 bg-slate-50/70 px-2.5 py-1.5">
-                        <span className="text-[11px] font-semibold uppercase tracking-wide text-slate-500 block">
+                      <div className="rounded-lg border border-border-subtle bg-surface-subtle px-2.5 py-1.5">
+                        <span className="text-[11px] font-semibold uppercase tracking-wide text-text-muted block">
                           Jatuh Tempo
                         </span>
                         <p
-                          className="mt-0.5 truncate font-semibold text-slate-700 tabular-nums"
+                          className="mt-0.5 truncate font-semibold text-text-secondary tabular-nums"
                           title={formatDate(transaction.loan.dueAt)}
                         >
                           {formatDate(transaction.loan.dueAt)}
                         </p>
                       </div>
 
-                      <div className="rounded-lg border border-slate-100 bg-slate-50/70 px-2.5 py-1.5">
-                        <span className="text-[11px] font-semibold uppercase tracking-wide text-slate-500 block">
+                      <div className="rounded-lg border border-border-subtle bg-surface-subtle px-2.5 py-1.5">
+                        <span className="text-[11px] font-semibold uppercase tracking-wide text-text-muted block">
                           Pengembalian
                         </span>
                         <p
-                          className="mt-0.5 truncate font-semibold text-slate-700 tabular-nums"
+                          className="mt-0.5 truncate font-semibold text-text-secondary tabular-nums"
                           title={formatDate(transaction.loan.returnedAt)}
                         >
                           {formatDate(transaction.loan.returnedAt)}
@@ -1722,8 +1722,8 @@ function TransactionsContent() {
                     </div>
 
                     {/* AKSI BARIS (MOBILE / TABLET) */}
-                    <div className="mt-3 flex items-center justify-between border-t border-slate-100 pt-2.5">
-                      <span className="text-xs font-medium text-slate-600">Pilihan Aksi</span>
+                    <div className="mt-3 flex items-center justify-between border-t border-border-subtle pt-2.5">
+                      <span className="text-xs font-medium text-text-secondary">Pilihan Aksi</span>
                       <RowActions
                         actions={[
                           ...(canReturn && transaction.loan.status !== "COMPLETED"
@@ -1765,7 +1765,7 @@ function TransactionsContent() {
             {/* PAGINATION */}
             {transactions.length > 0 && (
               <div className="mt-4">
-                <div className="rounded-xl border border-slate-200 bg-white shadow-2xs">
+                <div className="rounded-xl border border-border bg-surface shadow-2xs">
                   <Pagination
                     currentPage={page}
                     totalPages={totalPages}
@@ -1792,7 +1792,7 @@ export default function TransactionsPage() {
   return (
     <Suspense
       fallback={
-        <div className="min-h-screen bg-slate-50">
+        <div className="min-h-screen bg-surface-subtle">
           <LoadingState label="Memuat riwayat transaksi..." />
         </div>
       }

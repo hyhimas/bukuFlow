@@ -23,6 +23,8 @@ import {
 
 import Sidebar from "@/components/ui/Sidebar";
 import ConfirmationDialog from "@/components/ui/ConfirmationDialog";
+import ThemeSwitcher from "@/components/ui/ThemeSwitcher";
+import { useTheme } from "@/context/ThemeContext";
 import LoadingState from "@/components/ui/LoadingState";
 import Button from "@/components/ui/Button";
 import Modal from "@/components/ui/Modal";
@@ -82,6 +84,7 @@ function getPageTitle(pathname: string): string {
 }
 
 export default function AppShell({ children }: AppShellProps) {
+  useTheme();
   const pathname = usePathname();
   const router = useRouter();
   const isLoginPage = pathname === "/login";
@@ -412,7 +415,7 @@ export default function AppShell({ children }: AppShellProps) {
       : "Staf";
 
   return (
-    <div className="min-h-screen bg-slate-50 flex">
+    <div className="min-h-screen bg-canvas text-text-main flex">
       {/* SIDEBAR: Di desktop (lg+) full-height di kiri; di mobile (<lg) berupa drawer overlay */}
       <Sidebar
         open={sidebarOpen}
@@ -425,7 +428,7 @@ export default function AppShell({ children }: AppShellProps) {
       {/* SISI KANAN: HEADER & KONTEN UTAMA */}
       <div className="flex-1 flex flex-col min-w-0">
         {/* HEADER UTAMA */}
-        <header className="print:hidden sticky top-0 z-30 flex h-16 items-center justify-between border-b border-slate-200 bg-white/95 backdrop-blur-sm px-4 sm:px-6">
+        <header className="print:hidden sticky top-0 z-30 flex h-16 items-center justify-between border-b border-border bg-surface/95 backdrop-blur-sm px-4 sm:px-6">
           {/* Sisi Kiri: Menu Hamburger (hanya di mobile) & Judul Halaman */}
           <div className="flex items-center gap-2.5 sm:gap-3 min-w-0">
             {isMobile && (
@@ -437,7 +440,7 @@ export default function AppShell({ children }: AppShellProps) {
                   aria-label="Buka menu navigasi"
                   aria-expanded={sidebarOpen}
                   aria-controls="app-sidebar"
-                  className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg border border-slate-200 bg-white text-slate-700 shadow-xs transition hover:bg-slate-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-slate-400"
+                  className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg border border-border bg-surface text-text-secondary shadow-xs transition hover:bg-surface-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-slate-400"
                 >
                   <MenuIcon />
                 </button>
@@ -454,15 +457,20 @@ export default function AppShell({ children }: AppShellProps) {
                   <img
                     src="/logo.png"
                     alt="BukuFlow Logo"
-                    className="h-8 w-auto object-contain hidden sm:block"
+                    className="h-8 w-auto object-contain hidden sm:inline-block dark:sm:hidden"
+                  />
+                  <img
+                    src="/logo-dark.png"
+                    alt="BukuFlow Logo"
+                    className="h-8 w-auto object-contain hidden dark:sm:inline-block"
                   />
                 </Link>
 
-                <div className="h-5 w-px bg-slate-200 mx-0.5 sm:mx-1" />
+                <div className="h-5 w-px bg-border mx-0.5 sm:mx-1" />
               </>
             )}
 
-            <h1 className="text-base sm:text-lg font-bold text-slate-900 tracking-tight truncate">
+            <h1 className="text-base sm:text-lg font-bold text-text-main tracking-tight truncate">
               {pageTitle}
             </h1>
           </div>
@@ -498,6 +506,8 @@ export default function AppShell({ children }: AppShellProps) {
             </div>
           )}
 
+          <ThemeSwitcher />
+
           {/* Menu User (Profil, Keluar) */}
           {currentSession?.user && (
             <div className="relative" ref={userMenuRef}>
@@ -507,23 +517,23 @@ export default function AppShell({ children }: AppShellProps) {
                 aria-expanded={userMenuOpen}
                 aria-haspopup="menu"
                 aria-label={`${userInitials} ${currentSession.user.name} ${roleLabel}, Menu pengguna`}
-                className="flex items-center gap-2 rounded-xl border border-slate-200 bg-white p-1.5 sm:px-2.5 sm:py-1.5 text-left text-xs font-medium text-slate-700 shadow-xs transition hover:bg-slate-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500"
+                className="flex items-center gap-2 rounded-xl border border-border bg-surface p-1.5 sm:px-2.5 sm:py-1.5 text-left text-xs font-medium text-text-secondary shadow-xs transition hover:bg-surface-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500"
               >
                 <div className="flex h-7 w-7 shrink-0 items-center justify-center rounded-lg bg-blue-600 font-bold text-white text-xs shadow-xs">
                   {userInitials}
                 </div>
                 {" "}
                 <div className="hidden md:block max-w-[120px] truncate text-left">
-                  <p className="truncate font-semibold text-slate-800 leading-tight">
+                  <p className="truncate font-semibold text-text-main leading-tight">
                     {currentSession?.user.name}
                     {" "}
                   </p>
-                  <p className="truncate text-xs text-slate-500 font-normal">
+                  <p className="truncate text-xs text-text-muted font-normal">
                     {roleLabel}
                   </p>
                 </div>
                 <svg
-                  className={`h-4 w-4 text-slate-400 transition-transform ${
+                  className={`h-4 w-4 text-text-subtle transition-transform ${
                     userMenuOpen ? "rotate-180" : ""
                   }`}
                   viewBox="0 0 20 20"
@@ -542,13 +552,13 @@ export default function AppShell({ children }: AppShellProps) {
                 <div
                   role="menu"
                   aria-label="Pilihan pengguna"
-                  className="absolute right-0 mt-1.5 w-56 rounded-xl border border-slate-200 bg-white p-1.5 shadow-xl ring-1 ring-black/5 z-50 animate-in fade-in-50 zoom-in-95"
+                  className="absolute right-0 mt-1.5 w-56 rounded-xl border border-border bg-surface p-1.5 shadow-dropdown z-50 animate-in fade-in-50 zoom-in-95"
                 >
-                  <div className="px-3 py-2 border-b border-slate-100">
-                    <p className="text-xs font-semibold text-slate-900 truncate">
+                  <div className="px-3 py-2 border-b border-border-subtle">
+                    <p className="text-xs font-semibold text-text-main truncate">
                       {currentSession?.user.name}
                     </p>
-                    <p className="text-xs text-slate-500 truncate">
+                    <p className="text-xs text-text-muted truncate">
                       {currentSession?.user.email}
                     </p>
                     <p className="mt-1 inline-block text-xs font-medium text-blue-700 bg-blue-50 px-2 py-0.5 rounded">
@@ -561,10 +571,10 @@ export default function AppShell({ children }: AppShellProps) {
                       href="/profile"
                       role="menuitem"
                       onClick={() => setUserMenuOpen(false)}
-                      className="flex w-full items-center gap-2 rounded-lg px-3 py-2 text-xs font-medium text-slate-700 hover:bg-slate-50 hover:text-slate-900 transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500"
+                      className="flex w-full items-center gap-2 rounded-lg px-3 py-2 text-xs font-medium text-text-secondary hover:bg-surface-muted hover:text-text-main transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500"
                     >
                       <svg
-                        className="h-4 w-4 text-slate-400"
+                        className="h-4 w-4 text-text-subtle"
                         viewBox="0 0 24 24"
                         fill="none"
                         stroke="currentColor"
@@ -632,8 +642,8 @@ export default function AppShell({ children }: AppShellProps) {
             onClick={() => setShowReloginModal(true)}
             className={`ml-2 shrink-0 rounded-lg border px-2.5 py-1 text-xs font-semibold shadow-xs transition focus-visible:outline-none focus-visible:ring-2 ${
               isCritical
-                ? "border-red-300 bg-white text-red-800 hover:bg-red-50 focus-visible:ring-red-500"
-                : "border-amber-300 bg-white text-amber-900 hover:bg-amber-50 focus-visible:ring-amber-500"
+                ? "border-danger-border bg-surface text-danger-text hover:bg-danger-soft focus-visible:ring-danger"
+                : "border-warning-border bg-surface text-warning-text hover:bg-warning-soft focus-visible:ring-warning"
             }`}
           >
             Perpanjang
@@ -665,11 +675,11 @@ export default function AppShell({ children }: AppShellProps) {
             <LockIcon />
           </div>
 
-          <h3 className="text-lg font-bold text-slate-900 sm:text-xl">
+          <h3 className="text-lg font-bold text-text-main sm:text-xl">
             Sesi Anda telah berakhir
           </h3>
 
-          <p className="mt-2 text-sm text-slate-500 leading-relaxed">
+          <p className="mt-2 text-sm text-text-muted leading-relaxed">
             Sesi Anda berakhir karena batas waktu. Silakan masuk kembali untuk melanjutkan.
           </p>
 
@@ -704,7 +714,7 @@ export default function AppShell({ children }: AppShellProps) {
       >
         <form onSubmit={handleReloginSubmit} className="space-y-4">
           <div>
-            <label htmlFor="relogin-password" className="block text-xs font-semibold text-slate-700">
+            <label htmlFor="relogin-password" className="block text-xs font-semibold text-text-secondary">
               Password
             </label>
             <input
@@ -715,7 +725,7 @@ export default function AppShell({ children }: AppShellProps) {
               placeholder="Masukkan password Anda"
               required
               autoFocus
-              className="mt-1.5 w-full h-11 rounded-lg border border-slate-300 px-3.5 text-sm transition focus:border-blue-500 focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 focus-visible:border-blue-500"
+              className="mt-1.5 w-full h-11 rounded-lg border border-border px-3.5 text-sm transition focus:border-blue-500 focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 focus-visible:border-blue-500"
             />
           </div>
 

@@ -296,12 +296,14 @@ function DashboardStatCard({
   value,
   icon,
   variant = "default",
+  href,
   className = "",
 }: {
   label: string;
   value?: number | string | null;
   icon: React.ReactNode;
   variant?: "default" | "danger";
+  href?: string;
   className?: string;
 }) {
   const isMissing =
@@ -309,10 +311,17 @@ function DashboardStatCard({
     value === null ||
     (typeof value === "number" && !Number.isFinite(value));
   const isDanger = !isMissing && variant === "danger" && typeof value === "number" && value > 0;
+  const isInteractive = Boolean(href && !isMissing);
 
-  return (
+  const cardElement = (
     <Card
-      className={`p-5 ${
+      className={`p-5 transition-all duration-200 ${
+        isInteractive
+          ? isDanger
+            ? "cursor-pointer hover:border-red-400 hover:shadow-md active:scale-[0.99]"
+            : "cursor-pointer hover:border-blue-300 hover:shadow-md active:scale-[0.99]"
+          : "cursor-default"
+      } ${
         isDanger
           ? "border-red-200 bg-red-50/25"
           : ""
@@ -320,15 +329,15 @@ function DashboardStatCard({
     >
       <div className="flex items-center justify-between gap-4">
         <div>
-          <p className="text-sm text-slate-500">{label}</p>
+          <p className="text-sm text-text-muted">{label}</p>
           {isMissing ? (
-            <p className="mt-2 text-2xl font-normal text-slate-500">
+            <p className="mt-2 text-2xl font-normal text-text-muted">
               Gagal memuat
             </p>
           ) : (
             <p
               className={`mt-2 text-3xl font-bold ${
-                isDanger ? "text-red-600" : "text-slate-900"
+                isDanger ? "text-red-600" : "text-text-main"
               }`}
             >
               {value}
@@ -337,12 +346,16 @@ function DashboardStatCard({
         </div>
 
         <div
-          className={`flex h-11 w-11 shrink-0 items-center justify-center rounded-xl ${
+          className={`flex h-11 w-11 shrink-0 items-center justify-center rounded-xl transition-colors duration-200 ${
             isDanger
-              ? "bg-red-100 text-red-600"
+              ? isInteractive
+                ? "bg-red-100 text-red-600 group-hover:bg-red-200/80"
+                : "bg-red-100 text-red-600"
               : isMissing
-              ? "bg-amber-50 text-amber-600"
-              : "bg-blue-50 text-blue-600"
+              ? "bg-warning-soft text-warning-text"
+              : isInteractive
+              ? "bg-brand-soft text-brand-text group-hover:bg-blue-100"
+              : "bg-brand-soft text-brand-text"
           }`}
         >
           {icon}
@@ -350,6 +363,20 @@ function DashboardStatCard({
       </div>
     </Card>
   );
+
+  if (isInteractive && href) {
+    return (
+      <Link
+        href={href}
+        className="group block rounded-xl focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand"
+        aria-label={`${label}: ${value ?? ""}. Buka daftar terfilter.`}
+      >
+        {cardElement}
+      </Link>
+    );
+  }
+
+  return cardElement;
 }
 
 function QuickAccessCard({
@@ -368,16 +395,16 @@ function QuickAccessCard({
   return (
     <Link
       href={href}
-      className={`group rounded-xl border border-slate-200 bg-white p-5 shadow-xs transition hover:border-blue-300 hover:shadow-sm focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 ${className}`}
+      className={`group rounded-xl border border-border bg-surface p-5 shadow-xs transition hover:border-blue-300 hover:shadow-sm focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 ${className}`}
     >
       <div className="flex gap-4">
-        <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-blue-50 text-blue-600">
+        <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-brand-soft text-brand-text">
           {icon}
         </div>
 
         <div className="min-w-0">
-          <h3 className="font-semibold text-slate-900">{title}</h3>
-          <p className="mt-1 text-sm text-slate-500">{description}</p>
+          <h3 className="font-semibold text-text-main">{title}</h3>
+          <p className="mt-1 text-sm text-text-muted">{description}</p>
         </div>
       </div>
     </Link>
@@ -538,7 +565,7 @@ export default function DashboardPage() {
 
   if (error && !data) {
     return (
-      <div className="flex min-h-screen items-center justify-center bg-slate-50 px-4">
+      <div className="flex min-h-screen items-center justify-center bg-surface-subtle px-4">
         <div className="w-full max-w-md">
           <ErrorState
             title="Dashboard Tidak Dapat Dimuat"
@@ -581,7 +608,7 @@ export default function DashboardPage() {
   );
 
   return (
-    <div className="min-h-screen bg-slate-50">
+    <div className="min-h-screen bg-surface-subtle">
       <div className="page-container py-6">
         {/* Header Dashboard */}
         <div className="mb-6">
@@ -622,12 +649,14 @@ export default function DashboardPage() {
               label="Buku Tersedia"
               value={data.booksAvailable}
               icon={<BookIcon />}
+              href={isCompanyAdmin ? "/master/books" : undefined}
             />
 
             <DashboardStatCard
               label="Peminjaman Aktif"
               value={data.activeLoans}
               icon={<TransactionIcon />}
+              href="/transactions?status=ACTIVE"
             />
 
             <DashboardStatCard
@@ -635,6 +664,7 @@ export default function DashboardPage() {
               value={data.overdueLoans}
               icon={<WarningIcon />}
               variant={typeof data.overdueLoans === "number" && data.overdueLoans > 0 ? "danger" : "default"}
+              href="/transactions?status=OVERDUE"
               className="sm:col-span-2 lg:col-span-1"
             />
           </section>
@@ -657,7 +687,7 @@ export default function DashboardPage() {
           <div className="mb-3.5 space-y-3">
             {/* Header Title */}
             <div>
-              <h2 className="text-lg font-bold text-slate-900 flex items-center gap-2">
+              <h2 className="text-lg font-bold text-text-main flex items-center gap-2">
                 <span>Worklist Jatuh Tempo & Terlambat</span>
                 {worklist.length > 0 && (
                   <span className="rounded-full bg-red-100 text-red-700 px-2.5 py-0.5 text-xs font-bold">
@@ -665,7 +695,7 @@ export default function DashboardPage() {
                   </span>
                 )}
               </h2>
-              <p className="mt-0.5 text-xs sm:text-sm text-slate-500">
+              <p className="mt-0.5 text-xs sm:text-sm text-text-muted">
                 Daftar transaksi yang perlu segera diproses pengembaliannya hari ini.
               </p>
             </div>
@@ -676,7 +706,7 @@ export default function DashboardPage() {
               <div
                 role="group"
                 aria-label="Filter antrean kerja"
-                className="flex items-center gap-1 self-start overflow-x-auto max-w-full rounded-lg bg-slate-100 p-1 text-xs font-medium"
+                className="flex items-center gap-1 self-start overflow-x-auto max-w-full rounded-lg bg-surface-muted p-1 text-xs font-medium"
               >
                 <Button
                   type="button"
@@ -689,8 +719,8 @@ export default function DashboardPage() {
                   aria-pressed={worklistFilter === "ALL"}
                   className={`min-h-0 px-3 py-1.5 rounded-md text-xs font-medium transition whitespace-nowrap ${
                     worklistFilter === "ALL"
-                      ? "bg-white text-slate-900 font-semibold shadow-xs hover:bg-white hover:text-slate-900"
-                      : "text-slate-600 hover:text-slate-900 hover:bg-slate-200/60"
+                      ? "bg-surface text-text-main font-semibold shadow-xs hover:bg-surface hover:text-text-main"
+                      : "text-text-secondary hover:text-text-main hover:bg-surface-muted"
                   }`}
                 >
                   Semua ({worklist.length})
@@ -706,8 +736,8 @@ export default function DashboardPage() {
                   aria-pressed={worklistFilter === "TODAY"}
                   className={`min-h-0 px-3 py-1.5 rounded-md text-xs font-medium transition whitespace-nowrap ${
                     worklistFilter === "TODAY"
-                      ? "bg-white text-amber-800 font-semibold shadow-xs hover:bg-white hover:text-amber-800"
-                      : "text-slate-600 hover:text-slate-900 hover:bg-slate-200/60"
+                      ? "bg-surface text-amber-800 font-semibold shadow-xs hover:bg-surface hover:text-amber-800"
+                      : "text-text-secondary hover:text-text-main hover:bg-surface-muted"
                   }`}
                 >
                   Jatuh Tempo Hari Ini ({countToday})
@@ -723,8 +753,8 @@ export default function DashboardPage() {
                   aria-pressed={worklistFilter === "OVERDUE"}
                   className={`min-h-0 px-3 py-1.5 rounded-md text-xs font-medium transition whitespace-nowrap ${
                     worklistFilter === "OVERDUE"
-                      ? "bg-white text-red-700 font-semibold shadow-xs hover:bg-white hover:text-red-700"
-                      : "text-slate-600 hover:text-slate-900 hover:bg-slate-200/60"
+                      ? "bg-surface text-red-700 font-semibold shadow-xs hover:bg-surface hover:text-red-700"
+                      : "text-text-secondary hover:text-text-main hover:bg-surface-muted"
                   }`}
                 >
                   Terlambat ({countOverdue})
@@ -742,10 +772,10 @@ export default function DashboardPage() {
                   }}
                   placeholder="Cari anggota, nomor, judul..."
                   aria-label="Cari antrean kerja"
-                  className="w-full h-9 rounded-lg border border-slate-200 bg-white pl-8 pr-7 text-xs text-slate-800 placeholder:text-slate-400 focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-500"
+                  className="w-full h-9 rounded-lg border border-border bg-surface pl-8 pr-7 text-xs text-text-main placeholder:text-text-subtle focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-500"
                 />
                 <svg
-                  className="absolute left-2.5 top-2.5 h-4 w-4 text-slate-400 pointer-events-none"
+                  className="absolute left-2.5 top-2.5 h-4 w-4 text-text-subtle pointer-events-none"
                   viewBox="0 0 24 24"
                   fill="none"
                   stroke="currentColor"
@@ -767,7 +797,7 @@ export default function DashboardPage() {
                       setWorklistPage(1);
                     }}
                     aria-label="Hapus pencarian"
-                    className="absolute right-1 top-1 h-7 w-7 min-h-0 min-w-0 p-0 text-slate-400 hover:text-slate-600 rounded"
+                    className="absolute right-1 top-1 h-7 w-7 min-h-0 min-w-0 p-0 text-text-subtle hover:text-text-secondary rounded"
                   >
                     <svg className="h-3.5 w-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden="true">
                       <line x1="18" y1="6" x2="6" y2="18" />
@@ -779,7 +809,7 @@ export default function DashboardPage() {
             </div>
           </div>
 
-          <Card className="overflow-hidden border-slate-200">
+          <Card className="overflow-hidden border-border">
             {loading ? (
               <div className="p-4">
                 <TableSkeleton rows={3} cols={4} />
@@ -791,7 +821,7 @@ export default function DashboardPage() {
                     <polyline points="20 6 9 17 4 12" />
                   </svg>
                 </div>
-                <p className="font-semibold text-slate-800 text-sm">
+                <p className="font-semibold text-text-main text-sm">
                   {worklistSearch.trim()
                     ? `Tidak ada transaksi yang cocok dengan "${worklistSearch}".`
                     : worklistFilter === "TODAY"
@@ -800,7 +830,7 @@ export default function DashboardPage() {
                     ? "Tidak ada peminjaman yang terlambat."
                     : "Tidak ada peminjaman yang jatuh tempo hari ini atau terlambat."}
                 </p>
-                <p className="mt-1 text-xs text-slate-500">
+                <p className="mt-1 text-xs text-text-muted">
                   {worklistSearch.trim()
                     ? "Coba periksa kembali kata kunci pencarian Anda atau ganti tab filter."
                     : "Semua transaksi aktif dalam kondisi tertib."}
@@ -823,11 +853,11 @@ export default function DashboardPage() {
             ) : (
               <div>
                 {/* Mobile View (< md): Stacked Cards */}
-                <div className="divide-y divide-slate-100 md:hidden">
+                <div className="divide-y divide-border-subtle md:hidden">
                   {paginatedWorklist.map((item) => (
                     <div
                       key={item.id}
-                      className="p-4 space-y-3 transition hover:bg-slate-50/70"
+                      className="p-4 space-y-3 transition hover:bg-surface-subtle/70"
                     >
                       {/* Baris Atas: Info Anggota & Badge Status */}
                       <div className="flex items-start justify-between gap-3">
@@ -836,10 +866,10 @@ export default function DashboardPage() {
                             {(item.memberName || "?").charAt(0).toUpperCase()}
                           </div>
                           <div className="min-w-0">
-                            <p className="font-semibold text-slate-900 text-sm truncate" title={item.memberName}>
+                            <p className="font-semibold text-text-main text-sm truncate" title={item.memberName}>
                               {item.memberName}
                             </p>
-                            <p className="text-xs text-slate-500 font-mono" title={item.loanNumber}>
+                            <p className="text-xs text-text-muted font-mono" title={item.loanNumber}>
                               {item.loanNumber}
                             </p>
                           </div>
@@ -853,9 +883,9 @@ export default function DashboardPage() {
                       </div>
 
                       {/* Judul Buku */}
-                      <div className="flex items-start gap-2 text-xs text-slate-700 bg-slate-50/80 rounded-lg p-2.5 border border-slate-100">
+                      <div className="flex items-start gap-2 text-xs text-text-secondary bg-surface-subtle/80 rounded-lg p-2.5 border border-border-subtle">
                         <svg
-                          className="h-4 w-4 shrink-0 text-slate-400 mt-0.5"
+                          className="h-4 w-4 shrink-0 text-text-subtle mt-0.5"
                           viewBox="0 0 24 24"
                           fill="none"
                           stroke="currentColor"
@@ -868,10 +898,10 @@ export default function DashboardPage() {
                           <path d="M6 6h10M6 10h10" />
                         </svg>
                         <div className="min-w-0 flex-1">
-                          <span className="text-[11px] font-medium text-slate-600 block uppercase tracking-wider">
+                          <span className="text-[11px] font-medium text-text-secondary block uppercase tracking-wider">
                             Judul Buku
                           </span>
-                          <span className="font-semibold text-slate-800 break-words">
+                          <span className="font-semibold text-text-main break-words">
                             {item.bookTitles}
                           </span>
                         </div>
@@ -879,26 +909,26 @@ export default function DashboardPage() {
 
                       {/* Info 2 Kolom: Jatuh Tempo & Denda */}
                       <div className="grid grid-cols-2 gap-2 text-xs">
-                        <div className="rounded-lg bg-white p-2.5 border border-slate-200/80 shadow-2xs">
-                          <span className="text-[11px] text-slate-500 block">Jatuh Tempo</span>
-                          <span className="font-semibold text-slate-800 tabular-nums">
+                        <div className="rounded-lg bg-surface p-2.5 border border-border/80 shadow-2xs">
+                          <span className="text-[11px] text-text-muted block">Jatuh Tempo</span>
+                          <span className="font-semibold text-text-main tabular-nums">
                             {formatDate(item.dueAt)}
                           </span>
                         </div>
                         <div className={`rounded-lg p-2.5 border shadow-2xs ${
                           item.fineAmount === null
-                            ? "bg-amber-50/60 border-amber-200/70 text-amber-800"
+                            ? "bg-warning-soft border-warning-border text-warning-text"
                             : item.fineAmount > 0
-                            ? "bg-red-50/60 border-red-200/70 text-red-800"
-                            : "bg-slate-50 border-slate-200/80 text-slate-700"
+                            ? "bg-danger-soft border-danger-border text-danger-text"
+                            : "bg-surface-subtle border-border/80 text-text-secondary"
                         }`}>
-                          <span className="text-[11px] text-slate-500 block">Nominal Denda</span>
+                          <span className="text-[11px] text-text-muted block">Nominal Denda</span>
                           <span className={`font-semibold tabular-nums ${
                             item.fineAmount === null
-                              ? "text-amber-700"
+                              ? "text-warning-text"
                               : item.fineAmount > 0
-                              ? "text-red-700 font-bold"
-                              : "text-slate-700"
+                              ? "text-danger-text font-bold"
+                              : "text-text-secondary"
                           }`}>
                             {item.fineAmount === null
                               ? "Menunggu konfigurasi"
@@ -910,12 +940,12 @@ export default function DashboardPage() {
                       </div>
 
                       {/* Baris Bawah: Aksi */}
-                      <div className="pt-2.5 border-t border-slate-100 flex items-center justify-between">
-                        <span className="text-xs text-slate-600">Pilihan Aksi</span>
+                      <div className="pt-2.5 border-t border-border-subtle flex items-center justify-between">
+                        <span className="text-xs text-text-secondary">Pilihan Aksi</span>
                         {isCompanyAdmin ? (
                           <Link
                             href={`/loans?search=${encodeURIComponent(item.loanNumber)}&loanId=${encodeURIComponent(item.id)}`}
-                            className="inline-flex items-center gap-1.5 rounded-lg border border-slate-200 bg-white px-3.5 py-1.5 text-xs font-semibold text-slate-700 shadow-2xs hover:bg-slate-50 hover:text-slate-900 transition"
+                            className="inline-flex items-center gap-1.5 rounded-lg border border-border bg-surface px-3.5 py-1.5 text-xs font-semibold text-text-secondary shadow-2xs hover:bg-surface-subtle hover:text-text-main transition"
                           >
                             <span>Lihat transaksi</span>
                             <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden="true">
@@ -947,7 +977,7 @@ export default function DashboardPage() {
                       <col className="w-[24%]" />
                       <col className="w-[195px]" />
                     </colgroup>
-                    <thead className="border-b border-slate-100 bg-slate-50/80 text-[11px] font-semibold uppercase tracking-wider text-slate-500">
+                    <thead className="border-b border-border-subtle bg-surface-subtle/80 text-[11px] font-semibold uppercase tracking-wider text-text-muted">
                       <tr>
                         <th className="px-4 sm:px-5 py-3 font-semibold">Nama Anggota</th>
                         <th className="px-4 py-3 font-semibold">Judul Buku</th>
@@ -955,18 +985,18 @@ export default function DashboardPage() {
                         <th className="px-4 sm:px-5 py-3 font-semibold text-right">Aksi</th>
                       </tr>
                     </thead>
-                    <tbody className="divide-y divide-slate-100">
+                    <tbody className="divide-y divide-border-subtle">
                       {paginatedWorklist.map((item) => (
                         <tr
                           key={item.id}
-                          className="transition hover:bg-slate-50/70"
+                          className="transition hover:bg-surface-subtle/70"
                         >
                           {/* Nama Anggota & Loan Number */}
                           <td className="px-4 sm:px-5 py-3.5 min-w-0 align-middle">
-                            <p className="font-semibold text-slate-900 text-sm truncate" title={item.memberName}>
+                            <p className="font-semibold text-text-main text-sm truncate" title={item.memberName}>
                               {item.memberName}
                             </p>
-                            <p className="text-xs text-slate-500 font-mono truncate" title={item.loanNumber}>
+                            <p className="text-xs text-text-muted font-mono truncate" title={item.loanNumber}>
                               {item.loanNumber}
                             </p>
                           </td>
@@ -974,7 +1004,7 @@ export default function DashboardPage() {
                           {/* Judul Buku */}
                           <td className="px-4 py-3.5 min-w-0 align-middle">
                             <p
-                              className="text-xs sm:text-sm font-medium text-slate-800 line-clamp-2"
+                              className="text-xs sm:text-sm font-medium text-text-main line-clamp-2"
                               title={item.bookTitles}
                             >
                               {item.bookTitles}
@@ -990,15 +1020,15 @@ export default function DashboardPage() {
                                   : `${item.daysOverdue} hari terlambat`}
                               </Badge>
                               {item.fineAmount === null ? (
-                                <p className="mt-1 text-xs font-semibold text-amber-600 tabular-nums">
+                                <p className="mt-1 text-xs font-semibold text-warning-text tabular-nums">
                                   Denda: Menunggu konfigurasi
                                 </p>
                               ) : item.fineAmount > 0 ? (
-                                <p className="mt-1 text-xs font-semibold text-red-600 tabular-nums">
+                                <p className="mt-1 text-xs font-semibold text-danger-text tabular-nums">
                                   Denda: Rp {item.fineAmount.toLocaleString("id-ID")}
                                 </p>
                               ) : null}
-                              <p className="text-xs text-slate-500 mt-0.5">
+                              <p className="text-xs text-text-muted mt-0.5">
                                 Jatuh tempo: {formatDate(item.dueAt)}
                               </p>
                             </div>
@@ -1009,7 +1039,7 @@ export default function DashboardPage() {
                             {isCompanyAdmin ? (
                               <Link
                                 href={`/loans?search=${encodeURIComponent(item.loanNumber)}&loanId=${encodeURIComponent(item.id)}`}
-                                className="inline-flex shrink-0 items-center gap-1.5 rounded-lg border border-slate-200 bg-white px-3.5 py-1.5 text-xs font-semibold text-slate-700 shadow-2xs hover:bg-slate-50 hover:text-slate-900 transition"
+                                className="inline-flex shrink-0 items-center gap-1.5 rounded-lg border border-border bg-surface px-3.5 py-1.5 text-xs font-semibold text-text-secondary shadow-2xs hover:bg-surface-subtle hover:text-text-main transition"
                               >
                                 <span>Lihat transaksi</span>
                                 <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden="true">
@@ -1035,7 +1065,7 @@ export default function DashboardPage() {
                 </div>
 
                 {filteredWorklist.length > worklistPageSize && (
-                  <div className="border-t border-slate-100 bg-white">
+                  <div className="border-t border-border-subtle bg-surface">
                     <Pagination
                       currentPage={safeWorklistPage}
                       totalPages={totalWorklistPages}
@@ -1057,7 +1087,7 @@ export default function DashboardPage() {
 
         {/* Akses Cepat */}
         <section className="mt-6">
-          <h2 className="text-lg font-semibold text-slate-900">
+          <h2 className="text-lg font-semibold text-text-main">
             {isCompanyAdmin ? "Pengelolaan" : "Akses cepat"}
           </h2>
 
@@ -1122,8 +1152,8 @@ export default function DashboardPage() {
 
         {/* Aktivitas Terbaru */}
         <Card className="mt-6 overflow-hidden">
-          <div className="flex items-center justify-between border-b border-slate-200 px-5 py-4">
-            <h2 className="font-semibold text-slate-900">
+          <div className="flex items-center justify-between border-b border-border px-5 py-4">
+            <h2 className="font-semibold text-text-main">
               {isCompanyAdmin
                 ? "Aktivitas Transaksi Terbaru"
                 : "Aktivitas Terbaru"}
@@ -1132,7 +1162,7 @@ export default function DashboardPage() {
             {data && data.recentLoans.length > 0 && (
               <Link
                 href="/transactions"
-                className="text-xs font-semibold text-blue-600 hover:text-blue-700 transition"
+                className="text-xs font-semibold text-brand-text hover:text-brand-hover transition"
               >
                 Lihat semua →
               </Link>
@@ -1145,46 +1175,46 @@ export default function DashboardPage() {
             </div>
           ) : data.recentLoans.length === 0 ? (
             <div className="p-8 text-center">
-              <p className="font-medium text-slate-700">
+              <p className="font-medium text-text-secondary">
                 Belum ada aktivitas transaksi
               </p>
 
-              <p className="mt-1 text-sm text-slate-500">
+              <p className="mt-1 text-sm text-text-muted">
                 Aktivitas transaksi terbaru akan muncul di sini.
               </p>
             </div>
           ) : (
             <div>
               {/* Tampilan Mobile (< md): 100% Fluid Width, Status Badge selalu terlihat di kanan */}
-              <div className="divide-y divide-slate-100 md:hidden">
+              <div className="divide-y divide-border-subtle md:hidden">
                 {data.recentLoans.slice(0, 10).map((loan) => (
-                  <div key={loan.id} className="flex flex-col gap-1.5 p-4 transition hover:bg-slate-50/70">
+                  <div key={loan.id} className="flex flex-col gap-1.5 p-4 transition hover:bg-surface-subtle/70">
                     {/* Baris 1: No Transaksi (Kiri) & Nama Member (Kanan) */}
                     <div className="flex items-center justify-between gap-3">
-                      <span className="shrink-0 font-mono text-sm font-bold text-slate-900">
+                      <span className="shrink-0 font-mono text-sm font-bold text-text-main">
                         {loan.loanNumber}
                       </span>
-                      <span className="truncate text-right text-sm font-medium text-slate-700 max-w-[55%]">
+                      <span className="truncate text-right text-sm font-medium text-text-secondary max-w-[55%]">
                         {loan.memberName}
                       </span>
                     </div>
 
                     {/* Baris 2: Tgl Pinjam (Kiri) & Jatuh Tempo (Kanan) */}
-                    <div className="flex items-center justify-between gap-3 text-xs text-slate-500">
+                    <div className="flex items-center justify-between gap-3 text-xs text-text-muted">
                       <span className="truncate">
-                        <span className="font-medium text-slate-500">Pinjam: </span>
+                        <span className="font-medium text-text-muted">Pinjam: </span>
                         {formatDate(loan.borrowedAt)}
                       </span>
                       <span className="shrink-0 text-right">
-                        <span className="font-medium text-slate-500">Jatuh Tempo: </span>
+                        <span className="font-medium text-text-muted">Jatuh Tempo: </span>
                         {formatDate(loan.dueAt)}
                       </span>
                     </div>
 
                     {/* Baris 3: Tgl Kembali (Kiri) & Badge Status (Kanan) */}
                     <div className="flex items-center justify-between gap-3 text-xs pt-0.5">
-                      <span className="truncate text-slate-500">
-                        <span className="font-medium text-slate-500">Kembali: </span>
+                      <span className="truncate text-text-muted">
+                        <span className="font-medium text-text-muted">Kembali: </span>
                         {loan.status === "COMPLETED" && loan.returnedAt
                           ? formatDate(loan.returnedAt)
                           : "-"}
@@ -1203,7 +1233,7 @@ export default function DashboardPage() {
               <div className="hidden md:block overflow-x-auto">
                 <div className="min-w-[660px]">
                   {/* Table Header: Pisahkan Tanggal Pinjam, Jatuh Tempo, dan Dikembalikan */}
-                  <div className="grid grid-cols-[minmax(115px,1.2fr)_minmax(115px,1.2fr)_minmax(92px,1fr)_minmax(92px,1fr)_minmax(92px,1fr)_85px] items-center gap-x-3 border-b border-slate-100 bg-slate-50/80 px-4 sm:px-5 py-2.5 text-[11px] font-semibold uppercase tracking-wider text-slate-500">
+                  <div className="grid grid-cols-[minmax(115px,1.2fr)_minmax(115px,1.2fr)_minmax(92px,1fr)_minmax(92px,1fr)_minmax(92px,1fr)_85px] items-center gap-x-3 border-b border-border-subtle bg-surface-subtle/80 px-4 sm:px-5 py-2.5 text-[11px] font-semibold uppercase tracking-wider text-text-muted">
                     <div>Nomor Peminjaman</div>
                     <div>Anggota</div>
                     <div>Tgl Pinjam</div>
@@ -1212,43 +1242,43 @@ export default function DashboardPage() {
                     <div className="text-right">Status</div>
                   </div>
 
-                  <div className="divide-y divide-slate-100">
+                  <div className="divide-y divide-border-subtle">
                     {data.recentLoans.slice(0, 10).map((loan) => (
                       <div
                         key={loan.id}
-                        className="grid grid-cols-[minmax(115px,1.2fr)_minmax(115px,1.2fr)_minmax(92px,1fr)_minmax(92px,1fr)_minmax(92px,1fr)_85px] items-center gap-x-3 px-4 sm:px-5 py-3 transition hover:bg-slate-50/70"
+                        className="grid grid-cols-[minmax(115px,1.2fr)_minmax(115px,1.2fr)_minmax(92px,1fr)_minmax(92px,1fr)_minmax(92px,1fr)_85px] items-center gap-x-3 px-4 sm:px-5 py-3 transition hover:bg-surface-subtle/70"
                       >
                         {/* 1. Nomor transaksi */}
                         <div className="min-w-0">
-                          <p className="whitespace-nowrap text-sm font-semibold text-slate-900 font-mono">
+                          <p className="whitespace-nowrap text-sm font-semibold text-text-main font-mono">
                             {loan.loanNumber}
                           </p>
                         </div>
 
                         {/* 2. Nama member */}
                         <div className="min-w-0">
-                          <p className="truncate text-xs sm:text-sm text-slate-600">
+                          <p className="truncate text-xs sm:text-sm text-text-secondary">
                             {loan.memberName}
                           </p>
                         </div>
 
                         {/* 3. Tanggal Pinjam */}
                         <div className="min-w-0">
-                          <span className="whitespace-nowrap text-xs sm:text-sm text-slate-600">
+                          <span className="whitespace-nowrap text-xs sm:text-sm text-text-secondary">
                             {formatDate(loan.borrowedAt)}
                           </span>
                         </div>
 
                         {/* 4. Jatuh Tempo */}
                         <div className="min-w-0">
-                          <span className="whitespace-nowrap text-xs sm:text-sm text-slate-600">
+                          <span className="whitespace-nowrap text-xs sm:text-sm text-text-secondary">
                             {formatDate(loan.dueAt)}
                           </span>
                         </div>
 
                         {/* 5. Dikembalikan */}
                         <div className="min-w-0">
-                          <span className="whitespace-nowrap text-xs sm:text-sm text-slate-600">
+                          <span className="whitespace-nowrap text-xs sm:text-sm text-text-secondary">
                             {loan.status === "COMPLETED" && loan.returnedAt
                               ? formatDate(loan.returnedAt)
                               : "-"}

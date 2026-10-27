@@ -54,13 +54,13 @@ export default function ConfirmationDialog({
         event.preventDefault();
         if (!loading) onClose();
       }}
-      className="fixed inset-0 m-auto max-h-[calc(100dvh-2rem)] w-[calc(100%-2rem)] max-w-md overflow-y-auto rounded-2xl border border-slate-200 bg-white p-0 text-slate-900 shadow-2xl backdrop:bg-slate-900/40 backdrop:backdrop-blur-xs z-50 animate-in fade-in-0 zoom-in-95 duration-150"
+      className="fixed inset-0 m-auto max-h-[calc(100dvh-2rem)] w-[calc(100%-2rem)] max-w-md overflow-y-auto rounded-2xl border border-border bg-surface p-0 text-text-main shadow-2xl backdrop:bg-overlay backdrop:backdrop-blur-xs z-50 animate-in fade-in-0 zoom-in-95 duration-150"
     >
       <div className="p-5 sm:p-6">
         <h2 id={titleId} className="text-lg font-semibold">
           {title}
         </h2>
-        <p id={descriptionId} className="mt-2 text-sm text-app-text-muted">
+        <p id={descriptionId} className="mt-2 text-sm text-text-muted">
           {description}
         </p>
         <div className="mt-6 flex flex-col-reverse gap-3 sm:flex-row sm:justify-end">

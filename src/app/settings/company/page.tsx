@@ -145,7 +145,7 @@ export default function CompanySettingsPage() {
   });
 
   return (
-    <div className="min-h-screen bg-slate-50">
+    <div className="min-h-screen bg-surface-subtle">
       <div className="page-container py-6">
         {/* Header */}
         <div className="mb-6">
@@ -211,7 +211,7 @@ export default function CompanySettingsPage() {
                 <div className="space-y-6 lg:col-span-7 xl:col-span-8">
                   {/* Kebijakan Sirkulasi & Peminjaman (3 Field Backend) */}
                   <Card className="p-5 sm:p-6">
-                    <div className="border-b border-slate-100 pb-3 mb-4">
+                    <div className="border-b border-border-subtle pb-3 mb-4">
                       <div className="flex items-center gap-2.5">
                         <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-emerald-50 text-emerald-600">
                           <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden="true">
@@ -219,10 +219,10 @@ export default function CompanySettingsPage() {
                           </svg>
                         </div>
                         <div>
-                          <h2 className="text-sm font-semibold text-slate-900">
+                          <h2 className="text-sm font-semibold text-text-main">
                             Kebijakan Sirkulasi Peminjaman & Denda
                           </h2>
-                          <p className="text-xs text-slate-500">
+                          <p className="text-xs text-text-muted">
                             Parameter operasional peminjaman otomatis yang berlaku untuk seluruh anggota.
                           </p>
                         </div>
@@ -306,37 +306,37 @@ export default function CompanySettingsPage() {
                     </div>
 
                     <div className="space-y-2.5 text-xs sm:text-sm text-blue-900">
-                      <div className="flex items-start gap-2.5 rounded-lg bg-white/90 p-2.5 border border-blue-100 shadow-2xs">
+                      <div className="flex items-start gap-2.5 rounded-lg bg-surface/90 p-2.5 border border-blue-100 shadow-2xs">
                         <span className="flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-blue-100 text-blue-700 text-xs font-bold">
                           1
                         </span>
                         <div className="min-w-0">
-                          <p className="text-xs text-slate-500 font-medium">Durasi Peminjaman</p>
-                          <p className="font-semibold text-slate-900">
+                          <p className="text-xs text-text-muted font-medium">Durasi Peminjaman</p>
+                          <p className="font-semibold text-text-main">
                             {defaultLoanDuration !== "" ? `${defaultLoanDuration} hari kalender` : "-"}
                           </p>
                         </div>
                       </div>
 
-                      <div className="flex items-start gap-2.5 rounded-lg bg-white/90 p-2.5 border border-blue-100 shadow-2xs">
+                      <div className="flex items-start gap-2.5 rounded-lg bg-surface/90 p-2.5 border border-blue-100 shadow-2xs">
                         <span className="flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-blue-100 text-blue-700 text-xs font-bold">
                           2
                         </span>
                         <div className="min-w-0">
-                          <p className="text-xs text-slate-500 font-medium">Batas Transaksi Aktif</p>
-                          <p className="font-semibold text-slate-900">
+                          <p className="text-xs text-text-muted font-medium">Batas Transaksi Aktif</p>
+                          <p className="font-semibold text-text-main">
                             {maxActiveLoans !== "" ? `Maks. ${maxActiveLoans} transaksi bersamaan` : "-"}
                           </p>
                         </div>
                       </div>
 
-                      <div className="flex items-start gap-2.5 rounded-lg bg-white/90 p-2.5 border border-blue-100 shadow-2xs">
+                      <div className="flex items-start gap-2.5 rounded-lg bg-surface/90 p-2.5 border border-blue-100 shadow-2xs">
                         <span className="flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-blue-100 text-blue-700 text-xs font-bold">
                           3
                         </span>
                         <div className="min-w-0">
-                          <p className="text-xs text-slate-500 font-medium">Denda Keterlambatan</p>
-                          <p className="font-semibold text-slate-900">
+                          <p className="text-xs text-text-muted font-medium">Denda Keterlambatan</p>
+                          <p className="font-semibold text-text-main">
                             {dailyFineRate !== ""
                               ? `Rp ${Number(dailyFineRate).toLocaleString("id-ID")} / buku / hari`
                               : "-"}

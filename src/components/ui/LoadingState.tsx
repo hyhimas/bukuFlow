@@ -13,7 +13,7 @@ export default function LoadingState({
 }: LoadingStateProps) {
   const containerClasses = nested
     ? `flex items-center justify-center py-12 ${className}`
-    : `flex min-h-screen items-center justify-center bg-slate-50 ${className}`;
+    : `flex min-h-screen items-center justify-center bg-canvas ${className}`;
 
   return (
     <div
@@ -25,12 +25,12 @@ export default function LoadingState({
         <LogoSpinner />
 
         {/* Loading Label */}
-        <p className="mt-4 text-sm font-medium text-slate-700">
+        <p className="mt-4 text-sm font-medium text-text-main">
           {label}
         </p>
 
         {/* Loading Description */}
-        <p className="mt-1 text-xs text-slate-500">
+        <p className="mt-1 text-xs text-text-muted">
           Harap tunggu sebentar...
         </p>
       </div>

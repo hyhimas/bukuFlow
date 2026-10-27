@@ -32,7 +32,7 @@ export interface MemberListInput extends PaginationInput {
 
 export interface CreateMemberInput {
   name: string;
-  memberNumber: string;
+  memberNumber?: string;
   phone: string;
   identityNumber: string;
   email?: string;

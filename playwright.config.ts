@@ -21,6 +21,7 @@ export default defineConfig({
     locale: "id-ID",
     timezoneId: "Asia/Jakarta",
     reducedMotion: "reduce",
+    colorScheme: "light",
   },
   projects: [
     {
@@ -28,6 +29,7 @@ export default defineConfig({
       use: {
         viewport: { width: 1280, height: 800 },
         browserName: "chromium",
+        colorScheme: "light",
       },
     },
     {
@@ -35,6 +37,7 @@ export default defineConfig({
       use: {
         viewport: { width: 768, height: 1024 },
         browserName: "chromium",
+        colorScheme: "light",
       },
     },
     {
@@ -43,6 +46,15 @@ export default defineConfig({
         viewport: { width: 390, height: 844 },
         browserName: "chromium",
         isMobile: true,
+        colorScheme: "light",
+      },
+    },
+    {
+      name: "desktop-dark-1280x800",
+      use: {
+        viewport: { width: 1280, height: 800 },
+        browserName: "chromium",
+        colorScheme: "dark",
       },
     },
   ],

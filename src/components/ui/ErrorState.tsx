@@ -24,8 +24,8 @@ export default function ErrorState({
     "Terjadi kesalahan saat memuat data. Silakan coba lagi.",
   );
   const containerClasses = nested
-    ? `rounded-xl border border-red-200 bg-red-50/50 p-6 text-center ${className}`
-    : `rounded-2xl border border-red-100 bg-white p-8 text-center shadow-xs sm:p-12 ${className}`;
+    ? `rounded-xl border border-danger-border bg-danger-soft/60 p-6 text-center ${className}`
+    : `rounded-2xl border border-danger-border bg-surface p-8 text-center shadow-xs sm:p-12 ${className}`;
 
   return (
     <div
@@ -33,7 +33,7 @@ export default function ErrorState({
       aria-live="assertive"
       className={containerClasses}
     >
-      <div className="mx-auto flex h-12 w-12 items-center justify-center rounded-full bg-red-100 text-red-600 sm:h-14 sm:w-14">
+      <div className="mx-auto flex h-12 w-12 items-center justify-center rounded-full bg-danger-soft text-danger sm:h-14 sm:w-14">
         <svg
           className="h-6 w-6 sm:h-7 sm:w-7"
           viewBox="0 0 24 24"
@@ -50,11 +50,11 @@ export default function ErrorState({
         </svg>
       </div>
 
-      <h2 className="mt-4 text-base font-semibold text-slate-900 sm:text-lg">
+      <h2 className="mt-4 text-base font-semibold text-text-main sm:text-lg">
         {title}
       </h2>
 
-      <p className="mx-auto mt-2 max-w-md text-sm text-slate-600">
+      <p className="mx-auto mt-2 max-w-md text-sm text-text-muted">
         {safeMessage}
       </p>
 
@@ -64,7 +64,7 @@ export default function ErrorState({
             type="button"
             variant="secondary"
             onClick={onRetry}
-            className="inline-flex items-center gap-2 border-slate-300 text-slate-700 hover:bg-slate-50"
+            className="inline-flex items-center gap-2"
           >
             <svg
               className="h-4 w-4"

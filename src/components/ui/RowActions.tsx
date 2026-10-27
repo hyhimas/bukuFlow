@@ -71,7 +71,7 @@ export default function RowActions({
   }, [open, hasNoActions]);
 
   if (hasNoActions) {
-    return <span className="text-slate-500 text-xs">-</span>;
+    return <span className="text-text-muted text-xs">-</span>;
   }
 
   // Keyboard navigation within menu
@@ -106,14 +106,14 @@ export default function RowActions({
   const getToneClasses = (tone?: "default" | "destructive" | "success" | "warning") => {
     switch (tone) {
       case "destructive":
-        return "text-red-600 hover:bg-red-50 hover:text-red-700 focus-visible:bg-red-50";
+        return "text-danger hover:bg-danger-soft hover:text-danger-hover focus-visible:bg-danger-soft";
       case "success":
-        return "text-emerald-700 hover:bg-emerald-50 hover:text-emerald-800 focus-visible:bg-emerald-50";
+        return "text-success hover:bg-success-soft hover:text-success-hover focus-visible:bg-success-soft";
       case "warning":
-        return "text-amber-700 hover:bg-amber-50 hover:text-amber-800 focus-visible:bg-amber-50";
+        return "text-warning hover:bg-warning-soft hover:text-warning-hover focus-visible:bg-warning-soft";
       case "default":
       default:
-        return "text-slate-700 hover:bg-slate-50 hover:text-slate-900 focus-visible:bg-slate-50";
+        return "text-text-secondary hover:bg-surface-muted hover:text-text-main focus-visible:bg-surface-muted";
     }
   };
 
@@ -171,7 +171,7 @@ export default function RowActions({
           aria-haspopup="menu"
           aria-expanded={open}
           aria-label={ariaLabel}
-          className="inline-flex h-8 w-8 items-center justify-center rounded-lg border border-slate-200 bg-white text-slate-600 shadow-2xs transition hover:border-slate-300 hover:bg-slate-50 hover:text-slate-900 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500"
+          className="inline-flex h-8 w-8 items-center justify-center rounded-lg border border-border bg-surface text-text-secondary shadow-2xs transition hover:border-border-strong hover:bg-surface-muted hover:text-text-main focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand"
         >
           <svg
             className="h-4 w-4"
@@ -196,7 +196,7 @@ export default function RowActions({
           role="menu"
           aria-label={ariaLabel}
           onKeyDown={handleMenuKeyDown}
-          className={`absolute z-40 min-w-[150px] max-w-[240px] rounded-xl border border-slate-200 bg-white p-1 shadow-lg ring-1 ring-black/5 animate-in fade-in-50 zoom-in-95 ${
+          className={`absolute z-40 min-w-[150px] max-w-[240px] rounded-xl border border-border bg-surface p-1 shadow-dropdown animate-in fade-in-50 zoom-in-95 ${
             openUpward
               ? "bottom-full mb-1.5 origin-bottom-right"
               : "top-full mt-1.5 origin-top-right"

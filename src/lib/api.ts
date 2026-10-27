@@ -211,7 +211,7 @@ export interface CreateMemberInputData {
   phone: string;
   identityNumber: string;
   email?: string;
-  memberNumber: string;
+  memberNumber?: string;
 }
 
 export interface UpdateMemberInputData {
@@ -416,42 +416,37 @@ export async function createMemberApi(
 ): Promise<Member> {
   const cleanNik = data.identityNumber.trim();
 
-  // Ambil list member untuk validasi NIK unik dan generate nomor urut sequential
-  let existingMembers: Member[] = [];
+  // Validasi keunikan NIK jika data anggota lama dapat diakses
   try {
-    existingMembers = await getMembersApi();
+    const existingMembers = await getMembersApi();
+    const duplicateNik = existingMembers.some(
+      (m) => m.identityNumber?.trim() === cleanNik
+    );
+    if (duplicateNik) {
+      throw new Error(
+        "NIK tersebut sudah terdaftar sebagai anggota. Gunakan NIK yang berbeda."
+      );
+    }
   } catch (err: any) {
-    throw new Error(
-      formatApiError(
-        err,
-        "Gagal memuat data anggota untuk validasi NIK dan penomoran. Silakan periksa koneksi atau coba lagi."
-      )
-    );
+    if (err.message?.includes("sudah terdaftar")) {
+      throw err;
+    }
+    // Lanjutkan jika pengambilan daftar anggota gagal (backend akan memvalidasi)
   }
 
-  // 1. Validasi Keunikan NIK
-  const duplicateNik = existingMembers.some(
-    (m) => m.identityNumber?.trim() === cleanNik
-  );
-  if (duplicateNik) {
-    throw new Error(
-      "NIK tersebut sudah terdaftar sebagai anggota. Gunakan NIK yang berbeda."
-    );
-  }
-
-  // 2. Validasi Nomor Anggota Wajib (Sesuai spesifikasi Backend MemberCreateRequest)
   const memberNumber = data.memberNumber?.trim();
-  if (!memberNumber) {
-    throw new Error("Nomor anggota wajib diisi.");
-  }
 
-  const payload = {
+  const payload: Record<string, any> = {
     name: data.name.trim(),
-    member_number: memberNumber,
     identity_number: cleanNik,
     phone: data.phone.trim(),
     email: data.email?.trim() || null,
   };
+
+  // Jika diisi manual oleh user, kirim member_number. Jika kosong, biarkan backend auto-increment
+  if (memberNumber) {
+    payload.member_number = memberNumber;
+  }
 
   try {
     const response = await api.post("/member", payload);
@@ -2690,7 +2685,8 @@ export async function returnLoanItemsApi(
   loanId: string,
   copyIds: string[],
   _itemIds?: string[],
-  companyId?: string
+  companyId?: string,
+  returnedAt?: string
 ): Promise<Loan> {
   const compId = resolveCompanyId(companyId);
 
@@ -2707,9 +2703,16 @@ export async function returnLoanItemsApi(
     );
     const finalCopyIds = validHexIds.length > 0 ? validHexIds : cleanCopyIds;
 
-    const payload = {
+    const payload: Record<string, any> = {
       copy_ids: finalCopyIds,
     };
+
+    if (returnedAt) {
+      const cleanReturnedAt = returnedAt.includes("T")
+        ? returnedAt
+        : `${returnedAt.slice(0, 10)}T12:00:00.000Z`;
+      payload.returned_at = cleanReturnedAt;
+    }
 
     const response = await api.post(`/loan/returns/${loanId}`, payload);
 
@@ -2979,9 +2982,6 @@ export async function createOfficeMemberApi(
     throw new Error("Pilih instansi terlebih dahulu.");
   }
   const memberNumber = (payload.member_number || payload.memberNumber || "").trim();
-  if (!memberNumber) {
-    throw new Error("Nomor anggota (member_number) WAJIB diisi dari input pengguna.");
-  }
   if (!payload.name?.trim()) {
     throw new Error("Nama anggota wajib diisi.");
   }
@@ -2993,13 +2993,15 @@ export async function createOfficeMemberApi(
     throw new Error("Nomor telepon wajib diisi.");
   }
 
-  const body = {
+  const body: Record<string, any> = {
     name: payload.name.trim(),
-    member_number: memberNumber,
     identity_number: identityNumber,
     phone: payload.phone.trim(),
     email: payload.email?.trim() || null,
   };
+  if (memberNumber) {
+    body.member_number = memberNumber;
+  }
 
   try {
     const response = await api.post("/office/member", body, {
@@ -3139,13 +3141,39 @@ export function saveStoredCompanyMeta(id: string, meta: StoredCompanyMeta): void
   }
 }
 
-export async function getCompaniesApi(): Promise<Company[]> {
-  const response = await api.get("/office/company");
+export interface GetCompaniesParams {
+  page?: number;
+  size?: number;
+  sortby?: string;
+  order?: "asc" | "desc";
+}
+
+export interface CompaniesPaginatedResponse {
+  items: Company[];
+  total: number;
+  page: number;
+  size: number;
+  totalPages: number;
+}
+
+export async function getCompaniesPaginatedApi(
+  params?: GetCompaniesParams
+): Promise<CompaniesPaginatedResponse> {
+  const page = params?.page ?? 1;
+  const size = params?.size ?? 10;
+  const queryParams: Record<string, any> = {
+    page,
+    size,
+  };
+  if (params?.sortby) queryParams.sortby = params.sortby;
+  if (params?.order) queryParams.order = params.order;
+
+  const response = await api.get("/office/company", { params: queryParams });
   const raw = response.data;
   const items = raw?.items || raw?.data || (Array.isArray(raw) ? raw : []);
   const metaMap = getStoredCompanyMetaMap();
 
-  return items.map((item: Record<string, unknown>) => {
+  const mappedCompanies: Company[] = items.map((item: Record<string, unknown>) => {
     const id = String(item.id || item._id || "");
     const cached = metaMap[id];
 
@@ -3180,6 +3208,27 @@ export async function getCompaniesApi(): Promise<Company[]> {
           : undefined,
     };
   });
+
+  const total = typeof raw?.total === "number" && raw.total >= 0 ? raw.total : -1;
+  const totalPages =
+    typeof raw?.total_pages === "number" && raw.total_pages > 0
+      ? raw.total_pages
+      : total > 0
+      ? Math.ceil(total / size)
+      : Math.max(1, page);
+
+  return {
+    items: mappedCompanies,
+    total,
+    page,
+    size,
+    totalPages,
+  };
+}
+
+export async function getCompaniesApi(params?: GetCompaniesParams): Promise<Company[]> {
+  const res = await getCompaniesPaginatedApi(params);
+  return res.items;
 }
 
 export async function getCompanyDetailApi(_id: string): Promise<Company> {

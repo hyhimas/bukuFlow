@@ -2,7 +2,7 @@
 
 import { Suspense, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 
 import Card from "@/components/ui/Card";
 import Badge, { type BadgeVariant } from "@/components/ui/Badge";
@@ -15,6 +15,10 @@ import EmptyState from "@/components/ui/EmptyState";
 import ErrorState from "@/components/ui/ErrorState";
 import Modal from "@/components/ui/Modal";
 import PageHeader from "@/components/ui/PageHeader";
+import InactiveCompanyState, {
+  isCompanyInactiveError,
+  isStoredCompanyInactive,
+} from "@/components/office/InactiveCompanyState";
 import Pagination from "@/components/ui/Pagination";
 import RowActions from "@/components/ui/RowActions";
 import DataTable, { type DataTableColumn } from "@/components/ui/DataTable";
@@ -76,6 +80,7 @@ function getStatusVariant(status: OfficeLoanItem["status"]): BadgeVariant {
 
 function OfficeLoansContent() {
   const router = useRouter();
+  const searchParams = useSearchParams();
   const { toast } = useToast();
 
   const [isAuthorized] = useState(() => {
@@ -100,10 +105,16 @@ function OfficeLoansContent() {
   const [search, setSearch] = useState("");
   const [debouncedSearch, setDebouncedSearch] = useState("");
 
+  const urlStatusParam = searchParams.get("status")?.toUpperCase();
+  const initialStatus: TransactionStatus | "" =
+    urlStatusParam === "ACTIVE" || urlStatusParam === "OVERDUE" || urlStatusParam === "COMPLETED"
+      ? urlStatusParam
+      : "";
+
   // =========================================================
   // APPLIED FILTERS
   // =========================================================
-  const [status, setStatus] = useState<TransactionStatus | "">("");
+  const [status, setStatus] = useState<TransactionStatus | "">(initialStatus);
   const [startDate, setStartDate] = useState("");
   const [endDate, setEndDate] = useState("");
   const [dueFrom, setDueFrom] = useState("");
@@ -114,7 +125,7 @@ function OfficeLoansContent() {
   // =========================================================
   // TEMPORARY FILTERS (Di Drawer)
   // =========================================================
-  const [filterStatus, setFilterStatus] = useState<TransactionStatus | "">("");
+  const [filterStatus, setFilterStatus] = useState<TransactionStatus | "">(initialStatus);
   const [filterStartDate, setFilterStartDate] = useState("");
   const [filterEndDate, setFilterEndDate] = useState("");
   const [filterDueFrom, setFilterDueFrom] = useState("");
@@ -145,6 +156,20 @@ function OfficeLoansContent() {
   const [totalPages, setTotalPages] = useState(1);
   const savedTotalRef = useRef(0);
 
+  // Sinkronisasi status filter dari query URL searchParams (?status=ACTIVE/OVERDUE)
+  useEffect(() => {
+    const rawStatus = searchParams.get("status")?.toUpperCase();
+    if (rawStatus === "ACTIVE" || rawStatus === "OVERDUE" || rawStatus === "COMPLETED") {
+      setStatus(rawStatus);
+      setFilterStatus(rawStatus);
+      setPage(1);
+    } else if (searchParams.has("status") && !rawStatus) {
+      setStatus("");
+      setFilterStatus("");
+      setPage(1);
+    }
+  }, [searchParams]);
+
   const searchInputRef = useRef<HTMLInputElement>(null);
   useSearchHotkey(searchInputRef, {
     enabled: Boolean(selectedCompanyId) && !error && !tableLoading,
@@ -155,8 +180,13 @@ function OfficeLoansContent() {
 
   // Export to Excel
   const [exportLoading, setExportLoading] = useState(false);
-  const selectedCompanyName =
-    companies.find((c) => c.id === selectedCompanyId)?.name || "Perpustakaan";
+  const selectedCompany = companies.find((c) => c.id === selectedCompanyId);
+  const selectedCompanyName = selectedCompany?.name || "Perpustakaan";
+  const isInactiveCompany =
+    selectedCompany?.status === "INACTIVE" ||
+    selectedCompany?.status === "SUSPENDED" ||
+    isStoredCompanyInactive(selectedCompanyId) ||
+    isCompanyInactiveError(error);
 
   // Debounce search
   useEffect(() => {
@@ -362,7 +392,7 @@ function OfficeLoansContent() {
         sortKey: "loanNumber",
         render: (loan) => (
           <span
-            className="truncate whitespace-nowrap font-semibold tracking-tight text-slate-900 font-mono text-xs tabular-nums block"
+            className="truncate whitespace-nowrap font-semibold tracking-tight text-text-main font-mono text-xs tabular-nums block"
             title={
               loan.rawLoanNumber
                 ? `ID Sistem: ${loan.rawLoanNumber}`
@@ -380,7 +410,7 @@ function OfficeLoansContent() {
         render: (loan) => (
           <div>
             <p
-              className="truncate text-slate-800 font-medium text-xs font-medium"
+              className="truncate text-text-main font-medium text-xs font-medium"
               title={loan.memberName || "-"}
             >
               {loan.memberName ||
@@ -389,7 +419,7 @@ function OfficeLoansContent() {
                   : "Anggota")}
             </p>
             {loan.memberNumber && loan.memberNumber !== "-" && (
-              <p className="text-xs text-slate-500 font-mono truncate">
+              <p className="text-xs text-text-muted font-mono truncate">
                 {loan.memberNumber}
               </p>
             )}
@@ -409,7 +439,7 @@ function OfficeLoansContent() {
                   copyCode: cid,
                 }));
           if (bookItems.length === 0) {
-            return <span className="text-slate-500 text-xs">-</span>;
+            return <span className="text-text-muted text-xs">-</span>;
           }
           return (
             <ul className="min-w-0 space-y-0.5">
@@ -418,18 +448,18 @@ function OfficeLoansContent() {
                   key={item.id || idx}
                   className="grid min-w-0 grid-cols-[10px_minmax(0,1fr)] text-xs"
                 >
-                  <span className="text-slate-300 select-none" aria-hidden="true">
+                  <span className="text-text-subtle select-none" aria-hidden="true">
                     &bull;
                   </span>
                   <span
-                    className="min-w-0 leading-5 text-slate-700 truncate"
+                    className="min-w-0 leading-5 text-text-secondary truncate"
                     title={`${item.bookTitle}${item.copyCode ? ` (${item.copyCode})` : ""}`}
                   >
-                    <span className="font-medium text-slate-800">
+                    <span className="font-medium text-text-main">
                       {item.bookTitle}
                     </span>
                     {item.copyCode && (
-                      <span className="ml-1 text-slate-500 text-xs font-mono">
+                      <span className="ml-1 text-text-muted text-xs font-mono">
                         ({item.copyCode})
                       </span>
                     )}
@@ -446,7 +476,7 @@ function OfficeLoansContent() {
         width: "105px",
         render: (loan) => (
           <p
-            className="truncate text-slate-600 text-xs font-medium"
+            className="truncate text-text-secondary text-xs font-medium"
             title={loan.officerName || "Petugas"}
           >
             {loan.officerName || "Petugas"}
@@ -461,7 +491,7 @@ function OfficeLoansContent() {
         sortKey: "borrowedAt",
         isNumeric: true,
         render: (loan) => (
-          <span className="whitespace-nowrap text-slate-700 tabular-nums text-xs font-medium">
+          <span className="whitespace-nowrap text-text-secondary tabular-nums text-xs font-medium">
             {formatDate(loan.borrowedAt)}
           </span>
         ),
@@ -478,7 +508,7 @@ function OfficeLoansContent() {
           return (
             <span
               className={`whitespace-nowrap tabular-nums text-xs font-medium ${
-                isOverdue ? "font-bold text-red-600" : "text-slate-700"
+                isOverdue ? "font-bold text-red-600" : "text-text-secondary"
               }`}
             >
               {formatDate(loan.dueAt)}
@@ -492,7 +522,7 @@ function OfficeLoansContent() {
         width: "105px",
         isNumeric: true,
         render: (loan) => (
-          <span className="whitespace-nowrap text-slate-700 tabular-nums text-xs font-medium">
+          <span className="whitespace-nowrap text-text-secondary tabular-nums text-xs font-medium">
             {formatDate(loan.returnedAt)}
           </span>
         ),
@@ -665,14 +695,14 @@ function OfficeLoansContent() {
 
   if (!isAuthorized) {
     return (
-      <div className="min-h-screen bg-slate-50">
+      <div className="min-h-screen bg-surface-subtle">
         <LoadingState label="Memeriksa otorisasi Super Admin..." />
       </div>
     );
   }
 
   return (
-    <div className="min-h-screen bg-slate-50">
+    <div className="min-h-screen bg-surface-subtle">
       <div className="page-container py-5 sm:py-6">
         {/* HEADER */}
         <PageHeader
@@ -740,14 +770,20 @@ function OfficeLoansContent() {
             <div className="mx-auto flex h-14 w-14 items-center justify-center rounded-2xl bg-blue-50 text-blue-600">
               <TransactionIcon />
             </div>
-            <h2 className="mt-4 text-lg font-semibold text-slate-900">
+            <h2 className="mt-4 text-lg font-semibold text-text-main">
               Pilih Instansi Terlebih Dahulu
             </h2>
-            <p className="mx-auto mt-2 max-w-md text-sm text-slate-500">
+            <p className="mx-auto mt-2 max-w-md text-sm text-text-muted">
               Sebelum memuat daftar peminjaman, silakan pilih salah satu instansi
               melalui pemilih instansi di atas.
             </p>
           </Card>
+        ) : isInactiveCompany ? (
+          <InactiveCompanyState
+            companyName={selectedCompanyName}
+            description="Inspeksi transaksi peminjaman ditangguhkan karena instansi ini sedang dalam status nonaktif."
+            className="mt-6"
+          />
         ) : error ? (
           <ErrorState
             title="Gagal Memuat Peminjaman Office"
@@ -826,7 +862,7 @@ function OfficeLoansContent() {
                       <span className="max-w-[220px] truncate">
                         Pencarian: {search}
                       </span>
-                      <svg className="ml-1 h-3.5 w-3.5 text-slate-400 hover:text-slate-600 shrink-0 inline" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true"><path fillRule="evenodd" d="M4.293 4.293a1 1 0 011.414 0L10 8.586l4.293-4.293a1 1 0 111.414 1.414L11.414 10l4.293 4.293a1 1 0 01-1.414 1.414L10 11.414l-4.293 4.293a1 1 0 01-1.414-1.414L8.586 10 4.293 5.707a1 1 0 010-1.414z" clipRule="evenodd" /></svg>
+                      <svg className="ml-1 h-3.5 w-3.5 text-text-subtle hover:text-text-secondary shrink-0 inline" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true"><path fillRule="evenodd" d="M4.293 4.293a1 1 0 011.414 0L10 8.586l4.293-4.293a1 1 0 111.414 1.414L11.414 10l4.293 4.293a1 1 0 01-1.414 1.414L10 11.414l-4.293 4.293a1 1 0 01-1.414-1.414L8.586 10 4.293 5.707a1 1 0 010-1.414z" clipRule="evenodd" /></svg>
                     </Button>
                   )}
 
@@ -843,7 +879,7 @@ function OfficeLoansContent() {
                       className="rounded-full px-3 py-1 text-xs"
                     >
                       Status: {getStatusLabel(status)}
-                      <svg className="ml-1 h-3.5 w-3.5 text-slate-400 hover:text-slate-600 shrink-0 inline" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true"><path fillRule="evenodd" d="M4.293 4.293a1 1 0 011.414 0L10 8.586l4.293-4.293a1 1 0 111.414 1.414L11.414 10l4.293 4.293a1 1 0 01-1.414 1.414L10 11.414l-4.293 4.293a1 1 0 01-1.414-1.414L8.586 10 4.293 5.707a1 1 0 010-1.414z" clipRule="evenodd" /></svg>
+                      <svg className="ml-1 h-3.5 w-3.5 text-text-subtle hover:text-text-secondary shrink-0 inline" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true"><path fillRule="evenodd" d="M4.293 4.293a1 1 0 011.414 0L10 8.586l4.293-4.293a1 1 0 111.414 1.414L11.414 10l4.293 4.293a1 1 0 01-1.414 1.414L10 11.414l-4.293 4.293a1 1 0 01-1.414-1.414L8.586 10 4.293 5.707a1 1 0 010-1.414z" clipRule="evenodd" /></svg>
                     </Button>
                   )}
 
@@ -860,7 +896,7 @@ function OfficeLoansContent() {
                       className="rounded-full px-3 py-1 text-xs"
                     >
                       Pinjam Dari: {formatDate(startDate)}
-                      <svg className="ml-1 h-3.5 w-3.5 text-slate-400 hover:text-slate-600 shrink-0 inline" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true"><path fillRule="evenodd" d="M4.293 4.293a1 1 0 011.414 0L10 8.586l4.293-4.293a1 1 0 111.414 1.414L11.414 10l4.293 4.293a1 1 0 01-1.414 1.414L10 11.414l-4.293 4.293a1 1 0 01-1.414-1.414L8.586 10 4.293 5.707a1 1 0 010-1.414z" clipRule="evenodd" /></svg>
+                      <svg className="ml-1 h-3.5 w-3.5 text-text-subtle hover:text-text-secondary shrink-0 inline" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true"><path fillRule="evenodd" d="M4.293 4.293a1 1 0 011.414 0L10 8.586l4.293-4.293a1 1 0 111.414 1.414L11.414 10l4.293 4.293a1 1 0 01-1.414 1.414L10 11.414l-4.293 4.293a1 1 0 01-1.414-1.414L8.586 10 4.293 5.707a1 1 0 010-1.414z" clipRule="evenodd" /></svg>
                     </Button>
                   )}
 
@@ -877,7 +913,7 @@ function OfficeLoansContent() {
                       className="rounded-full px-3 py-1 text-xs"
                     >
                       Pinjam Sampai: {formatDate(endDate)}
-                      <svg className="ml-1 h-3.5 w-3.5 text-slate-400 hover:text-slate-600 shrink-0 inline" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true"><path fillRule="evenodd" d="M4.293 4.293a1 1 0 011.414 0L10 8.586l4.293-4.293a1 1 0 111.414 1.414L11.414 10l4.293 4.293a1 1 0 01-1.414 1.414L10 11.414l-4.293 4.293a1 1 0 01-1.414-1.414L8.586 10 4.293 5.707a1 1 0 010-1.414z" clipRule="evenodd" /></svg>
+                      <svg className="ml-1 h-3.5 w-3.5 text-text-subtle hover:text-text-secondary shrink-0 inline" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true"><path fillRule="evenodd" d="M4.293 4.293a1 1 0 011.414 0L10 8.586l4.293-4.293a1 1 0 111.414 1.414L11.414 10l4.293 4.293a1 1 0 01-1.414 1.414L10 11.414l-4.293 4.293a1 1 0 01-1.414-1.414L8.586 10 4.293 5.707a1 1 0 010-1.414z" clipRule="evenodd" /></svg>
                     </Button>
                   )}
 
@@ -894,7 +930,7 @@ function OfficeLoansContent() {
                       className="rounded-full px-3 py-1 text-xs"
                     >
                       Jatuh Tempo Dari: {formatDate(dueFrom)}
-                      <svg className="ml-1 h-3.5 w-3.5 text-slate-400 hover:text-slate-600 shrink-0 inline" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true"><path fillRule="evenodd" d="M4.293 4.293a1 1 0 011.414 0L10 8.586l4.293-4.293a1 1 0 111.414 1.414L11.414 10l4.293 4.293a1 1 0 01-1.414 1.414L10 11.414l-4.293 4.293a1 1 0 01-1.414-1.414L8.586 10 4.293 5.707a1 1 0 010-1.414z" clipRule="evenodd" /></svg>
+                      <svg className="ml-1 h-3.5 w-3.5 text-text-subtle hover:text-text-secondary shrink-0 inline" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true"><path fillRule="evenodd" d="M4.293 4.293a1 1 0 011.414 0L10 8.586l4.293-4.293a1 1 0 111.414 1.414L11.414 10l4.293 4.293a1 1 0 01-1.414 1.414L10 11.414l-4.293 4.293a1 1 0 01-1.414-1.414L8.586 10 4.293 5.707a1 1 0 010-1.414z" clipRule="evenodd" /></svg>
                     </Button>
                   )}
 
@@ -911,7 +947,7 @@ function OfficeLoansContent() {
                       className="rounded-full px-3 py-1 text-xs"
                     >
                       Jatuh Tempo Sampai: {formatDate(dueTo)}
-                      <svg className="ml-1 h-3.5 w-3.5 text-slate-400 hover:text-slate-600 shrink-0 inline" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true"><path fillRule="evenodd" d="M4.293 4.293a1 1 0 011.414 0L10 8.586l4.293-4.293a1 1 0 111.414 1.414L11.414 10l4.293 4.293a1 1 0 01-1.414 1.414L10 11.414l-4.293 4.293a1 1 0 01-1.414-1.414L8.586 10 4.293 5.707a1 1 0 010-1.414z" clipRule="evenodd" /></svg>
+                      <svg className="ml-1 h-3.5 w-3.5 text-text-subtle hover:text-text-secondary shrink-0 inline" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true"><path fillRule="evenodd" d="M4.293 4.293a1 1 0 011.414 0L10 8.586l4.293-4.293a1 1 0 111.414 1.414L11.414 10l4.293 4.293a1 1 0 01-1.414 1.414L10 11.414l-4.293 4.293a1 1 0 01-1.414-1.414L8.586 10 4.293 5.707a1 1 0 010-1.414z" clipRule="evenodd" /></svg>
                     </Button>
                   )}
 
@@ -928,7 +964,7 @@ function OfficeLoansContent() {
                       className="rounded-full px-3 py-1 text-xs"
                     >
                       Kembali Dari: {formatDate(returnedFrom)}
-                      <svg className="ml-1 h-3.5 w-3.5 text-slate-400 hover:text-slate-600 shrink-0 inline" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true"><path fillRule="evenodd" d="M4.293 4.293a1 1 0 011.414 0L10 8.586l4.293-4.293a1 1 0 111.414 1.414L11.414 10l4.293 4.293a1 1 0 01-1.414 1.414L10 11.414l-4.293 4.293a1 1 0 01-1.414-1.414L8.586 10 4.293 5.707a1 1 0 010-1.414z" clipRule="evenodd" /></svg>
+                      <svg className="ml-1 h-3.5 w-3.5 text-text-subtle hover:text-text-secondary shrink-0 inline" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true"><path fillRule="evenodd" d="M4.293 4.293a1 1 0 011.414 0L10 8.586l4.293-4.293a1 1 0 111.414 1.414L11.414 10l4.293 4.293a1 1 0 01-1.414 1.414L10 11.414l-4.293 4.293a1 1 0 01-1.414-1.414L8.586 10 4.293 5.707a1 1 0 010-1.414z" clipRule="evenodd" /></svg>
                     </Button>
                   )}
 
@@ -945,7 +981,7 @@ function OfficeLoansContent() {
                       className="rounded-full px-3 py-1 text-xs"
                     >
                       Kembali Sampai: {formatDate(returnedTo)}
-                      <svg className="ml-1 h-3.5 w-3.5 text-slate-400 hover:text-slate-600 shrink-0 inline" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true"><path fillRule="evenodd" d="M4.293 4.293a1 1 0 011.414 0L10 8.586l4.293-4.293a1 1 0 111.414 1.414L11.414 10l4.293 4.293a1 1 0 01-1.414 1.414L10 11.414l-4.293 4.293a1 1 0 01-1.414-1.414L8.586 10 4.293 5.707a1 1 0 010-1.414z" clipRule="evenodd" /></svg>
+                      <svg className="ml-1 h-3.5 w-3.5 text-text-subtle hover:text-text-secondary shrink-0 inline" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true"><path fillRule="evenodd" d="M4.293 4.293a1 1 0 011.414 0L10 8.586l4.293-4.293a1 1 0 111.414 1.414L11.414 10l4.293 4.293a1 1 0 01-1.414 1.414L10 11.414l-4.293 4.293a1 1 0 01-1.414-1.414L8.586 10 4.293 5.707a1 1 0 010-1.414z" clipRule="evenodd" /></svg>
                     </Button>
                   )}
 
@@ -954,7 +990,7 @@ function OfficeLoansContent() {
                     variant="ghost"
                     size="sm"
                     onClick={resetAllFilters}
-                    className="text-slate-500 hover:text-slate-900"
+                    className="text-text-muted hover:text-text-main"
                   >
                     <svg
                       viewBox="0 0 24 24"
@@ -1007,7 +1043,7 @@ function OfficeLoansContent() {
                   rowClassName={(loan) =>
                     loan.status === "OVERDUE"
                       ? "border-l-4 border-l-red-500 bg-red-50/35 hover:bg-red-50/60"
-                      : "hover:bg-slate-50/70"
+                      : "hover:bg-surface-subtle"
                   }
                   renderMobileCard={(loan) => {
                     const isOverdue = loan.status === "OVERDUE";
@@ -1026,7 +1062,7 @@ function OfficeLoansContent() {
                         className={`p-3.5 sm:p-4 shadow-xs transition flex flex-col justify-between ${
                           isOverdue
                             ? "border-l-4 border-l-red-500 border-red-200 bg-red-50/20"
-                            : "hover:border-slate-300"
+                            : "hover:border-border"
                         }`}
                       >
                         <div>
@@ -1034,7 +1070,7 @@ function OfficeLoansContent() {
                           <div className="flex items-start justify-between gap-2.5">
                             <div className="min-w-0 flex-1">
                               <p
-                                className="truncate text-sm font-bold tracking-tight text-slate-900 sm:text-base font-mono tabular-nums"
+                                className="truncate text-sm font-bold tracking-tight text-text-main sm:text-base font-mono tabular-nums"
                                 title={
                                   loan.rawLoanNumber
                                     ? `ID Sistem: ${loan.rawLoanNumber}`
@@ -1045,7 +1081,7 @@ function OfficeLoansContent() {
                               </p>
 
                               <p
-                                className="mt-0.5 truncate text-xs text-slate-600 sm:text-sm font-medium"
+                                className="mt-0.5 truncate text-xs text-text-secondary sm:text-sm font-medium"
                                 title={loan.memberName || "-"}
                               >
                                 {loan.memberName ||
@@ -1063,15 +1099,15 @@ function OfficeLoansContent() {
                           </div>
 
                           {/* BUKU DIPINJAM */}
-                          <div className="mt-2.5 rounded-lg bg-slate-50 px-3 py-2">
-                            <p className="text-xs font-semibold text-slate-500">
+                          <div className="mt-2.5 rounded-lg bg-surface-subtle px-3 py-2">
+                            <p className="text-xs font-semibold text-text-muted">
                               Buku Dipinjam ({bookItems.length})
                             </p>
 
                             {bookItems.length === 0 ? (
-                              <p className="mt-0.5 text-xs text-slate-900">-</p>
+                              <p className="mt-0.5 text-xs text-text-main">-</p>
                             ) : (
-                              <ul className="mt-1 space-y-0.5 text-xs text-slate-900 sm:text-sm">
+                              <ul className="mt-1 space-y-0.5 text-xs text-text-main sm:text-sm">
                                 {bookItems.map((item, idx) => (
                                   <li
                                     key={item.id || idx}
@@ -1079,15 +1115,15 @@ function OfficeLoansContent() {
                                   >
                                     <span
                                       aria-hidden="true"
-                                      className="mr-1.5 text-slate-400 select-none"
+                                      className="mr-1.5 text-text-subtle select-none"
                                     >
                                       &bull;
                                     </span>
-                                    <span className="font-medium text-slate-800">
+                                    <span className="font-medium text-text-main">
                                       {item.bookTitle}
                                     </span>
                                     {item.copyCode && (
-                                      <span className="ml-1.5 font-mono text-xs text-slate-500">
+                                      <span className="ml-1.5 font-mono text-xs text-text-muted">
                                         ({item.copyCode})
                                       </span>
                                     )}
@@ -1099,40 +1135,40 @@ function OfficeLoansContent() {
                         </div>
 
                         {/* DATES & PETUGAS GRID (2x2 Grid) */}
-                        <div className="mt-3 grid grid-cols-2 gap-2 border-t border-slate-100 pt-2.5 text-xs">
-                          <div className="rounded-lg border border-slate-100 bg-slate-50/70 px-2.5 py-1.5">
-                            <span className="text-[11px] font-semibold uppercase tracking-wide text-slate-500 block">
+                        <div className="mt-3 grid grid-cols-2 gap-2 border-t border-border-subtle pt-2.5 text-xs">
+                          <div className="rounded-lg border border-border-subtle bg-surface-subtle px-2.5 py-1.5">
+                            <span className="text-[11px] font-semibold uppercase tracking-wide text-text-muted block">
                               Petugas
                             </span>
                             <p
-                              className="mt-0.5 truncate font-semibold text-slate-700"
+                              className="mt-0.5 truncate font-semibold text-text-secondary"
                               title={loan.officerName || "Petugas"}
                             >
                               {loan.officerName || "Petugas"}
                             </p>
                           </div>
 
-                          <div className="rounded-lg border border-slate-100 bg-slate-50/70 px-2.5 py-1.5">
-                            <span className="text-[11px] font-semibold uppercase tracking-wide text-slate-500 block">
+                          <div className="rounded-lg border border-border-subtle bg-surface-subtle px-2.5 py-1.5">
+                            <span className="text-[11px] font-semibold uppercase tracking-wide text-text-muted block">
                               Pinjam
                             </span>
                             <p
-                              className="mt-0.5 truncate font-semibold text-slate-700 tabular-nums"
+                              className="mt-0.5 truncate font-semibold text-text-secondary tabular-nums"
                               title={formatDate(loan.borrowedAt)}
                             >
                               {formatDate(loan.borrowedAt)}
                             </p>
                           </div>
 
-                          <div className="rounded-lg border border-slate-100 bg-slate-50/70 px-2.5 py-1.5">
-                            <span className="text-[11px] font-semibold uppercase tracking-wide text-slate-500 block">
+                          <div className="rounded-lg border border-border-subtle bg-surface-subtle px-2.5 py-1.5">
+                            <span className="text-[11px] font-semibold uppercase tracking-wide text-text-muted block">
                               Jatuh Tempo
                             </span>
                             <p
                               className={`mt-0.5 truncate font-semibold tabular-nums ${
                                 isOverdue
                                   ? "text-red-600 font-bold"
-                                  : "text-slate-700"
+                                  : "text-text-secondary"
                               }`}
                               title={formatDate(loan.dueAt)}
                             >
@@ -1140,12 +1176,12 @@ function OfficeLoansContent() {
                             </p>
                           </div>
 
-                          <div className="rounded-lg border border-slate-100 bg-slate-50/70 px-2.5 py-1.5">
-                            <span className="text-[11px] font-semibold uppercase tracking-wide text-slate-500 block">
+                          <div className="rounded-lg border border-border-subtle bg-surface-subtle px-2.5 py-1.5">
+                            <span className="text-[11px] font-semibold uppercase tracking-wide text-text-muted block">
                               Pengembalian
                             </span>
                             <p
-                              className="mt-0.5 truncate font-semibold text-slate-700 tabular-nums"
+                              className="mt-0.5 truncate font-semibold text-text-secondary tabular-nums"
                               title={formatDate(loan.returnedAt)}
                             >
                               {formatDate(loan.returnedAt)}
@@ -1154,8 +1190,8 @@ function OfficeLoansContent() {
                         </div>
 
                         {/* AKSI BARIS (TITIK 3 / ROWACTIONS) */}
-                        <div className="mt-3 flex items-center justify-between border-t border-slate-100 pt-2.5">
-                          <span className="text-xs font-medium text-slate-500">
+                        <div className="mt-3 flex items-center justify-between border-t border-border-subtle pt-2.5">
+                          <span className="text-xs font-medium text-text-muted">
                             Pilihan Aksi
                           </span>
                           <RowActions
@@ -1207,7 +1243,7 @@ function OfficeLoansContent() {
                 {/* PAGINATION */}
                 {total > 0 && (
                   <div className="mt-4">
-                    <div className="rounded-xl border border-slate-200 bg-white shadow-2xs">
+                    <div className="rounded-xl border border-border bg-surface shadow-2xs">
                       <Pagination
                         currentPage={page}
                         totalPages={totalPages}
@@ -1235,22 +1271,22 @@ function OfficeLoansContent() {
           onClose={closeFilter}
           raw
           ariaLabelledBy="filter-title"
-          overlayClassName={`fixed inset-0 z-50 overflow-hidden bg-slate-900/40 backdrop-blur-[2px] transition-opacity duration-200 ease-out ${
+          overlayClassName={`fixed inset-0 z-50 overflow-hidden bg-overlay backdrop-blur-[2px] transition-opacity duration-200 ease-out ${
             isFilterOpen ? "opacity-100" : "opacity-0"
           }`}
-          className={`fixed inset-y-0 right-0 flex h-full w-full max-w-md flex-col bg-white shadow-2xl transition-transform duration-200 ease-out ${
+          className={`fixed inset-y-0 right-0 flex h-full w-full max-w-md flex-col bg-surface shadow-2xl transition-transform duration-200 ease-out ${
             isFilterOpen ? "translate-x-0" : "translate-x-full"
           }`}
         >
-          <div className="flex items-start justify-between border-b border-slate-200 px-5 py-4 sm:px-6">
+          <div className="flex items-start justify-between border-b border-border px-5 py-4 sm:px-6">
             <div>
               <h2
                 id="filter-title"
-                className="text-lg font-semibold tracking-tight text-slate-900"
+                className="text-lg font-semibold tracking-tight text-text-main"
               >
                 Filter Transaksi
               </h2>
-              <p className="mt-1 text-sm leading-5 text-slate-500">
+              <p className="mt-1 text-sm leading-5 text-text-muted">
                 Filter berdasarkan rentang tanggal peminjaman dan status.
               </p>
             </div>
@@ -1261,7 +1297,7 @@ function OfficeLoansContent() {
               size="sm"
               onClick={closeFilter}
               aria-label="Tutup filter"
-              className="min-h-[32px] min-w-[32px] p-2 text-slate-500 hover:bg-slate-100 hover:text-slate-900"
+              className="min-h-[32px] min-w-[32px] p-2 text-text-muted hover:bg-surface-muted hover:text-text-main"
             >
               <svg
                 viewBox="0 0 24 24"
@@ -1282,7 +1318,7 @@ function OfficeLoansContent() {
           <div className="flex-1 overflow-y-auto px-5 py-5 sm:px-6 sm:py-6">
             {/* STATUS FILTER */}
             <section>
-              <h3 className="text-sm font-semibold text-slate-900">
+              <h3 className="text-sm font-semibold text-text-main">
                 Status Transaksi
               </h3>
 
@@ -1307,14 +1343,14 @@ function OfficeLoansContent() {
               </div>
             </section>
 
-            <div className="my-6 border-t border-slate-100" />
+            <div className="my-6 border-t border-border-subtle" />
 
             {/* RENTANG TANGGAL PEMINJAMAN */}
             <section>
-              <h3 className="text-sm font-semibold text-slate-900">
+              <h3 className="text-sm font-semibold text-text-main">
                 Rentang Tanggal Pinjam
               </h3>
-              <p className="mt-1 text-sm text-slate-500">
+              <p className="mt-1 text-sm text-text-muted">
                 Filter transaksi berdasarkan tanggal peminjaman buku (borrowedAt).
               </p>
 
@@ -1349,14 +1385,14 @@ function OfficeLoansContent() {
               </div>
             </section>
 
-            <div className="my-6 border-t border-slate-100" />
+            <div className="my-6 border-t border-border-subtle" />
 
             {/* RENTANG TANGGAL JATUH TEMPO */}
             <section>
-              <h3 className="text-sm font-semibold text-slate-900">
+              <h3 className="text-sm font-semibold text-text-main">
                 Rentang Tanggal Jatuh Tempo
               </h3>
-              <p className="mt-1 text-sm text-slate-500">
+              <p className="mt-1 text-sm text-text-muted">
                 Filter transaksi berdasarkan batas waktu jatuh tempo pengembalian.
               </p>
 
@@ -1391,14 +1427,14 @@ function OfficeLoansContent() {
               </div>
             </section>
 
-            <div className="my-6 border-t border-slate-100" />
+            <div className="my-6 border-t border-border-subtle" />
 
             {/* RENTANG TANGGAL PENGEMBALIAN */}
             <section>
-              <h3 className="text-sm font-semibold text-slate-900">
+              <h3 className="text-sm font-semibold text-text-main">
                 Rentang Tanggal Pengembalian
               </h3>
-              <p className="mt-1 text-sm text-slate-500">
+              <p className="mt-1 text-sm text-text-muted">
                 Filter transaksi berdasarkan tanggal pengembalian buku.
               </p>
 
@@ -1434,7 +1470,7 @@ function OfficeLoansContent() {
             </section>
           </div>
 
-          <div className="border-t border-slate-200 bg-white px-5 py-4 sm:px-6">
+          <div className="border-t border-border bg-surface px-5 py-4 sm:px-6">
             <div className="flex gap-2.5 sm:gap-3">
               <Button
                 type="button"
@@ -1467,34 +1503,34 @@ function OfficeLoansContent() {
             <div className="space-y-4">
               <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
                 <div>
-                  <label className="text-xs font-medium text-slate-500">
+                  <label className="text-xs font-medium text-text-muted">
                     ID Transaksi (Internal)
                   </label>
-                  <p className="mt-1 font-mono text-sm font-semibold text-slate-900 break-all">
+                  <p className="mt-1 font-mono text-sm font-semibold text-text-main break-all">
                     {selectedLoan.id}
                   </p>
                 </div>
 
                 <div>
-                  <label className="text-xs font-medium text-slate-500">
+                  <label className="text-xs font-medium text-text-muted">
                     ID Instansi
                   </label>
-                  <p className="mt-1 font-mono text-sm text-slate-700 break-all">
+                  <p className="mt-1 font-mono text-sm text-text-secondary break-all">
                     {selectedLoan.companyId}
                   </p>
                 </div>
 
                 <div>
-                  <label className="text-xs font-medium text-slate-500">
+                  <label className="text-xs font-medium text-text-muted">
                     Nomor Peminjaman
                   </label>
-                  <p className="mt-1 font-mono text-sm font-bold text-slate-900">
+                  <p className="mt-1 font-mono text-sm font-bold text-text-main">
                     {selectedLoan.loanNumber}
                   </p>
                   {selectedLoan.rawLoanNumber &&
                     selectedLoan.rawLoanNumber !== selectedLoan.loanNumber && (
                       <p
-                        className="mt-1 font-mono text-xs text-slate-500 break-all bg-slate-50 p-1.5 rounded border border-slate-200"
+                        className="mt-1 font-mono text-xs text-text-muted break-all bg-surface-subtle p-1.5 rounded border border-border"
                         title="ID Sistem Internal"
                       >
                         ID Sistem: {selectedLoan.rawLoanNumber}
@@ -1503,7 +1539,7 @@ function OfficeLoansContent() {
                 </div>
 
                 <div>
-                  <label className="text-xs font-medium text-slate-500">
+                  <label className="text-xs font-medium text-text-muted">
                     Status Peminjaman
                   </label>
                   <div className="mt-1">
@@ -1514,10 +1550,10 @@ function OfficeLoansContent() {
                 </div>
 
                 <div>
-                  <label className="text-xs font-medium text-slate-500">
+                  <label className="text-xs font-medium text-text-muted">
                     Nama Peminjam
                   </label>
-                  <p className="mt-1 text-sm font-semibold text-slate-900">
+                  <p className="mt-1 text-sm font-semibold text-text-main">
                     {selectedLoan.memberName ||
                       (selectedLoan.memberNumber
                         ? `Anggota (${selectedLoan.memberNumber})`
@@ -1525,23 +1561,23 @@ function OfficeLoansContent() {
                   </p>
                   {selectedLoan.memberNumber &&
                     selectedLoan.memberNumber !== "-" && (
-                      <p className="text-xs text-slate-500 font-mono mt-0.5">
+                      <p className="text-xs text-text-muted font-mono mt-0.5">
                         No. Anggota: {selectedLoan.memberNumber}
                       </p>
                     )}
                 </div>
 
                 <div>
-                  <label className="text-xs font-medium text-slate-500">
+                  <label className="text-xs font-medium text-text-muted">
                     Petugas Peminjaman
                   </label>
-                  <p className="mt-1 text-sm font-semibold text-slate-900">
+                  <p className="mt-1 text-sm font-semibold text-text-main">
                     {selectedLoan.officerName || "Petugas"}
                   </p>
                   {selectedLoan.borrowedBy &&
                     selectedLoan.borrowedBy !== "-" && (
                       <p
-                        className="text-xs text-slate-500 font-mono mt-0.5"
+                        className="text-xs text-text-muted font-mono mt-0.5"
                         title="ID Akun Petugas"
                       >
                         ID Petugas: {selectedLoan.borrowedBy}
@@ -1550,32 +1586,32 @@ function OfficeLoansContent() {
                 </div>
 
                 <div>
-                  <label className="text-xs font-medium text-slate-500">
+                  <label className="text-xs font-medium text-text-muted">
                     ID Member (Sistem)
                   </label>
-                  <p className="mt-1 font-mono text-xs text-slate-600 break-all bg-slate-50 p-2 rounded border border-slate-200">
+                  <p className="mt-1 font-mono text-xs text-text-secondary break-all bg-surface-subtle p-2 rounded border border-border">
                     {selectedLoan.memberId}
                   </p>
                 </div>
 
                 <div>
-                  <label className="text-xs font-medium text-slate-500">
+                  <label className="text-xs font-medium text-text-muted">
                     Tanggal Peminjaman
                   </label>
-                  <p className="mt-1 text-sm text-slate-700">
+                  <p className="mt-1 text-sm text-text-secondary">
                     {formatDate(selectedLoan.borrowedAt)}
                   </p>
                 </div>
 
                 <div>
-                  <label className="text-xs font-medium text-slate-500">
+                  <label className="text-xs font-medium text-text-muted">
                     Tanggal Jatuh Tempo
                   </label>
                   <p
                     className={`mt-1 text-sm ${
                       selectedLoan.status === "OVERDUE"
                         ? "font-semibold text-red-600"
-                        : "text-slate-700"
+                        : "text-text-secondary"
                     }`}
                   >
                     {formatDate(selectedLoan.dueAt)}
@@ -1583,16 +1619,16 @@ function OfficeLoansContent() {
                 </div>
 
                 <div>
-                  <label className="text-xs font-medium text-slate-500">
+                  <label className="text-xs font-medium text-text-muted">
                     Tanggal Dikembalikan
                   </label>
-                  <p className="mt-1 text-sm text-slate-700">
+                  <p className="mt-1 text-sm text-text-secondary">
                     {formatDate(selectedLoan.returnedAt)}
                   </p>
                 </div>
 
                 <div className="sm:col-span-2">
-                  <label className="text-xs font-medium text-slate-500">
+                  <label className="text-xs font-medium text-text-muted">
                     Buku & Salinan Dipinjam (
                     {selectedLoan.items?.length || selectedLoan.copyIds.length}{" "}
                     buku)
@@ -1602,25 +1638,25 @@ function OfficeLoansContent() {
                       selectedLoan.items.map((item, idx) => (
                         <div
                           key={item.id || idx}
-                          className="flex items-center justify-between rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-xs"
+                          className="flex items-center justify-between rounded-lg border border-border bg-surface-subtle px-3 py-2 text-xs"
                         >
-                          <span className="font-semibold text-slate-900">
+                          <span className="font-semibold text-text-main">
                             {item.bookTitle}
                           </span>
                           {item.copyCode && (
-                            <span className="font-mono text-slate-600 bg-white px-2 py-0.5 rounded border border-slate-200">
+                            <span className="font-mono text-text-secondary bg-surface px-2 py-0.5 rounded border border-border">
                               {item.copyCode}
                             </span>
                           )}
                         </div>
                       ))
                     ) : selectedLoan.copyIds.length === 0 ? (
-                      <span className="text-sm text-slate-500">-</span>
+                      <span className="text-sm text-text-muted">-</span>
                     ) : (
                       selectedLoan.copyIds.map((cid, idx) => (
                         <span
                           key={idx}
-                          className="font-mono text-xs bg-slate-100 text-slate-700 px-2 py-1 rounded border border-slate-200 mr-1.5 inline-block"
+                          className="font-mono text-xs bg-surface-muted text-text-secondary px-2 py-1 rounded border border-border mr-1.5 inline-block"
                         >
                           {cid}
                         </span>
@@ -1630,28 +1666,28 @@ function OfficeLoansContent() {
                 </div>
 
                 <div>
-                  <label className="text-xs font-medium text-slate-500">
+                  <label className="text-xs font-medium text-text-muted">
                     Waktu Dibuat
                   </label>
-                  <p className="mt-1 text-sm text-slate-700">
+                  <p className="mt-1 text-sm text-text-secondary">
                     {formatDate(selectedLoan.createdAt)}
                   </p>
                 </div>
 
                 <div>
-                  <label className="text-xs font-medium text-slate-500">
+                  <label className="text-xs font-medium text-text-muted">
                     Waktu Diperbarui
                   </label>
-                  <p className="mt-1 text-sm text-slate-700">
+                  <p className="mt-1 text-sm text-text-secondary">
                     {formatDate(selectedLoan.updatedAt)}
                   </p>
                 </div>
               </div>
 
-              <div className="mt-6 flex items-center justify-between border-t border-slate-200 pt-4">
+              <div className="mt-6 flex items-center justify-between border-t border-border pt-4">
                 <Link
                   href="/office/members"
-                  className="text-xs font-semibold text-slate-600 hover:text-slate-900 transition flex items-center gap-1"
+                  className="text-xs font-semibold text-text-secondary hover:text-text-main transition flex items-center gap-1"
                 >
                   Lihat Profil Anggota
                   <span aria-hidden="true">→</span>
@@ -1696,7 +1732,7 @@ export default function OfficeLoansPage() {
   return (
     <Suspense
       fallback={
-        <div className="min-h-screen bg-slate-50">
+        <div className="min-h-screen bg-surface-subtle">
           <LoadingState label="Memuat inspeksi peminjaman..." />
         </div>
       }

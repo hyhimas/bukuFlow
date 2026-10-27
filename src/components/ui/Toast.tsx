@@ -90,9 +90,9 @@ const TONE_CONFIG: Record<
   }
 > = {
   success: {
-    borderColor: "border-emerald-200",
-    iconBgColor: "bg-emerald-100",
-    iconTextColor: "text-emerald-700",
+    borderColor: "border-success-border",
+    iconBgColor: "bg-success-soft",
+    iconTextColor: "text-success-text",
     icon: (
       <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
         <polyline points="20 6 9 17 4 12" />
@@ -101,9 +101,9 @@ const TONE_CONFIG: Record<
     defaultTitle: "Berhasil",
   },
   warning: {
-    borderColor: "border-amber-200",
-    iconBgColor: "bg-amber-100",
-    iconTextColor: "text-amber-700",
+    borderColor: "border-warning-border",
+    iconBgColor: "bg-warning-soft",
+    iconTextColor: "text-warning-text",
     icon: (
       <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
         <path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z" />
@@ -114,9 +114,9 @@ const TONE_CONFIG: Record<
     defaultTitle: "Perhatian",
   },
   error: {
-    borderColor: "border-red-200",
-    iconBgColor: "bg-red-50",
-    iconTextColor: "text-red-700",
+    borderColor: "border-danger-border",
+    iconBgColor: "bg-danger-soft",
+    iconTextColor: "text-danger-text",
     icon: (
       <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
         <line x1="18" y1="6" x2="6" y2="18" />
@@ -126,9 +126,9 @@ const TONE_CONFIG: Record<
     defaultTitle: "Terjadi Kesalahan",
   },
   info: {
-    borderColor: "border-blue-200",
-    iconBgColor: "bg-blue-100",
-    iconTextColor: "text-blue-700",
+    borderColor: "border-brand-border",
+    iconBgColor: "bg-brand-soft",
+    iconTextColor: "text-brand-text",
     icon: (
       <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
         <circle cx="12" cy="12" r="10" />
@@ -188,7 +188,7 @@ function ToastMessage({
       className="pointer-events-auto transition-all duration-300 transform translate-y-0 animate-in fade-in slide-in-from-top-2"
     >
       <div
-        className={`flex items-start gap-3 rounded-xl border ${config.borderColor} bg-white p-4 shadow-lg ring-1 ring-slate-900/5`}
+        className={`flex items-start gap-3 rounded-xl border ${config.borderColor} bg-surface p-4 shadow-dropdown ring-1 ring-border`}
       >
         <div
           className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-full ${config.iconBgColor} ${config.iconTextColor} font-bold text-sm`}
@@ -198,8 +198,8 @@ function ToastMessage({
         </div>
 
         <div className="min-w-0 flex-1">
-          <p className="text-sm font-semibold text-slate-900">{title}</p>
-          <p className="mt-1 text-sm leading-5 text-slate-500 break-words">
+          <p className="text-sm font-semibold text-text-main">{title}</p>
+          <p className="mt-1 text-sm leading-5 text-text-muted break-words">
             {item.message}
           </p>
         </div>
@@ -208,7 +208,7 @@ function ToastMessage({
           type="button"
           aria-label="Tutup notifikasi"
           onClick={() => onRemove(item.id)}
-          className="flex h-8 w-8 min-h-[32px] min-w-[32px] shrink-0 items-center justify-center rounded-md p-1 text-slate-400 transition hover:bg-slate-100 hover:text-slate-700 focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-500"
+          className="flex h-8 w-8 min-h-[32px] min-w-[32px] shrink-0 items-center justify-center rounded-md p-1 text-text-subtle transition hover:bg-surface-muted hover:text-text-secondary focus:outline-none focus-visible:ring-2 focus-visible:ring-brand"
         >
           <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2} aria-hidden="true">
             <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />

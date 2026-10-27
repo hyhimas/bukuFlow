@@ -31,7 +31,7 @@ const Input = forwardRef<HTMLInputElement, InputProps>(function Input(
     <div className="space-y-1.5">
       <label
         htmlFor={id}
-        className="block text-sm font-medium text-app-text-muted"
+        className="block text-sm font-medium text-text-muted"
       >
         {label}
         {required && (
@@ -48,7 +48,7 @@ const Input = forwardRef<HTMLInputElement, InputProps>(function Input(
           required={required}
           aria-invalid={Boolean(error) || undefined}
           aria-describedby={descriptionId}
-          className={`w-full h-11 rounded-lg border px-4 py-2.5 text-sm text-app-text outline-none transition
+          className={`w-full h-11 rounded-lg border bg-input px-4 py-2.5 text-sm text-text-main placeholder:text-placeholder outline-none transition
             focus-visible:outline-none
             focus-visible:border-brand
             focus-visible:ring-2
@@ -56,7 +56,7 @@ const Input = forwardRef<HTMLInputElement, InputProps>(function Input(
             ${
               error
                 ? "border-danger focus-visible:border-danger focus-visible:ring-danger/20"
-                : "border-app-border"
+                : "border-border"
             }
             ${endSlot ? "pr-11" : ""}
             ${className}`}
@@ -82,7 +82,7 @@ const Input = forwardRef<HTMLInputElement, InputProps>(function Input(
       {!error && helperText && (
         <p
           id={id ? `${id}-help` : undefined}
-          className="text-sm text-app-text-muted"
+          className="text-sm text-text-muted"
         >
           {helperText}
         </p>

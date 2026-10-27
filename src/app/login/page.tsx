@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import Button from "@/components/ui/Button";
 import Input from "@/components/ui/Input";
 import LogoSpinner from "@/components/ui/LogoSpinner";
+import ThemeSwitcher from "@/components/ui/ThemeSwitcher";
 
 import { loginApi, getErrorMessage } from "@/lib/api";
 import { getAuthData, saveAuthData } from "@/lib/auth";
@@ -125,33 +126,41 @@ export default function LoginPage() {
 
   if (checkingAuth) {
     return (
-      <div className="flex min-h-screen items-center justify-center bg-slate-50">
+      <div className="flex min-h-screen items-center justify-center bg-canvas">
         <LogoSpinner label="Memeriksa sesi..." />
       </div>
     );
   }
 
   return (
-    <main className="flex min-h-screen flex-col items-center justify-center bg-slate-50 px-4 py-10 sm:px-6">
+    <main className="relative flex min-h-screen flex-col items-center justify-center bg-canvas px-4 py-10 sm:px-6">
+      <div className="absolute top-4 right-4 z-40">
+        <ThemeSwitcher />
+      </div>
       {/* LOGIN CARD CONTAINER */}
       <div className="w-full max-w-[420px]">
         {/* BRAND HEADER */}
         
 
         {/* MAIN FORM CARD (SOLID CLEAN) */}
-        <div className="rounded-xl border border-slate-200 bg-white p-6 shadow-sm sm:p-8">
+        <div className="rounded-xl border border-border bg-surface text-text-main p-6 shadow-sm sm:p-8">
           <div className="mb-6 flex flex-col items-center text-center">
-          <img
-            src="/logo.png"
-            alt="BukuFlow Logo"
-            className="h-11 w-auto object-contain"
-          />
-          <p className="mt-2 text-xs font-medium text-slate-500">
+            <img
+              src="/logo.png"
+              alt="BukuFlow Logo"
+              className="h-11 w-auto object-contain dark:hidden"
+            />
+            <img
+              src="/logo-dark.png"
+              alt="BukuFlow Logo"
+              className="h-11 w-auto object-contain hidden dark:inline-block"
+            />
+          <p className="mt-2 text-xs font-medium text-text-muted">
             Sistem Manajemen Perpustakaan
           </p>
         </div>
           <div className="mb-6">
-            <h1 className="text-xl font-bold tracking-tight text-slate-900 sm:text-2xl text-center">
+            <h1 className="text-xl font-bold tracking-tight text-text-main sm:text-2xl text-center">
               Masuk ke Akun
             </h1>
           </div>
@@ -225,7 +234,7 @@ export default function LoginPage() {
                   size="sm"
                   onClick={() => setShowPassword((prev) => !prev)}
                   aria-label={showPassword ? "Sembunyikan password" : "Lihat password"}
-                  className="h-8 px-2 text-slate-400 hover:text-slate-600 focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-500"
+                  className="h-8 px-2 text-text-subtle hover:text-text-main focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-500"
                 >
                   {showPassword ? (
                     <svg
@@ -295,7 +304,7 @@ export default function LoginPage() {
         </div>
 
         {/* FOOTER TEXT */}
-        <p className="mt-6 text-center text-xs text-slate-500">
+        <p className="mt-6 text-center text-xs text-text-muted">
           © {new Date().getFullYear()} BukuFlow. Sistem Perpustakaan Terpadu.
         </p>
       </div>

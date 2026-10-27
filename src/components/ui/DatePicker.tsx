@@ -465,15 +465,15 @@ export default function DatePicker({
         width: `${popoverPos.width}px`,
         zIndex: 9000,
       }}
-      className="rounded-xl border border-slate-200 bg-white p-4 shadow-xl ring-1 ring-slate-900/5 animate-in fade-in-50 zoom-in-95"
+      className="rounded-xl border border-border bg-surface p-4 shadow-dropdown ring-1 ring-slate-900/5 animate-in fade-in-50 zoom-in-95"
     >
       {/* Header: Month & Year Nav */}
-      <div className="flex items-center justify-between pb-3 border-b border-slate-100">
+      <div className="flex items-center justify-between pb-3 border-b border-border-subtle">
         <button
           type="button"
           onClick={handlePrevMonth}
           aria-label="Bulan sebelumnya"
-          className="flex h-10 w-10 min-h-[40px] min-w-[40px] items-center justify-center rounded-lg text-slate-500 hover:bg-slate-100 hover:text-slate-800 transition focus:outline-none focus-visible:ring-2 focus-visible:ring-brand"
+          className="flex h-10 w-10 min-h-[40px] min-w-[40px] items-center justify-center rounded-lg text-text-muted hover:bg-surface-muted hover:text-text-main transition focus:outline-none focus-visible:ring-2 focus-visible:ring-brand"
         >
           <svg
             className="h-4 w-4"
@@ -487,7 +487,7 @@ export default function DatePicker({
           </svg>
         </button>
 
-        <span className="text-sm font-semibold text-slate-800">
+        <span className="text-sm font-semibold text-text-main">
           {MONTHS_ID[month]} {year}
         </span>
 
@@ -495,7 +495,7 @@ export default function DatePicker({
           type="button"
           onClick={handleNextMonth}
           aria-label="Bulan berikutnya"
-          className="flex h-10 w-10 min-h-[40px] min-w-[40px] items-center justify-center rounded-lg text-slate-500 hover:bg-slate-100 hover:text-slate-800 transition focus:outline-none focus-visible:ring-2 focus-visible:ring-brand"
+          className="flex h-10 w-10 min-h-[40px] min-w-[40px] items-center justify-center rounded-lg text-text-muted hover:bg-surface-muted hover:text-text-main transition focus:outline-none focus-visible:ring-2 focus-visible:ring-brand"
         >
           <svg
             className="h-4 w-4"
@@ -519,7 +519,7 @@ export default function DatePicker({
         {WEEKDAYS_ID.map((day) => (
           <span
             key={day}
-            className="py-1 text-xs font-semibold text-slate-500"
+            className="py-1 text-xs font-semibold text-text-muted"
           >
             {day}
           </span>
@@ -559,10 +559,10 @@ export default function DatePicker({
                   : cell.isToday
                     ? "border border-brand text-brand font-semibold hover:bg-info-surface focus:bg-info-surface focus:ring-2 focus:ring-brand/20"
                     : cell.isDisabled
-                      ? "text-slate-300 cursor-not-allowed opacity-40"
+                      ? "text-text-subtle cursor-not-allowed opacity-40"
                       : cell.isCurrentMonth
-                        ? "text-slate-700 hover:bg-slate-100 focus:bg-slate-100"
-                        : "text-slate-300 hover:bg-slate-50 focus:bg-slate-50"
+                        ? "text-text-secondary hover:bg-surface-muted focus:bg-surface-muted"
+                        : "text-text-subtle hover:bg-surface-muted focus:bg-surface-muted"
               }`}
             >
               {cell.dayNum}
@@ -572,7 +572,7 @@ export default function DatePicker({
       </div>
 
       {/* Footer Actions */}
-      <div className="mt-3 flex items-center justify-between border-t border-slate-100 pt-3 text-xs font-medium">
+      <div className="mt-3 flex items-center justify-between border-t border-border-subtle pt-3 text-xs font-medium">
         <button
           type="button"
           onClick={() => {
@@ -590,7 +590,7 @@ export default function DatePicker({
           <button
             type="button"
             onClick={handleClear}
-            className="text-slate-500 hover:text-slate-700 rounded px-2 py-1 focus:outline-none focus-visible:ring-2 focus-visible:ring-brand"
+            className="text-text-muted hover:text-text-secondary rounded px-2 py-1 focus:outline-none focus-visible:ring-2 focus-visible:ring-brand"
           >
             Bersihkan
           </button>
@@ -604,7 +604,7 @@ export default function DatePicker({
       {label && (
         <label
           htmlFor={id}
-          className="block text-sm font-medium text-app-text-muted"
+          className="block text-sm font-medium text-text-muted"
         >
           {label}
           {required && <span className="ml-1 text-danger">*</span>}
@@ -621,34 +621,34 @@ export default function DatePicker({
           aria-expanded={isOpen}
           aria-haspopup="dialog"
           aria-describedby={descriptionId}
-          className={`w-full flex items-center justify-between rounded-lg border px-4 py-3 text-sm outline-none transition text-left bg-white
+          className={`w-full flex items-center justify-between rounded-lg border px-4 py-3 text-sm outline-none transition text-left bg-surface
             ${showClearButton && value && !disabled ? "pr-16" : "pr-10"}
             ${
               disabled
-                ? "bg-slate-100 cursor-not-allowed opacity-60 text-slate-400"
-                : "cursor-pointer text-app-text hover:border-slate-400"
+                ? "bg-surface-muted cursor-not-allowed opacity-60 text-text-subtle"
+                : "cursor-pointer text-text-main hover:border-border-strong"
             }
             ${
               isOpen
                 ? "border-brand ring-2 ring-brand/20"
                 : error
                   ? "border-danger"
-                  : "border-app-border"
+                  : "border-border"
             }
             focus:border-brand focus:ring-2 focus:ring-brand/20 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand`}
         >
-          <span className={displayString ? "font-medium text-app-text" : "text-slate-400"}>
+          <span className={displayString ? "font-medium text-text-main" : "text-text-subtle"}>
             {displayString || placeholder}
           </span>
         </button>
 
-        <div className="absolute right-3 top-1/2 -translate-y-1/2 flex items-center gap-1.5 text-slate-400">
+        <div className="absolute right-3 top-1/2 -translate-y-1/2 flex items-center gap-1.5 text-text-subtle">
           {showClearButton && value && !disabled && (
             <button
               type="button"
               aria-label="Bersihkan tanggal"
               onClick={handleClear}
-              className="p-1 text-slate-400 hover:text-slate-600 rounded transition focus:outline-none focus-visible:ring-2 focus-visible:ring-brand"
+              className="p-1 text-text-subtle hover:text-text-secondary rounded transition focus:outline-none focus-visible:ring-2 focus-visible:ring-brand"
             >
               <svg
                 className="h-4 w-4"
@@ -664,7 +664,7 @@ export default function DatePicker({
           )}
 
           <svg
-            className="h-5 w-5 pointer-events-none text-slate-400 shrink-0"
+            className="h-5 w-5 pointer-events-none text-text-subtle shrink-0"
             fill="none"
             viewBox="0 0 24 24"
             stroke="currentColor"
@@ -687,7 +687,7 @@ export default function DatePicker({
       )}
 
       {!error && helperText && (
-        <p id={`${id}-help`} className="text-sm text-app-text-muted">
+        <p id={`${id}-help`} className="text-sm text-text-muted">
           {helperText}
         </p>
       )}

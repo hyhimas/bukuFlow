@@ -79,7 +79,7 @@ export default function DataTable<T>({
   if (items.length === 0 && !loading) {
     if (emptyState) return <>{emptyState}</>;
     return (
-      <Card className={`p-8 text-center text-slate-500 text-sm ${className}`}>
+      <Card className={`p-8 text-center text-text-muted text-sm ${className}`}>
         Tidak ada data ditemukan.
       </Card>
     );
@@ -95,7 +95,7 @@ export default function DataTable<T>({
       {/* DESKTOP TABLE */}
       <div className={`relative overflow-x-auto rounded-t-xl ${desktopDisplayClass}`}>
         <table
-          className={`w-full table-fixed text-left text-sm text-slate-600 ${tableClassName}`}
+          className={`w-full table-fixed text-left text-sm text-text-secondary ${tableClassName}`}
         >
           {/* COLGROUP */}
           <colgroup>
@@ -110,7 +110,7 @@ export default function DataTable<T>({
           </colgroup>
 
           {/* THEAD */}
-          <thead className="border-b border-slate-200 bg-slate-50 text-[11px] font-bold uppercase tracking-wider text-slate-500">
+          <thead className="border-b border-border bg-surface-subtle text-[11px] font-bold uppercase tracking-wider text-text-muted">
             <tr>
               {columns.map((col) => {
                 const alignClass =
@@ -140,7 +140,7 @@ export default function DataTable<T>({
                         variant="ghost"
                         size="sm"
                         onClick={() => handleSort(col.sortKey || col.key)}
-                        className={`group -ml-2 h-auto px-2 py-1 inline-flex items-center gap-1 text-left text-[11px] font-bold uppercase tracking-wider text-slate-500 hover:text-slate-900 transition-colors focus:outline-none ${
+                        className={`group -ml-2 h-auto px-2 py-1 inline-flex items-center gap-1 text-left text-[11px] font-bold uppercase tracking-wider text-text-muted hover:text-text-main transition-colors focus:outline-none ${
                           col.align === "right"
                             ? "justify-end ml-auto"
                             : col.align === "center"
@@ -153,7 +153,7 @@ export default function DataTable<T>({
                           className={`inline-flex shrink-0 items-center justify-center text-xs ${
                             activeSortBy === (col.sortKey || col.key)
                               ? "text-blue-600 font-bold"
-                              : "text-slate-400 opacity-0 group-hover:opacity-100 transition-opacity"
+                              : "text-text-subtle opacity-0 group-hover:opacity-100 transition-opacity"
                           }`}
                           aria-hidden="true"
                         >
@@ -173,7 +173,7 @@ export default function DataTable<T>({
               {rowActions && (
                 <th
                   scope="col"
-                  className="px-3 py-3 text-right text-[11px] font-bold uppercase tracking-wider text-slate-500"
+                  className="px-3 py-3 text-right text-[11px] font-bold uppercase tracking-wider text-text-muted"
                 >
                   Aksi
                 </th>
@@ -182,7 +182,7 @@ export default function DataTable<T>({
           </thead>
 
           {/* TBODY */}
-          <tbody className="divide-y divide-slate-100 bg-white">
+          <tbody className="divide-y divide-border-subtle bg-surface">
             {items.map((item, index) => {
               const rowKey = keyExtractor(item, index);
               const customRowClass = rowClassName ? rowClassName(item, index) : "";
@@ -190,7 +190,7 @@ export default function DataTable<T>({
               return (
                 <tr
                   key={rowKey}
-                  className={`transition hover:bg-slate-50/70 ${customRowClass}`}
+                  className={`transition hover:bg-surface-subtle/70 ${customRowClass}`}
                 >
                   {columns.map((col) => {
                     const alignClass =
@@ -235,12 +235,12 @@ export default function DataTable<T>({
         {/* LOADING OVERLAY ON TABLE */}
         {loading && (
           <div
-            className="absolute inset-0 flex items-center justify-center bg-white/70 backdrop-blur-[1px] z-10"
+            className="absolute inset-0 flex items-center justify-center bg-surface/70 backdrop-blur-[1px] z-10"
             role="status"
             aria-live="polite"
             aria-label={loadingMessage}
           >
-            <div className="rounded-xl border border-slate-200 bg-white px-4 py-3 text-sm font-semibold text-slate-700 shadow-sm flex items-center gap-2">
+            <div className="rounded-xl border border-border bg-surface px-4 py-3 text-sm font-semibold text-text-secondary shadow-sm flex items-center gap-2">
               <span className="h-4 w-4 animate-spin rounded-full border-2 border-blue-600 border-t-transparent" />
               <span>{loadingMessage}</span>
             </div>
@@ -272,7 +272,7 @@ export default function DataTable<T>({
                       key={col.key}
                       className="flex items-start justify-between gap-2 text-xs"
                     >
-                      <span className="font-semibold text-slate-500 shrink-0">
+                      <span className="font-semibold text-text-muted shrink-0">
                         {col.header}
                       </span>
                       <div
@@ -290,8 +290,8 @@ export default function DataTable<T>({
                   );
                 })}
                 {rowActions && (
-                  <div className="mt-2 flex items-center justify-between border-t border-slate-100 pt-2.5">
-                    <span className="text-xs font-medium text-slate-500">Pilihan Aksi</span>
+                  <div className="mt-2 flex items-center justify-between border-t border-border-subtle pt-2.5">
+                    <span className="text-xs font-medium text-text-muted">Pilihan Aksi</span>
                     {rowActions(item, index)}
                   </div>
                 )}

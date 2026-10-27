@@ -171,12 +171,12 @@ export default function Dropdown({
           aria-describedby={describedBy}
           onClick={toggleDropdown}
           onKeyDown={handleKeyDown}
-          className={`inline-flex items-center gap-1.5 rounded-full px-3 py-1.5 text-xs font-semibold transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 disabled:cursor-not-allowed disabled:opacity-60 ${
+          className={`inline-flex items-center gap-1.5 rounded-full px-3 py-1.5 text-xs font-semibold transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand disabled:cursor-not-allowed disabled:opacity-60 ${
             value === "AVAILABLE"
-              ? "bg-emerald-50 text-emerald-700 hover:bg-emerald-100"
+              ? "bg-success-soft text-success-text hover:bg-success-border/40"
               : value === "LOST"
-                ? "bg-red-50 text-red-600 hover:bg-red-100"
-                : "bg-slate-100 text-slate-600 hover:bg-slate-200"
+                ? "bg-danger-soft text-danger-text hover:bg-danger-border/40"
+                : "bg-surface-muted text-text-secondary hover:bg-surface-subtle"
           }`}
         >
           <span>{selectedOption?.label ?? placeholder}</span>
@@ -184,7 +184,7 @@ export default function Dropdown({
           {!disabled && (
             <svg
               aria-hidden="true"
-              className={`h-3 w-3 text-slate-400 transition-transform duration-200 ${
+              className={`h-3 w-3 text-text-subtle transition-transform duration-200 ${
                 open ? "rotate-180" : ""
               }`}
               viewBox="0 0 24 24"
@@ -203,7 +203,7 @@ export default function Dropdown({
             role="listbox"
             id={`${dropdownId}-listbox`}
             aria-label={ariaLabel || label}
-            className="absolute bottom-full right-0 z-50 mb-1 max-h-60 min-w-full overflow-y-auto rounded-xl border border-slate-200 bg-white p-1 shadow-xl"
+            className="absolute bottom-full right-0 z-50 mb-1 max-h-60 min-w-full overflow-y-auto rounded-xl border border-border bg-surface p-1 shadow-dropdown"
           >
             {options.map((option, index) => {
               const isSelected = option.value === value;
@@ -221,17 +221,17 @@ export default function Dropdown({
                   onMouseEnter={() => setActiveIndex(index)}
                   className={`flex w-full items-center justify-between whitespace-nowrap rounded-lg px-3 py-2 text-left text-xs font-medium transition ${
                     isSelected
-                      ? "bg-blue-50 font-semibold text-blue-700"
+                      ? "bg-brand-soft font-semibold text-brand-text"
                       : isHighlighted
-                        ? "bg-slate-100 text-slate-900"
-                        : "text-slate-700 hover:bg-slate-50"
+                        ? "bg-surface-muted text-text-main"
+                        : "text-text-secondary hover:bg-surface-muted"
                   }`}
                 >
                   <span>{option.label}</span>
                   {isSelected && (
                     <svg
                       aria-hidden="true"
-                      className="ml-2 h-3.5 w-3.5 shrink-0 text-blue-600"
+                      className="ml-2 h-3.5 w-3.5 shrink-0 text-brand"
                       viewBox="0 0 24 24"
                       fill="none"
                       stroke="currentColor"
@@ -256,9 +256,9 @@ export default function Dropdown({
       {label && (
         <label
           htmlFor={dropdownId}
-          className="block text-sm font-medium text-slate-700"
+          className="block text-sm font-medium text-text-secondary"
         >
-          {label} {required && <span className="text-red-500">*</span>}
+          {label} {required && <span className="text-danger">*</span>}
         </label>
       )}
 
@@ -279,22 +279,22 @@ export default function Dropdown({
           aria-describedby={describedBy}
           onClick={toggleDropdown}
           onKeyDown={handleKeyDown}
-          className={`flex w-full items-center justify-between rounded-xl border bg-white px-3.5 text-left text-slate-800 outline-none transition ${heightClass} ${
+          className={`flex w-full items-center justify-between rounded-xl border bg-input px-3.5 text-left text-text-main outline-none transition ${heightClass} ${
             error
-              ? "border-red-500 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-red-500"
+              ? "border-danger focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-danger"
               : open
-                ? "border-blue-600 ring-2 ring-blue-100"
-                : "border-slate-300 hover:border-slate-400 focus-visible:outline-none focus-visible:border-blue-600 focus-visible:ring-2 focus-visible:ring-blue-500"
-          } ${disabled ? "cursor-not-allowed bg-slate-100 text-slate-400 opacity-75" : ""}`}
+                ? "border-brand ring-2 ring-brand/20"
+                : "border-border hover:border-border-strong focus-visible:outline-none focus-visible:border-brand focus-visible:ring-2 focus-visible:ring-brand"
+          } ${disabled ? "cursor-not-allowed bg-surface-muted text-text-subtle opacity-75" : ""}`}
         >
-          <span className={`truncate ${!selectedOption && placeholder ? "text-slate-400" : ""}`}>
+          <span className={`truncate ${!selectedOption && placeholder ? "text-text-placeholder" : ""}`}>
             {selectedOption?.label ?? placeholder}
           </span>
 
           <svg
             aria-hidden="true"
-            className={`ml-2 h-4 w-4 shrink-0 text-slate-400 transition-transform duration-200 ${
-              open ? "rotate-180 text-blue-600" : ""
+            className={`ml-2 h-4 w-4 shrink-0 text-text-subtle transition-transform duration-200 ${
+              open ? "rotate-180 text-brand" : ""
             }`}
             viewBox="0 0 24 24"
             fill="none"
@@ -311,7 +311,7 @@ export default function Dropdown({
             role="listbox"
             id={`${dropdownId}-listbox`}
             aria-label={ariaLabel || label}
-            className="absolute left-0 right-0 z-50 mt-1.5 max-h-60 overflow-y-auto rounded-xl border border-slate-200 bg-white p-1 shadow-xl ring-1 ring-black/5 animate-in fade-in-50 zoom-in-95 duration-100"
+            className="absolute left-0 right-0 z-50 mt-1.5 max-h-60 overflow-y-auto rounded-xl border border-border bg-surface p-1 shadow-dropdown animate-in fade-in-50 zoom-in-95 duration-100"
           >
             {options.map((option, index) => {
               const isSelected = option.value === value;
@@ -329,17 +329,17 @@ export default function Dropdown({
                   onMouseEnter={() => setActiveIndex(index)}
                   className={`flex w-full items-center justify-between rounded-lg px-3 py-2.5 text-left text-sm transition ${
                     isSelected
-                      ? "bg-blue-50 font-semibold text-blue-700"
+                      ? "bg-brand-soft font-semibold text-brand-text"
                       : isHighlighted
-                        ? "bg-slate-100 text-slate-900"
-                        : "text-slate-700 hover:bg-slate-50"
+                        ? "bg-surface-muted text-text-main"
+                        : "text-text-secondary hover:bg-surface-muted"
                   }`}
                 >
                   <span className="truncate">{option.label}</span>
                   {isSelected && (
                     <svg
                       aria-hidden="true"
-                      className="ml-2 h-4 w-4 shrink-0 text-blue-600"
+                      className="ml-2 h-4 w-4 shrink-0 text-brand"
                       viewBox="0 0 24 24"
                       fill="none"
                       stroke="currentColor"
@@ -356,11 +356,11 @@ export default function Dropdown({
       </div>
 
       {error && (
-        <p id={errorId} className="text-xs text-red-600 font-medium">{error}</p>
+        <p id={errorId} className="text-xs text-danger font-medium">{error}</p>
       )}
 
       {!error && helperText && (
-        <p id={helperId} className="text-xs text-slate-500">{helperText}</p>
+        <p id={helperId} className="text-xs text-text-muted">{helperText}</p>
       )}
     </div>
   );

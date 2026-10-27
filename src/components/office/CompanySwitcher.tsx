@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import Button from "@/components/ui/Button";
 import LoadingState from "@/components/ui/LoadingState";
-import { getCompaniesApi } from "@/lib/api";
+import { getCompaniesPaginatedApi } from "@/lib/api";
 import type { Company } from "@/lib/types";
 
 export const OFFICE_COMPANY_STORAGE_KEY = "bukuflow_office_selected_company_id";
@@ -76,36 +76,67 @@ export default function CompanySwitcher({
   size = "default",
 }: CompanySwitcherProps) {
   const [fetchedCompanies, setFetchedCompanies] = useState<Company[]>([]);
+  const [serverTotalPages, setServerTotalPages] = useState(1);
+  const [serverTotalItems, setServerTotalItems] = useState(0);
+  const [companyLoading, setCompanyLoading] = useState(false);
+  const [cachedMap, setCachedMap] = useState<Record<string, Company>>({});
+  const savedTotalRef = useRef(0);
   const [isOpen, setIsOpen] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
   const [page, setPage] = useState(1);
   const PAGE_SIZE = 10;
   const dropdownRef = useRef<HTMLDivElement>(null);
+  const activeReqIdRef = useRef(0);
 
   const closeDropdown = useCallback(() => {
     setIsOpen(false);
     setSearchQuery("");
-    setPage(1);
   }, []);
 
   useEffect(() => {
-    if (initialCompanies && initialCompanies.length > 0) return;
+    if (initialCompanies && initialCompanies.length > 0) {
+      setCompanyLoading(false);
+      return;
+    }
 
-    let isMounted = true;
-    getCompaniesApi()
-      .then((comps) => {
-        if (isMounted) {
-          setFetchedCompanies(comps);
+    const reqId = ++activeReqIdRef.current;
+    setCompanyLoading(true);
+
+    getCompaniesPaginatedApi({ page, size: PAGE_SIZE, sortby: "name", order: "asc" })
+      .then((res) => {
+        if (reqId !== activeReqIdRef.current) return;
+        const items = res.items || [];
+        setFetchedCompanies(items);
+
+        setCachedMap((prev) => {
+          const next = { ...prev };
+          items.forEach((c) => {
+            next[c.id] = c;
+          });
+          return next;
+        });
+
+        if (typeof res.total === "number" && res.total >= 0) {
+          savedTotalRef.current = res.total;
+          setServerTotalItems(res.total);
+          setServerTotalPages(Math.max(1, Math.ceil(res.total / PAGE_SIZE)));
+        } else if (savedTotalRef.current > 0) {
+          setServerTotalItems(savedTotalRef.current);
+          setServerTotalPages(Math.max(1, Math.ceil(savedTotalRef.current / PAGE_SIZE)));
+        } else {
+          setServerTotalPages(res.totalPages || 1);
         }
       })
       .catch((err) => {
+        if (reqId !== activeReqIdRef.current) return;
         console.warn("Daftar instansi belum tersedia di backend:", err?.message || err);
+      })
+      .finally(() => {
+        if (reqId === activeReqIdRef.current) {
+          setCompanyLoading(false);
+        }
       });
-
-    return () => {
-      isMounted = false;
-    };
-  }, [initialCompanies]);
+  }, [initialCompanies, page]);
 
   // Click outside listener
   useEffect(() => {
@@ -131,24 +162,37 @@ export default function CompanySwitcher({
       : fetchedCompanies;
 
   const selectedCompany =
-    companies.find((c) => c.id === selectedCompanyId) || null;
+    companies.find((c) => c.id === selectedCompanyId) ||
+    cachedMap[selectedCompanyId] ||
+    null;
 
-  const filteredCompanies = companies.filter((c) => {
-    if (!searchQuery.trim()) return true;
-    const q = searchQuery.toLowerCase().trim();
-    return (
-      c.name.toLowerCase().includes(q) ||
-      (c.code && c.code.toLowerCase().includes(q))
-    );
-  });
+  const isServerPaginated = !initialCompanies || initialCompanies.length === 0;
 
-  const totalItems = filteredCompanies.length;
-  const totalPages = Math.max(1, Math.ceil(totalItems / PAGE_SIZE));
+  const filteredCompanies = companies
+    .filter((c) => {
+      if (!searchQuery.trim()) return true;
+      const q = searchQuery.toLowerCase().trim();
+      return (
+        c.name.toLowerCase().includes(q) ||
+        (c.code && c.code.toLowerCase().includes(q))
+      );
+    })
+    .sort((a, b) => a.name.localeCompare(b.name, "id-ID", { sensitivity: "base" }));
+
+  const totalItems = isServerPaginated
+    ? (serverTotalItems > 0 ? serverTotalItems : filteredCompanies.length)
+    : filteredCompanies.length;
+  const totalPages = isServerPaginated
+    ? Math.max(1, serverTotalPages)
+    : Math.max(1, Math.ceil(totalItems / PAGE_SIZE));
   const safePage = Math.min(Math.max(1, page), totalPages);
-  const paginatedCompanies = filteredCompanies.slice(
-    (safePage - 1) * PAGE_SIZE,
-    safePage * PAGE_SIZE
-  );
+
+  const paginatedCompanies = isServerPaginated
+    ? filteredCompanies
+    : filteredCompanies.slice(
+        (safePage - 1) * PAGE_SIZE,
+        safePage * PAGE_SIZE
+      );
 
   const isSmall = size === "sm";
 
@@ -167,24 +211,31 @@ export default function CompanySwitcher({
         aria-expanded={isOpen}
         className={`flex w-full items-center justify-between gap-3 text-left ${
           isSmall
-            ? "h-9 sm:w-64 px-3 py-1.5 text-xs font-semibold text-slate-800"
+            ? "h-9 sm:w-64 px-3 py-1.5 text-xs font-semibold text-text-main"
             : "h-auto sm:w-72 px-4 py-2.5"
         }`}
       >
         <div className="min-w-0 flex-1">
           {!isSmall && (
-            <p className="text-xs font-medium text-slate-500">Instansi</p>
+            <p className="text-xs font-medium text-text-muted">Instansi</p>
           )}
-          <p
-            className={`truncate font-semibold text-slate-900 ${
-              isSmall ? "text-xs" : "text-sm"
-            }`}
-          >
-            {selectedCompany ? selectedCompany.name : "Pilih instansi"}
-          </p>
+          <div className="flex items-center gap-1.5 min-w-0">
+            <p
+              className={`truncate font-semibold text-text-main ${
+                isSmall ? "text-xs" : "text-sm"
+              }`}
+            >
+              {selectedCompany ? selectedCompany.name : "Pilih instansi"}
+            </p>
+            {selectedCompany?.status === "INACTIVE" && (
+              <span className="shrink-0 rounded bg-amber-100 text-amber-800 text-[10px] font-semibold px-1.5 py-0.5">
+                Nonaktif
+              </span>
+            )}
+          </div>
         </div>
         <ChevronDownIcon
-          className={`h-4 w-4 shrink-0 text-slate-400 transition-transform duration-200 ${
+          className={`h-4 w-4 shrink-0 text-text-subtle transition-transform duration-200 ${
             isOpen ? "rotate-180" : ""
           }`}
         />
@@ -192,14 +243,14 @@ export default function CompanySwitcher({
 
       {isOpen && (
         <div
-          className={`absolute left-0 top-full z-50 mt-1.5 w-full min-w-[260px] max-w-[calc(100vw-2rem)] rounded-xl border border-slate-200 bg-white shadow-xl max-h-80 overflow-y-auto ${
+          className={`absolute left-0 top-full z-50 mt-1.5 w-full min-w-[260px] max-w-[calc(100vw-2rem)] rounded-xl border border-border bg-surface shadow-xl max-h-80 overflow-y-auto ${
             isSmall ? "sm:w-64" : "sm:w-72"
           }`}
         >
-          <div className="flex items-center justify-between px-3 pt-2.5 pb-1 text-[11px] font-semibold uppercase tracking-wider text-slate-500">
+          <div className="flex items-center justify-between px-3 pt-2.5 pb-1 text-[11px] font-semibold uppercase tracking-wider text-text-muted">
             <span>Pilih Instansi</span>
             {companies.length > 0 && (
-              <span className="text-[10px] lowercase font-normal text-slate-500">
+              <span className="text-[10px] lowercase font-normal text-text-muted">
                 {companies.length} terdaftar
               </span>
             )}
@@ -216,7 +267,7 @@ export default function CompanySwitcher({
                     setPage(1);
                   }}
                   placeholder="Cari nama atau inisial..."
-                  className="w-full rounded-lg border border-slate-200 bg-slate-50/70 px-2.5 py-1.5 text-xs text-slate-800 placeholder:text-slate-400 focus:border-blue-500 focus:bg-white focus:outline-none focus-visible:ring-1 focus-visible:ring-blue-500"
+                  className="w-full rounded-lg border border-border bg-surface-subtle px-2.5 py-1.5 text-xs text-text-main placeholder:text-text-subtle focus:border-blue-500 focus:bg-surface focus:outline-none focus-visible:ring-1 focus-visible:ring-blue-500"
                 />
                 {searchQuery && (
                   <button
@@ -225,7 +276,7 @@ export default function CompanySwitcher({
                       setSearchQuery("");
                       setPage(1);
                     }}
-                    className="absolute right-2 flex h-4 w-4 items-center justify-center rounded-full text-xs text-slate-400 hover:bg-slate-200/60 hover:text-slate-600"
+                    className="absolute right-2 flex h-4 w-4 items-center justify-center rounded-full text-xs text-text-subtle hover:bg-surface-muted hover:text-text-secondary"
                     aria-label="Hapus kata pencarian"
                   >
                     <svg className="h-3 w-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2} aria-hidden="true">
@@ -239,8 +290,10 @@ export default function CompanySwitcher({
 
           <div className="space-y-0.5 max-h-64 overflow-y-auto px-1.5 py-1">
             {paginatedCompanies.length === 0 ? (
-              <div className="px-3 py-4 text-center text-xs text-slate-500">
-                {searchQuery
+              <div className="px-3 py-4 text-center text-xs text-text-muted">
+                {companyLoading
+                  ? "Memuat daftar instansi..."
+                  : searchQuery
                   ? "Instansi tidak ditemukan."
                   : "Tidak ada data instansi."}
               </div>
@@ -261,14 +314,21 @@ export default function CompanySwitcher({
                     className={`flex w-full items-center justify-between gap-2 px-3 py-2 text-left h-auto rounded-lg ${
                       isSelected
                         ? "bg-blue-50 font-semibold text-blue-700 hover:bg-blue-100/60"
-                        : "text-slate-700 hover:bg-slate-100/70 font-normal"
+                        : "text-text-secondary hover:bg-surface-muted/70 font-normal"
                     }`}
                   >
                     <div className="min-w-0 flex-1">
-                      <p className="truncate text-xs sm:text-sm font-medium">
-                        {company.name}
-                      </p>
-                      <p className="font-mono text-[11px] text-slate-500">
+                      <div className="flex items-center gap-1.5 min-w-0">
+                        <p className="truncate text-xs sm:text-sm font-medium">
+                          {company.name}
+                        </p>
+                        {company.status === "INACTIVE" && (
+                          <span className="shrink-0 rounded bg-amber-100 text-amber-800 text-[10px] font-semibold px-1.5 py-0.2">
+                            Nonaktif
+                          </span>
+                        )}
+                      </div>
+                      <p className="font-mono text-[11px] text-text-muted">
                         {company.code}
                       </p>
                     </div>
@@ -284,15 +344,15 @@ export default function CompanySwitcher({
           </div>
 
           {totalPages > 1 && (
-            <div className="flex items-center justify-between border-t border-slate-100 px-3 py-2 text-xs text-slate-600 bg-slate-50/70 rounded-b-xl">
+            <div className="flex items-center justify-between border-t border-border-subtle px-3 py-2 text-xs text-text-secondary bg-surface-subtle rounded-b-xl">
               <Button
                 type="button"
                 variant="ghost"
                 size="sm"
-                disabled={safePage <= 1}
+                disabled={safePage <= 1 || companyLoading}
                 onClick={() => setPage((p) => Math.max(1, p - 1))}
                 aria-label="Halaman sebelumnya"
-                className="h-7 w-7 p-0 flex items-center justify-center text-slate-500 hover:bg-slate-200/60 disabled:opacity-30 disabled:hover:bg-transparent"
+                className="h-7 w-7 p-0 flex items-center justify-center text-text-muted hover:bg-surface-muted disabled:opacity-30 disabled:hover:bg-transparent"
               >
                 <svg
                   className="h-3.5 w-3.5"
@@ -306,18 +366,20 @@ export default function CompanySwitcher({
                 </svg>
               </Button>
 
-              <span className="font-medium text-[11px] text-slate-600 tabular-nums">
-                Halaman {safePage} dari {totalPages}
+              <span className="font-medium text-[11px] text-text-secondary tabular-nums">
+                {companyLoading
+                  ? "Memuat..."
+                  : `Halaman ${safePage} dari ${totalPages}`}
               </span>
 
               <Button
                 type="button"
                 variant="ghost"
                 size="sm"
-                disabled={safePage >= totalPages}
+                disabled={safePage >= totalPages || companyLoading}
                 onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
                 aria-label="Halaman berikutnya"
-                className="h-7 w-7 p-0 flex items-center justify-center text-slate-500 hover:bg-slate-200/60 disabled:opacity-30 disabled:hover:bg-transparent"
+                className="h-7 w-7 p-0 flex items-center justify-center text-text-muted hover:bg-surface-muted disabled:opacity-30 disabled:hover:bg-transparent"
               >
                 <svg
                   className="h-3.5 w-3.5"

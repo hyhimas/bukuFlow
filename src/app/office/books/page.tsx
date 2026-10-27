@@ -8,7 +8,7 @@ import Button from "@/components/ui/Button";
 import Input from "@/components/ui/Input";
 import Dropdown from "@/components/ui/Dropdown";
 import BackLink from "@/components/ui/BackLink";
-import LoadingState from "@/components/ui/LoadingState";
+import Skeleton, { TableSkeleton } from "@/components/ui/Skeleton";
 import ErrorState from "@/components/ui/ErrorState";
 import Modal from "@/components/ui/Modal";
 import { useSearchHotkey, useSubmitHotkey } from "@/hooks/useHotkeys";
@@ -16,6 +16,10 @@ import PageHeader from "@/components/ui/PageHeader";
 import Pagination from "@/components/ui/Pagination";
 import RowActions from "@/components/ui/RowActions";
 import ConfirmationDialog from "@/components/ui/ConfirmationDialog";
+import InactiveCompanyState, {
+  isCompanyInactiveError,
+  isStoredCompanyInactive,
+} from "@/components/office/InactiveCompanyState";
 import CompanySwitcher, {
   getStoredOfficeCompanyId,
   setStoredOfficeCompanyId,
@@ -97,7 +101,7 @@ function getCopyStatusClass(status: BookCopyStatus) {
     return "bg-red-50 text-red-600";
   }
 
-  return "bg-slate-100 text-slate-600";
+  return "bg-surface-muted text-text-secondary";
 }
 
 function getCopyStatusLabel(status: BookCopyStatus) {
@@ -211,8 +215,13 @@ export default function OfficeBooksPage() {
   const [exportLoading, setExportLoading] = useState(false);
 
   // Selected Company Name
-  const selectedCompanyName =
-    companies.find((c) => c.id === selectedCompanyId)?.name || "Perpustakaan";
+  const selectedCompany = companies.find((c) => c.id === selectedCompanyId);
+  const selectedCompanyName = selectedCompany?.name || "Perpustakaan";
+  const isInactiveCompany =
+    selectedCompany?.status === "INACTIVE" ||
+    selectedCompany?.status === "SUSPENDED" ||
+    isStoredCompanyInactive(selectedCompanyId) ||
+    isCompanyInactiveError(error);
 
   const searchInputRef = useRef<HTMLInputElement>(null);
   useSearchHotkey(searchInputRef, {
@@ -1007,14 +1016,39 @@ export default function OfficeBooksPage() {
 
   if (!isAuthorized) {
     return (
-      <div className="min-h-screen bg-slate-50">
-        <LoadingState label="Memeriksa otorisasi Super Admin..." />
+      <div className="min-h-screen bg-surface-subtle" role="status" aria-label="Memeriksa otorisasi Super Admin...">
+        <div className="mx-auto w-full max-w-7xl px-3 py-4 sm:px-5 sm:py-5 lg:px-6 space-y-4">
+          {/* BackLink Skeleton */}
+          <Skeleton className="h-4 w-44 rounded" />
+
+          {/* PageHeader Skeleton */}
+          <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 mb-2">
+            <div className="space-y-2">
+              <Skeleton className="h-8 w-60 rounded-lg" />
+              <Skeleton className="h-4 w-80 max-w-full rounded" />
+            </div>
+            <div className="flex items-center gap-2">
+              <Skeleton className="h-9 w-44 rounded-lg" />
+              <Skeleton className="h-9 w-28 rounded-lg" />
+            </div>
+          </div>
+
+          {/* Search & Filter Card Skeleton */}
+          <Card className="p-4">
+            <Skeleton className="h-10 w-full rounded-lg" />
+          </Card>
+
+          {/* Table Card Skeleton */}
+          <Card className="overflow-hidden">
+            <TableSkeleton rows={6} cols={6} />
+          </Card>
+        </div>
       </div>
     );
   }
 
   return (
-    <div className="min-h-screen bg-slate-50">
+    <div className="min-h-screen bg-surface-subtle">
       <div className="mx-auto w-full max-w-7xl px-3 py-4 sm:px-5 sm:py-5 lg:px-6">
         {/* Tombol Navigasi Kembali */}
         <div className="mb-4">
@@ -1105,13 +1139,13 @@ export default function OfficeBooksPage() {
         {/* State 1: Belum Memilih Instansi */}
         {!selectedCompanyId ? (
           <Card className="p-12 text-center">
-            <div className="mx-auto flex h-11 w-11 items-center justify-center rounded-full bg-slate-100 text-slate-400">
+            <div className="mx-auto flex h-11 w-11 items-center justify-center rounded-full bg-surface-muted text-text-subtle">
               ?
             </div>
-            <h2 className="mt-4 text-base font-semibold text-slate-900">
+            <h2 className="mt-4 text-base font-semibold text-text-main">
               Pilih Instansi Terlebih Dahulu
             </h2>
-            <p className="mx-auto mt-1 max-w-sm text-xs leading-5 text-slate-500">
+            <p className="mx-auto mt-1 max-w-sm text-xs leading-5 text-text-muted">
               Silakan pilih instansi pada dropdown di atas untuk mengelola katalog buku perpustakaan.
             </p>
           </Card>
@@ -1141,7 +1175,7 @@ export default function OfficeBooksPage() {
                 <div className="min-w-0 xl:hidden">
                   <label
                     htmlFor="book-sort"
-                    className="mb-1.5 block text-xs sm:text-sm font-medium text-slate-700 truncate"
+                    className="mb-1.5 block text-xs sm:text-sm font-medium text-text-secondary truncate"
                   >
                     Urutan
                   </label>
@@ -1166,8 +1200,14 @@ export default function OfficeBooksPage() {
               </div>
             </Card>
 
-            {/* ERROR STATE vs BOOK LIST */}
-            {error ? (
+            {/* INACTIVE STATE vs ERROR STATE vs BOOK LIST */}
+            {isInactiveCompany ? (
+              <InactiveCompanyState
+                companyName={selectedCompanyName}
+                description="Pengelolaan katalog buku dan data eksemplar ditangguhkan karena instansi ini sedang dalam status nonaktif."
+                className="mb-4"
+              />
+            ) : error ? (
               <ErrorState
                 title="Gagal Memuat Katalog Buku"
                 message={error}
@@ -1175,19 +1215,24 @@ export default function OfficeBooksPage() {
                 className="mb-4"
               />
             ) : (
-              <Card>
+              <Card className="overflow-hidden">
+                {/* SKELETON INITIAL LOADING */}
+                {loading && books.length === 0 && (
+                  <TableSkeleton rows={6} cols={6} />
+                )}
+
                 {/* EMPTY */}
                 {!loading && books.length === 0 && (
                   <div className="px-4 py-12 text-center">
-                    <div className="mx-auto flex h-11 w-11 items-center justify-center rounded-full bg-slate-100 text-slate-400">
+                    <div className="mx-auto flex h-11 w-11 items-center justify-center rounded-full bg-surface-muted text-text-subtle">
                       ?
                     </div>
 
-                    <h3 className="mt-3 text-sm font-semibold text-slate-900">
+                    <h3 className="mt-3 text-sm font-semibold text-text-main">
                       Buku tidak ditemukan
                     </h3>
 
-                    <p className="mx-auto mt-1 max-w-sm text-xs leading-5 text-slate-500">
+                    <p className="mx-auto mt-1 max-w-sm text-xs leading-5 text-text-muted">
                       {search
                         ? `Tidak ada buku yang sesuai dengan pencarian "${search}".`
                         : "Belum ada katalog buku yang terdaftar di instansi ini."}
@@ -1208,7 +1253,7 @@ export default function OfficeBooksPage() {
                 {/* DESKTOP TABLE (>= xl) */}
                 {books.length > 0 && (
                   <div className="relative hidden overflow-x-auto rounded-t-xl xl:block">
-                    <table className="w-full text-left text-sm text-slate-600 table-fixed">
+                    <table className="w-full text-left text-sm text-text-secondary table-fixed">
                       <colgroup>
                         <col className="w-[140px]" />
                         <col className="w-auto" />
@@ -1217,11 +1262,11 @@ export default function OfficeBooksPage() {
                         <col className="w-[110px]" />
                         <col className="w-[80px]" />
                       </colgroup>
-                      <thead className="border-b border-slate-200 bg-slate-50 text-[11px] font-bold uppercase tracking-wider text-slate-500">
+                      <thead className="border-b border-border bg-surface-subtle text-[11px] font-bold uppercase tracking-wider text-text-muted">
                         <tr>
                           <th className="px-3.5 py-3">Kode</th>
                           <th
-                            className="px-3.5 py-3 cursor-pointer select-none hover:text-slate-900 transition-colors"
+                            className="px-3.5 py-3 cursor-pointer select-none hover:text-text-main transition-colors"
                             onClick={() => {
                               setSortBy("title");
                               setSortOrder((prev) =>
@@ -1233,7 +1278,7 @@ export default function OfficeBooksPage() {
                           >
                             <div className="flex items-center gap-1.5">
                               <span>Buku</span>
-                              <span className="text-xs text-slate-500 font-medium">
+                              <span className="text-xs text-text-muted font-medium">
                                 {sortBy === "title"
                                   ? sortOrder === "asc"
                                     ? "▲ A-Z"
@@ -1251,15 +1296,15 @@ export default function OfficeBooksPage() {
                         </tr>
                       </thead>
 
-                      <tbody className="divide-y divide-slate-100">
+                      <tbody className="divide-y divide-border-subtle">
                         {books.map((book) => {
                           return (
                             <tr
                               key={book.id}
-                              className="transition hover:bg-slate-50/70"
+                              className="transition hover:bg-surface-subtle"
                             >
                               <td
-                                className="px-3.5 py-3 font-semibold text-slate-900 truncate text-xs font-mono"
+                                className="px-3.5 py-3 font-semibold text-text-main truncate text-xs font-mono"
                                 title={book.code}
                               >
                                 {book.code}
@@ -1267,7 +1312,7 @@ export default function OfficeBooksPage() {
 
                               <td className="px-3.5 py-3 min-w-0">
                                 <p
-                                  className="truncate font-semibold text-slate-800 text-xs sm:text-sm"
+                                  className="truncate font-semibold text-text-main text-xs sm:text-sm"
                                   title={book.title}
                                 >
                                   {book.title}
@@ -1275,14 +1320,14 @@ export default function OfficeBooksPage() {
 
                                 {(book.author && book.author !== "-") ||
                                 (book.isbn && book.isbn !== "-") ? (
-                                  <p className="mt-0.5 truncate text-xs text-slate-500">
+                                  <p className="mt-0.5 truncate text-xs text-text-muted">
                                     {book.author &&
                                     book.author !== "-" &&
                                     book.isbn &&
                                     book.isbn !== "-" ? (
                                       <>
                                         <span>{book.author}</span>
-                                        <span className="mx-1 select-none text-slate-300" aria-hidden="true">&bull;</span>
+                                        <span className="mx-1 select-none text-text-subtle" aria-hidden="true">&bull;</span>
                                         <span>ISBN {book.isbn}</span>
                                       </>
                                     ) : book.author && book.author !== "-" ? (
@@ -1294,15 +1339,15 @@ export default function OfficeBooksPage() {
                                 ) : null}
                               </td>
 
-                              <td className="px-3 py-3 text-slate-600 truncate text-xs">
+                              <td className="px-3 py-3 text-text-secondary truncate text-xs">
                                 {book.category ?? "-"}
                               </td>
 
                               <td className="px-2 py-3 whitespace-nowrap text-xs text-center tabular-nums">
-                                <span className="font-bold text-slate-900">
+                                <span className="font-bold text-text-main">
                                   {book.availableCopies}
                                 </span>
-                                <span className="text-slate-500">
+                                <span className="text-text-muted">
                                   {" "}
                                   / {book.totalCopies}
                                 </span>
@@ -1330,12 +1375,12 @@ export default function OfficeBooksPage() {
 
                     {tableLoading && (
                       <div
-                        className="absolute inset-0 flex items-center justify-center bg-white/70"
+                        className="absolute inset-0 flex items-center justify-center bg-surface/70"
                         role="status"
                         aria-live="polite"
                         aria-label="Memuat data buku"
                       >
-                        <div className="rounded-lg bg-white px-4 py-3 text-sm font-medium text-slate-600 shadow-sm ring-1 ring-slate-200">
+                        <div className="rounded-lg bg-surface px-4 py-3 text-sm font-medium text-text-secondary shadow-sm ring-1 ring-slate-200">
                           Memuat data...
                         </div>
                       </div>
@@ -1345,7 +1390,7 @@ export default function OfficeBooksPage() {
 
                 {/* MOBILE & TABLET CARDS (< xl) */}
                 {books.length > 0 && (
-                  <div className="relative grid grid-cols-1 md:grid-cols-2 gap-3 bg-slate-50/60 p-3 xl:hidden">
+                  <div className="relative grid grid-cols-1 md:grid-cols-2 gap-3 bg-surface-subtle/60 p-3 xl:hidden">
                     {books.map((book, idx) => {
                       const isLastOdd =
                         books.length % 2 !== 0 && idx === books.length - 1;
@@ -1353,7 +1398,7 @@ export default function OfficeBooksPage() {
                       return (
                         <div
                           key={book.id}
-                          className={`rounded-xl border border-slate-200 bg-white p-3.5 shadow-sm flex flex-col justify-between h-full ${
+                          className={`rounded-xl border border-border bg-surface p-3.5 shadow-sm flex flex-col justify-between h-full ${
                             isLastOdd
                               ? "md:col-span-2 md:w-[calc(50%-6px)] md:mx-auto"
                               : ""
@@ -1362,12 +1407,12 @@ export default function OfficeBooksPage() {
                           <div>
                             <div className="flex items-start justify-between gap-3">
                               <div className="min-w-0">
-                                <p className="text-xs font-medium text-slate-500 font-mono">
+                                <p className="text-xs font-medium text-text-muted font-mono">
                                   {book.code}
                                 </p>
 
                                 <p
-                                  className="mt-0.5 truncate text-sm font-semibold text-slate-900"
+                                  className="mt-0.5 truncate text-sm font-semibold text-text-main"
                                   title={book.title}
                                 >
                                   {book.title}
@@ -1385,13 +1430,13 @@ export default function OfficeBooksPage() {
 
                             {/* UNIFORM 2x2 INFO GRID */}
                             <div className="mt-3 grid grid-cols-2 gap-2">
-                              <div className="rounded-lg border border-slate-100 bg-slate-50 px-3 py-2">
-                                <p className="text-[11px] font-semibold uppercase tracking-wide text-slate-500">
+                              <div className="rounded-lg border border-border-subtle bg-surface-subtle px-3 py-2">
+                                <p className="text-[11px] font-semibold uppercase tracking-wide text-text-muted">
                                   Kategori
                                 </p>
 
                                 <p
-                                  className="mt-0.5 truncate text-xs font-medium text-slate-700"
+                                  className="mt-0.5 truncate text-xs font-medium text-text-secondary"
                                   title={book.category || "-"}
                                 >
                                   {book.category && book.category !== "-"
@@ -1400,12 +1445,12 @@ export default function OfficeBooksPage() {
                                 </p>
                               </div>
 
-                              <div className="rounded-lg border border-slate-100 bg-slate-50 px-3 py-2">
-                                <p className="text-[11px] font-semibold uppercase tracking-wide text-slate-500">
+                              <div className="rounded-lg border border-border-subtle bg-surface-subtle px-3 py-2">
+                                <p className="text-[11px] font-semibold uppercase tracking-wide text-text-muted">
                                   Eksemplar
                                 </p>
 
-                                <p className="mt-0.5 text-xs font-medium text-slate-700">
+                                <p className="mt-0.5 text-xs font-medium text-text-secondary">
                                   <span className="font-bold">
                                     {book.availableCopies}
                                   </span>
@@ -1414,13 +1459,13 @@ export default function OfficeBooksPage() {
                                 </p>
                               </div>
 
-                              <div className="rounded-lg border border-slate-100 bg-slate-50 px-3 py-2">
-                                <p className="text-[11px] font-semibold uppercase tracking-wide text-slate-500">
+                              <div className="rounded-lg border border-border-subtle bg-surface-subtle px-3 py-2">
+                                <p className="text-[11px] font-semibold uppercase tracking-wide text-text-muted">
                                   ISBN
                                 </p>
 
                                 <p
-                                  className="mt-0.5 truncate text-xs font-medium text-slate-700"
+                                  className="mt-0.5 truncate text-xs font-medium text-text-secondary"
                                   title={book.isbn || "-"}
                                 >
                                   {book.isbn && book.isbn !== "-"
@@ -1429,13 +1474,13 @@ export default function OfficeBooksPage() {
                                 </p>
                               </div>
 
-                              <div className="rounded-lg border border-slate-100 bg-slate-50 px-3 py-2">
-                                <p className="text-[11px] font-semibold uppercase tracking-wide text-slate-500">
+                              <div className="rounded-lg border border-border-subtle bg-surface-subtle px-3 py-2">
+                                <p className="text-[11px] font-semibold uppercase tracking-wide text-text-muted">
                                   Pengarang
                                 </p>
 
                                 <p
-                                  className="mt-0.5 truncate text-xs font-medium text-slate-700"
+                                  className="mt-0.5 truncate text-xs font-medium text-text-secondary"
                                   title={book.author || "-"}
                                 >
                                   {book.author && book.author !== "-"
@@ -1446,8 +1491,8 @@ export default function OfficeBooksPage() {
                             </div>
                           </div>
 
-                          <div className="mt-3.5 pt-2.5 border-t border-slate-100 flex items-center justify-between">
-                            <span className="text-xs font-medium text-slate-500">
+                          <div className="mt-3.5 pt-2.5 border-t border-border-subtle flex items-center justify-between">
+                            <span className="text-xs font-medium text-text-muted">
                               Pilihan Aksi
                             </span>
                             <RowActions actions={getBookActions(book)} />
@@ -1458,11 +1503,11 @@ export default function OfficeBooksPage() {
 
                     {tableLoading && (
                       <div
-                        className="absolute inset-0 flex items-center justify-center bg-white/70"
+                        className="absolute inset-0 flex items-center justify-center bg-surface/70"
                         role="status"
                         aria-live="polite"
                       >
-                        <div className="rounded-lg bg-white px-4 py-3 text-sm font-medium text-slate-600 shadow-sm ring-1 ring-slate-200">
+                        <div className="rounded-lg bg-surface px-4 py-3 text-sm font-medium text-text-secondary shadow-sm ring-1 ring-slate-200">
                           Memuat data...
                         </div>
                       </div>
@@ -1471,17 +1516,19 @@ export default function OfficeBooksPage() {
                 )}
 
                 {/* PAGINATION DENGAN PER HALAMAN DI BAWAH */}
-                <Pagination
-                  currentPage={page}
-                  totalPages={totalPages}
-                  onPageChange={(nextPage) => setPage(nextPage)}
-                  totalItems={total}
-                  pageSize={pageSize}
-                  onPageSizeChange={(newSize) => {
-                    setPageSize(newSize);
-                    setPage(1);
-                  }}
-                />
+                {books.length > 0 && (
+                  <Pagination
+                    currentPage={page}
+                    totalPages={totalPages}
+                    onPageChange={(nextPage) => setPage(nextPage)}
+                    totalItems={total}
+                    pageSize={pageSize}
+                    onPageSizeChange={(newSize) => {
+                      setPageSize(newSize);
+                      setPage(1);
+                    }}
+                  />
+                )}
               </Card>
             )}
           </>
@@ -1497,18 +1544,18 @@ export default function OfficeBooksPage() {
           size="2xl"
           initialFocusRef={formCloseRef}
           ariaLabelledBy="book-form-title"
-          className="w-full max-w-2xl overflow-hidden rounded-xl bg-white shadow-2xl"
+          className="w-full max-w-2xl overflow-hidden rounded-xl bg-surface shadow-2xl"
         >
-          <div className="flex items-center justify-between border-b border-slate-200 px-4 py-3">
+          <div className="flex items-center justify-between border-b border-border px-4 py-3">
             <div>
               <h2
                 id="book-form-title"
-                className="text-base font-semibold text-slate-900"
+                className="text-base font-semibold text-text-main"
               >
                 {editingBook ? "Ubah Buku" : "Tambah Buku"}
               </h2>
 
-              <p className="mt-0.5 text-xs text-slate-500">
+              <p className="mt-0.5 text-xs text-text-muted">
                 {editingBook
                   ? `Perbarui informasi buku di instansi ${selectedCompanyName}.`
                   : `Masukkan data buku dan jumlah eksemplar awal untuk instansi ${selectedCompanyName}.`}
@@ -1523,7 +1570,7 @@ export default function OfficeBooksPage() {
               disabled={bookFormLoading}
               aria-label="Tutup form"
               onClick={handleRequestCloseForm}
-              className="h-8 w-8 p-0 text-slate-500 hover:text-slate-700 flex items-center justify-center"
+              className="h-8 w-8 p-0 text-text-muted hover:text-text-secondary flex items-center justify-center"
             >
               <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2} aria-hidden="true">
                 <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
@@ -1628,20 +1675,20 @@ export default function OfficeBooksPage() {
             )}
 
             {editingBook && (
-              <div className="rounded-lg border border-slate-100 bg-slate-50 px-3 py-2.5">
-                <p className="text-[11px] font-semibold uppercase tracking-wide text-slate-500">
+              <div className="rounded-lg border border-border-subtle bg-surface-subtle px-3 py-2.5">
+                <p className="text-[11px] font-semibold uppercase tracking-wide text-text-muted">
                   Eksemplar
                 </p>
-                <p className="mt-0.5 text-sm font-semibold text-slate-800">
+                <p className="mt-0.5 text-sm font-semibold text-text-main">
                   {editingBook.totalCopies} eksemplar
                 </p>
-                <p className="mt-0.5 text-xs text-slate-500">
+                <p className="mt-0.5 text-xs text-text-muted">
                   Tambah eksemplar dilakukan dari detail buku.
                 </p>
               </div>
             )}
 
-            <div className="flex flex-col-reverse gap-2 border-t border-slate-100 pt-3 sm:col-span-2 sm:flex-row sm:justify-end">
+            <div className="flex flex-col-reverse gap-2 border-t border-border-subtle pt-3 sm:col-span-2 sm:flex-row sm:justify-end">
               <Button
                 type="button"
                 variant="secondary"
@@ -1718,13 +1765,13 @@ export default function OfficeBooksPage() {
             raw
             size="2xl"
             ariaLabelledBy="book-detail-title"
-            className="w-full max-w-2xl overflow-hidden rounded-2xl bg-white shadow-2xl"
+            className="w-full max-w-2xl overflow-hidden rounded-2xl bg-surface shadow-2xl"
           >
             {/* HEADER */}
-            <div className="flex shrink-0 items-center justify-between border-b border-slate-200 px-4 py-3 sm:px-5">
+            <div className="flex shrink-0 items-center justify-between border-b border-border px-4 py-3 sm:px-5">
               <div className="min-w-0 pr-2">
                 <div className="flex flex-wrap items-center gap-1.5">
-                  <span className="font-mono text-xs font-semibold text-slate-500">
+                  <span className="font-mono text-xs font-semibold text-text-muted">
                     {detailBook.code}
                   </span>
 
@@ -1739,7 +1786,7 @@ export default function OfficeBooksPage() {
 
                 <h2
                   id="book-detail-title"
-                  className="mt-1 truncate text-sm sm:text-base font-semibold text-slate-900"
+                  className="mt-1 truncate text-sm sm:text-base font-semibold text-text-main"
                   title={detailBook.title}
                 >
                   {detailBook.title}
@@ -1752,7 +1799,7 @@ export default function OfficeBooksPage() {
                 size="sm"
                 aria-label="Tutup dialog detail"
                 onClick={() => setDetailBook(null)}
-                className="h-8 w-8 p-0 text-slate-500 hover:text-slate-700 shrink-0 flex items-center justify-center"
+                className="h-8 w-8 p-0 text-text-muted hover:text-text-secondary shrink-0 flex items-center justify-center"
               >
                 <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2} aria-hidden="true">
                   <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
@@ -1764,44 +1811,44 @@ export default function OfficeBooksPage() {
             <div className="max-h-[calc(85vh-120px)] overflow-y-auto px-4 py-4 sm:px-5">
               {/* INFO 2x2 */}
               <div className="grid grid-cols-2 gap-2 sm:gap-2.5">
-                <div className="rounded-xl border border-slate-200/80 bg-white p-2.5 sm:px-4 sm:py-3 shadow-2xs">
-                  <p className="text-[11px] font-semibold uppercase tracking-wider text-slate-500">
+                <div className="rounded-xl border border-border/80 bg-surface p-2.5 sm:px-4 sm:py-3 shadow-2xs">
+                  <p className="text-[11px] font-semibold uppercase tracking-wider text-text-muted">
                     ISBN
                   </p>
-                  <p className="mt-0.5 sm:mt-1 truncate font-mono text-xs sm:text-sm font-semibold text-slate-800">
+                  <p className="mt-0.5 sm:mt-1 truncate font-mono text-xs sm:text-sm font-semibold text-text-main">
                     {detailBook.isbn ?? "-"}
                   </p>
                 </div>
 
-                <div className="rounded-xl border border-slate-200/80 bg-white p-2.5 sm:px-4 sm:py-3 shadow-2xs">
-                  <p className="text-[11px] font-semibold uppercase tracking-wider text-slate-500">
+                <div className="rounded-xl border border-border/80 bg-surface p-2.5 sm:px-4 sm:py-3 shadow-2xs">
+                  <p className="text-[11px] font-semibold uppercase tracking-wider text-text-muted">
                     Stok Tersedia
                   </p>
-                  <p className="mt-0.5 sm:mt-1 text-xs sm:text-sm font-semibold text-slate-800">
+                  <p className="mt-0.5 sm:mt-1 text-xs sm:text-sm font-semibold text-text-main">
                     <span className="font-bold text-emerald-600">
                       {detailBook.availableCopies}
                     </span>
-                    <span className="text-slate-500">
+                    <span className="text-text-muted">
                       {" "}
                       / {detailBook.totalCopies} copy
                     </span>
                   </p>
                 </div>
 
-                <div className="rounded-xl border border-slate-200/80 bg-white p-2.5 sm:px-4 sm:py-3 shadow-2xs">
-                  <p className="text-[11px] font-semibold uppercase tracking-wider text-slate-500">
+                <div className="rounded-xl border border-border/80 bg-surface p-2.5 sm:px-4 sm:py-3 shadow-2xs">
+                  <p className="text-[11px] font-semibold uppercase tracking-wider text-text-muted">
                     Pengarang
                   </p>
-                  <p className="mt-0.5 sm:mt-1 truncate text-xs sm:text-sm font-semibold text-slate-800">
+                  <p className="mt-0.5 sm:mt-1 truncate text-xs sm:text-sm font-semibold text-text-main">
                     {detailBook.author ?? "-"}
                   </p>
                 </div>
 
-                <div className="rounded-xl border border-slate-200/80 bg-white p-2.5 sm:px-4 sm:py-3 shadow-2xs">
-                  <p className="text-[11px] font-semibold uppercase tracking-wider text-slate-500">
+                <div className="rounded-xl border border-border/80 bg-surface p-2.5 sm:px-4 sm:py-3 shadow-2xs">
+                  <p className="text-[11px] font-semibold uppercase tracking-wider text-text-muted">
                     Kategori
                   </p>
-                  <p className="mt-0.5 sm:mt-1 truncate text-xs sm:text-sm font-semibold text-slate-800">
+                  <p className="mt-0.5 sm:mt-1 truncate text-xs sm:text-sm font-semibold text-text-main">
                     {detailBook.category ?? "-"}
                   </p>
                 </div>
@@ -1821,13 +1868,13 @@ export default function OfficeBooksPage() {
               )}
 
               {/* DAFTAR EKSEMPLAR */}
-              <div className="relative mt-3.5 sm:mt-5 rounded-xl border border-slate-200 bg-white shadow-2xs">
-                <div className="flex flex-col gap-2.5 border-b border-slate-100 px-3.5 py-3 sm:px-4 sm:flex-row sm:items-center sm:justify-between">
+              <div className="relative mt-3.5 sm:mt-5 rounded-xl border border-border bg-surface shadow-2xs">
+                <div className="flex flex-col gap-2.5 border-b border-border-subtle px-3.5 py-3 sm:px-4 sm:flex-row sm:items-center sm:justify-between">
                   <div>
-                    <h3 className="text-sm font-semibold text-slate-900">
+                    <h3 className="text-sm font-semibold text-text-main">
                       Daftar Eksemplar
                     </h3>
-                    <p className="mt-0.5 text-xs text-slate-500">
+                    <p className="mt-0.5 text-xs text-text-muted">
                       Total {detailCopies.length} eksemplar fisik.
                     </p>
                   </div>
@@ -1902,11 +1949,11 @@ export default function OfficeBooksPage() {
                 )}
 
                 {detailLoading ? (
-                  <div className="px-4 py-8 text-center text-sm text-slate-500">
+                  <div className="px-4 py-8 text-center text-sm text-text-muted">
                     Memuat daftar eksemplar...
                   </div>
                 ) : detailCopies.length === 0 ? (
-                  <div className="px-4 py-8 text-center text-sm text-slate-500">
+                  <div className="px-4 py-8 text-center text-sm text-text-muted">
                     {supplementalError ? (
                       <span className="font-medium text-amber-800">
                         Data tambahan gagal dimuat
@@ -1930,7 +1977,7 @@ export default function OfficeBooksPage() {
 
                   return (
                     <>
-                      <div className="divide-y divide-slate-100">
+                      <div className="divide-y divide-border-subtle">
                         {paginatedCopies.map((copy) => {
                           const isBorrowed = copy.status === "BORROWED";
 
@@ -1940,10 +1987,10 @@ export default function OfficeBooksPage() {
                               className="flex items-center justify-between gap-2.5 px-3.5 py-2.5 sm:px-4 sm:py-3"
                             >
                               <div className="min-w-0">
-                                <p className="font-mono text-xs sm:text-sm font-semibold text-slate-800 truncate">
+                                <p className="font-mono text-xs sm:text-sm font-semibold text-text-main truncate">
                                   {copy.code}
                                 </p>
-                                <p className="text-xs text-slate-500">
+                                <p className="text-xs text-text-muted">
                                   Eksemplar Fisik
                                 </p>
                               </div>
@@ -2023,7 +2070,7 @@ export default function OfficeBooksPage() {
                           onPageChange={(nextPage) => setCopyPage(nextPage)}
                           totalItems={detailCopies.length}
                           pageSize={COPY_PAGE_SIZE}
-                          className="rounded-b-xl border-t border-slate-100 bg-slate-50/50"
+                          className="rounded-b-xl border-t border-border-subtle bg-surface-subtle"
                         />
                       )}
                     </>
@@ -2033,7 +2080,7 @@ export default function OfficeBooksPage() {
             </div>
 
             {/* FOOTER */}
-            <div className="flex shrink-0 flex-col-reverse sm:flex-row sm:items-center sm:justify-end gap-2 border-t border-slate-200 bg-white px-4 py-3 sm:px-5">
+            <div className="flex shrink-0 flex-col-reverse sm:flex-row sm:items-center sm:justify-end gap-2 border-t border-border bg-surface px-4 py-3 sm:px-5">
               <Button
                 type="button"
                 variant="secondary"
@@ -2069,9 +2116,9 @@ export default function OfficeBooksPage() {
           size="sm"
         >
           <div className="space-y-4">
-            <p className="text-xs text-slate-500">
+            <p className="text-xs text-text-muted">
               Buku:{" "}
-              <span className="font-semibold text-slate-800">
+              <span className="font-semibold text-text-main">
                 {detailBook?.title}
               </span>{" "}
               ({detailBook?.code})
@@ -2094,7 +2141,7 @@ export default function OfficeBooksPage() {
               required
             />
 
-            <div className="flex justify-end gap-2 border-t border-slate-100 pt-3">
+            <div className="flex justify-end gap-2 border-t border-border-subtle pt-3">
               <Button
                 type="button"
                 variant="secondary"

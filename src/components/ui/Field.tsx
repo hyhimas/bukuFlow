@@ -23,7 +23,7 @@ export default function Field({
     <div className={`space-y-1.5 ${className}`}>
       <label
         htmlFor={id}
-        className="block text-sm font-medium text-app-text-muted"
+        className="block text-sm font-medium text-text-muted"
       >
         {label}
         {required && (
@@ -48,7 +48,7 @@ export default function Field({
       {!error && helperText && (
         <p
           id={id ? `${id}-help` : undefined}
-          className="text-sm text-app-text-muted"
+          className="text-sm text-text-muted"
         >
           {helperText}
         </p>

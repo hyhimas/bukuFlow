@@ -175,7 +175,7 @@ export default function BookBarcodePrintModal({
       onClose={onClose}
       raw
       size="full"
-      className="barcode-print-container relative flex max-h-[92vh] w-full max-w-5xl flex-col rounded-2xl bg-white shadow-2xl overflow-hidden border border-slate-200"
+      className="barcode-print-container relative flex max-h-[92vh] w-full max-w-5xl flex-col rounded-2xl bg-surface shadow-2xl overflow-hidden border border-border"
       ariaLabelledBy="barcode-print-modal-title"
     >
       {/* Global CSS for Print Output (Ctrl+P / window.print) */}
@@ -264,7 +264,7 @@ export default function BookBarcodePrintModal({
       {/* Container contents */}
       <div className="relative flex max-h-[92vh] w-full flex-col overflow-hidden">
         {/* Header (No Print) */}
-        <div className="border-b border-slate-200 bg-white print:hidden">
+        <div className="border-b border-border bg-surface print:hidden">
           {/* Top title & close bar */}
           <div className="flex items-start justify-between gap-2.5 px-4 py-3 sm:px-5 sm:py-4">
             <div className="flex items-start sm:items-center gap-2.5 sm:gap-3 min-w-0 flex-1">
@@ -287,11 +287,11 @@ export default function BookBarcodePrintModal({
               <div className="min-w-0 flex-1">
                 <h3
                   id="barcode-print-modal-title"
-                  className="text-sm sm:text-base md:text-lg font-bold text-slate-900 leading-snug break-words"
+                  className="text-sm sm:text-base md:text-lg font-bold text-text-main leading-snug break-words"
                 >
                   {title}
                 </h3>
-                <p className="text-xs text-slate-500 mt-0.5 leading-relaxed break-words">
+                <p className="text-xs text-text-muted mt-0.5 leading-relaxed break-words">
                   {selectedCount} dari {items.length} label dipilih untuk dicetak pada kertas stiker / HVS A4
                 </p>
               </div>
@@ -300,7 +300,7 @@ export default function BookBarcodePrintModal({
             <button
               type="button"
               onClick={onClose}
-              className="rounded-lg p-1.5 text-slate-400 transition hover:bg-slate-100 hover:text-slate-600 focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 shrink-0 mt-0.5 sm:mt-0"
+              className="rounded-lg p-1.5 text-text-subtle transition hover:bg-surface-muted hover:text-text-secondary focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 shrink-0 mt-0.5 sm:mt-0"
               title="Tutup Modal"
             >
               <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2} aria-hidden="true">
@@ -310,10 +310,10 @@ export default function BookBarcodePrintModal({
           </div>
 
           {/* Controls toolbar */}
-          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-t border-slate-100 bg-slate-50/80 px-5 py-2.5">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-t border-border-subtle bg-surface-subtle px-5 py-2.5">
             <div className="flex flex-wrap items-center gap-3">
               {/* Select all checkbox */}
-              <label className="flex items-center gap-2 cursor-pointer text-xs font-semibold text-slate-700 bg-white border border-slate-200 rounded-lg px-2.5 py-1.5 shadow-2xs hover:bg-slate-50">
+              <label className="flex items-center gap-2 cursor-pointer text-xs font-semibold text-text-secondary bg-surface border border-border rounded-lg px-2.5 py-1.5 shadow-2xs hover:bg-surface-subtle">
                 <input
                   type="checkbox"
                   checked={isAllSelected && items.length > 0}
@@ -324,13 +324,13 @@ export default function BookBarcodePrintModal({
                       setDeselectedIndices(new Set());
                     }
                   }}
-                  className="h-4 w-4 rounded border-slate-300 text-blue-600 focus:ring-blue-500 cursor-pointer"
+                  className="h-4 w-4 rounded border-border text-blue-600 focus:ring-blue-500 cursor-pointer"
                 />
                 <span>Pilih Semua ({selectedCount}/{items.length})</span>
               </label>
 
               <div className="flex items-center gap-1.5 text-xs min-w-[170px]">
-                <span className="font-semibold text-slate-600 shrink-0">Format:</span>
+                <span className="font-semibold text-text-secondary shrink-0">Format:</span>
                 <Dropdown
                   value={format}
                   size="sm"
@@ -345,7 +345,7 @@ export default function BookBarcodePrintModal({
               </div>
 
               <div className="flex items-center gap-1.5 text-xs min-w-[150px]">
-                <span className="font-semibold text-slate-600 shrink-0">Ukuran:</span>
+                <span className="font-semibold text-text-secondary shrink-0">Ukuran:</span>
                 <Dropdown
                   value={size}
                   size="sm"
@@ -399,9 +399,9 @@ export default function BookBarcodePrintModal({
         </div>
 
         {/* Printable Area */}
-        <div className="barcode-print-body flex-1 overflow-y-auto p-4 sm:p-6 bg-slate-100/60 print:bg-white print:p-0 print:overflow-visible">
+        <div className="barcode-print-body flex-1 overflow-y-auto p-4 sm:p-6 bg-surface-muted/60 print:bg-surface print:p-0 print:overflow-visible">
           {items.length === 0 ? (
-            <div className="py-12 text-center text-slate-500 text-sm">
+            <div className="py-12 text-center text-text-muted text-sm">
               Tidak ada label untuk dicetak.
             </div>
           ) : (
@@ -412,7 +412,7 @@ export default function BookBarcodePrintModal({
                 gridTemplateColumns: `repeat(${gridCols}, minmax(0, 1fr))`,
                 gap: size === "sm" ? "12px" : size === "lg" ? "20px" : "16px",
               }}
-              className="mx-auto w-full max-w-5xl justify-center bg-white p-4 sm:p-6 rounded-xl border border-slate-200 shadow-xs print:m-0 print:p-0 print:border-0 print:shadow-none print:gap-2 print:justify-start"
+              className="mx-auto w-full max-w-5xl justify-center bg-surface p-4 sm:p-6 rounded-xl border border-border shadow-xs print:m-0 print:p-0 print:border-0 print:shadow-none print:gap-2 print:justify-start"
             >
               {items.map((item, index) => {
                 const isSelected = !deselectedIndices.has(index);
@@ -425,7 +425,7 @@ export default function BookBarcodePrintModal({
                     }`}
                   >
                     <label
-                      className="print:hidden absolute top-2 right-2 z-10 flex items-center justify-center h-6 w-6 rounded-md bg-white/95 border border-slate-300 shadow-2xs hover:bg-slate-100 cursor-pointer"
+                      className="print:hidden absolute top-2 right-2 z-10 flex items-center justify-center h-6 w-6 rounded-md bg-surface/95 border border-border shadow-2xs hover:bg-surface-muted cursor-pointer"
                       title={isSelected ? "Batal pilih item ini" : "Pilih item ini untuk dicetak"}
                     >
                       <input
@@ -437,7 +437,7 @@ export default function BookBarcodePrintModal({
                           else next.add(index);
                           setDeselectedIndices(next);
                         }}
-                        className="h-3.5 w-3.5 rounded border-slate-300 text-blue-600 focus:ring-blue-500 cursor-pointer"
+                        className="h-3.5 w-3.5 rounded border-border text-blue-600 focus:ring-blue-500 cursor-pointer"
                       />
                     </label>
 
@@ -462,8 +462,8 @@ export default function BookBarcodePrintModal({
         </div>
 
         {/* Footer info (No Print) */}
-        <div className="border-t border-slate-200 bg-white px-5 py-3 text-xs text-slate-500 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2.5 print:hidden">
-          <div className="flex items-start sm:items-center gap-2 text-slate-600">
+        <div className="border-t border-border bg-surface px-5 py-3 text-xs text-text-muted flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2.5 print:hidden">
+          <div className="flex items-start sm:items-center gap-2 text-text-secondary">
             <svg
               width="14"
               height="14"
@@ -480,11 +480,11 @@ export default function BookBarcodePrintModal({
               <path d="M9 16a5 5 0 1 1 6 0 3.5 3.5 0 0 0-1 3 2 2 0 0 1-4 0 3.5 3.5 0 0 0-1-3" />
               <line x1="9" y1="22" x2="15" y2="22" />
             </svg>
-            <p className="text-xs leading-relaxed text-slate-600">
-              Pilih opsi <span className="font-semibold text-slate-800">&quot;None / Tidak Ada&quot;</span> pada margin browser di jendela print untuk hasil cetak stiker yang rapi.
+            <p className="text-xs leading-relaxed text-text-secondary">
+              Pilih opsi <span className="font-semibold text-text-main">&quot;None / Tidak Ada&quot;</span> pada margin browser di jendela print untuk hasil cetak stiker yang rapi.
             </p>
           </div>
-          <span className="text-slate-500 font-mono text-xs shrink-0 self-end sm:self-auto font-medium">
+          <span className="text-text-muted font-mono text-xs shrink-0 self-end sm:self-auto font-medium">
             {selectedCount} dari {items.length} label terpilih
           </span>
         </div>

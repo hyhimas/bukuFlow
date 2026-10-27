@@ -31,16 +31,37 @@ export const metadata: Metadata = {
   },
 };
 
+const themeScript = `(function() {
+  try {
+    var key = "bukuflow-theme";
+    var pref = localStorage.getItem(key) || "system";
+    var resolved = "light";
+    if (pref === "dark") {
+      resolved = "dark";
+    } else if (pref === "light") {
+      resolved = "light";
+    } else {
+      resolved = window.matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light";
+    }
+    var d = document.documentElement;
+    d.setAttribute("data-theme", resolved);
+    d.setAttribute("data-theme-pref", pref);
+    d.style.colorScheme = resolved;
+  } catch (e) {}
+})();`;
+
 export default function RootLayout({ children }: LayoutProps<"/">) {
   return (
     <html
       lang="id"
+      suppressHydrationWarning
       className={`${geistSans.variable} ${geistMono.variable} h-full antialiased`}
     >
       <head>
         <meta charSet="utf-8" />
+        <script dangerouslySetInnerHTML={{ __html: themeScript }} />
       </head>
-      <body className="min-h-full flex flex-col">
+      <body className="min-h-full flex flex-col bg-canvas text-text-main">
         <ToastProvider>
           <AppShell>{children}</AppShell>
         </ToastProvider>

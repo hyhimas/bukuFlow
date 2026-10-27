@@ -153,7 +153,7 @@ export default function ProfilePage() {
   };
 
   const inputBaseStyle =
-    "w-full h-11 rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-slate-900 placeholder:text-slate-400 focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-500/20 disabled:bg-slate-50 disabled:text-slate-500";
+    "w-full h-11 rounded-lg border border-border bg-surface px-3 py-2 text-sm text-text-main placeholder:text-text-subtle focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-500/20 disabled:bg-surface-muted disabled:text-text-muted";
 
   return (
     <div className="mx-auto max-w-4xl space-y-4 sm:space-y-6 p-3.5 sm:p-6 lg:p-8">
@@ -163,7 +163,7 @@ export default function ProfilePage() {
       </div>
 
       {/* HEADER PROFILE CARD */}
-      <Card className="overflow-hidden border-slate-200 bg-white p-4 sm:p-6 shadow-sm">
+      <Card className="overflow-hidden border-border bg-surface p-4 sm:p-6 shadow-sm">
         <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
           <div className="flex items-center gap-3.5">
             {/* Avatar */}
@@ -178,7 +178,7 @@ export default function ProfilePage() {
             {/* User Meta */}
             <div className="min-w-0">
               <div className="flex flex-wrap items-center gap-1.5 sm:gap-2">
-                <h1 className="text-base sm:text-xl font-bold text-slate-900 truncate">{name}</h1>
+                <h1 className="text-base sm:text-xl font-bold text-text-main truncate">{name}</h1>
                 <Badge
                   variant={
                     isSuperAdmin
@@ -196,21 +196,21 @@ export default function ProfilePage() {
                 </Badge>
               </div>
 
-              <p className="text-xs sm:text-sm text-slate-600 truncate">{email}</p>
+              <p className="text-xs sm:text-sm text-text-secondary truncate">{email}</p>
 
-              <div className="flex flex-wrap items-center gap-2 pt-0.5 text-xs text-slate-500">
-                <span className="flex items-center gap-1 font-medium text-slate-700">
+              <div className="flex flex-wrap items-center gap-2 pt-0.5 text-xs text-text-muted">
+                <span className="flex items-center gap-1 font-medium text-text-secondary">
                   <BuildingIcon />
                   {displayCompanyName}
                 </span>
-                <span className="text-slate-300 select-none" aria-hidden="true">&bull;</span>
-                <span className="font-mono text-slate-500">ID: {userId || "-"}</span>
+                <span className="text-text-subtle select-none" aria-hidden="true">&bull;</span>
+                <span className="font-mono text-text-muted">ID: {userId || "-"}</span>
               </div>
             </div>
           </div>
 
           {/* Quick Logout Header Action */}
-          <div className="flex shrink-0 items-center justify-end pt-2 sm:pt-0 border-t sm:border-t-0 border-slate-100">
+          <div className="flex shrink-0 items-center justify-end pt-2 sm:pt-0 border-t sm:border-t-0 border-border-subtle">
             <Button
               type="button"
               variant="destructive"
@@ -228,14 +228,14 @@ export default function ProfilePage() {
       {/* ========================================================= */}
       {/* MAIN INTERACTIVE CARD (AUTHENTIC BACKEND DATA SCHEMA)    */}
       {/* ========================================================= */}
-      <Card className="border-slate-200 bg-white p-4 sm:p-6 lg:p-7 shadow-sm">
+      <Card className="border-border bg-surface p-4 sm:p-6 lg:p-7 shadow-sm">
         {/* 1. VIEW MODE (AUTHENTIC DATA ONLY) */}
         {mode === "view" && (
           <div key="view" className="animate-profile-fade">
-            <div className="flex flex-col gap-3.5 sm:flex-row sm:items-center sm:justify-between pb-4 sm:pb-5 border-b border-slate-100">
+            <div className="flex flex-col gap-3.5 sm:flex-row sm:items-center sm:justify-between pb-4 sm:pb-5 border-b border-border-subtle">
               <div className="min-w-0 pr-2">
-                <h2 className="text-base sm:text-lg font-bold text-slate-900">Informasi Akun Pengguna</h2>
-                <p className="text-xs text-slate-500 mt-0.5">
+                <h2 className="text-base sm:text-lg font-bold text-text-main">Informasi Akun Pengguna</h2>
+                <p className="text-xs text-text-muted mt-0.5">
                   Data identitas akun dan hak akses operasional yang terdaftar pada sistem BukuFlow.
                 </p>
               </div>
@@ -257,38 +257,38 @@ export default function ProfilePage() {
 
             {/* READ-ONLY INFO GRID (ONLY REAL FIELDS FROM BACKEND) */}
             <div className="grid grid-cols-1 gap-3 sm:gap-4 pt-4 sm:pt-5 sm:grid-cols-2">
-              <div className="rounded-xl border border-slate-100 bg-slate-50/70 p-3.5">
-                <span className="text-[11px] font-semibold uppercase tracking-wider text-slate-500">
+              <div className="rounded-xl border border-border-subtle bg-surface-muted/70 p-3.5">
+                <span className="text-[11px] font-semibold uppercase tracking-wider text-text-muted">
                   Nama Lengkap
                 </span>
-                <p className="mt-1 text-sm font-semibold text-slate-900">{name}</p>
+                <p className="mt-1 text-sm font-semibold text-text-main">{name}</p>
               </div>
 
-              <div className="rounded-xl border border-slate-100 bg-slate-50/70 p-3.5">
-                <span className="text-[11px] font-semibold uppercase tracking-wider text-slate-500">
+              <div className="rounded-xl border border-border-subtle bg-surface-muted/70 p-3.5">
+                <span className="text-[11px] font-semibold uppercase tracking-wider text-text-muted">
                   Alamat Email Login
                 </span>
-                <p className="mt-1 text-sm font-semibold text-slate-900 break-all">{email}</p>
+                <p className="mt-1 text-sm font-semibold text-text-main break-all">{email}</p>
               </div>
 
-              <div className="rounded-xl border border-slate-100 bg-slate-50/70 p-3.5">
-                <span className="text-[11px] font-semibold uppercase tracking-wider text-slate-500">
+              <div className="rounded-xl border border-border-subtle bg-surface-muted/70 p-3.5">
+                <span className="text-[11px] font-semibold uppercase tracking-wider text-text-muted">
                   Hak Akses / Peran Akun
                 </span>
-                <p className="mt-1 text-sm font-semibold text-slate-900">{getRoleLabel(role)}</p>
+                <p className="mt-1 text-sm font-semibold text-text-main">{getRoleLabel(role)}</p>
               </div>
 
-              <div className="rounded-xl border border-slate-100 bg-slate-50/70 p-3.5">
-                <span className="text-[11px] font-semibold uppercase tracking-wider text-slate-500">
+              <div className="rounded-xl border border-border-subtle bg-surface-muted/70 p-3.5">
+                <span className="text-[11px] font-semibold uppercase tracking-wider text-text-muted">
                   Instansi / Sekolah
                 </span>
-                <p className="mt-1 text-sm font-semibold text-slate-900">
+                <p className="mt-1 text-sm font-semibold text-text-main">
                   {displayCompanyName}
                 </p>
               </div>
 
-              <div className="rounded-xl border border-slate-100 bg-slate-50/70 p-3.5">
-                <span className="text-[11px] font-semibold uppercase tracking-wider text-slate-500">
+              <div className="rounded-xl border border-border-subtle bg-surface-muted/70 p-3.5">
+                <span className="text-[11px] font-semibold uppercase tracking-wider text-text-muted">
                   Status Akun
                 </span>
                 <div className="mt-1 flex items-center gap-2">
@@ -297,11 +297,11 @@ export default function ProfilePage() {
                 </div>
               </div>
 
-              <div className="rounded-xl border border-slate-100 bg-slate-50/70 p-3.5">
-                <span className="text-[11px] font-semibold uppercase tracking-wider text-slate-500">
+              <div className="rounded-xl border border-border-subtle bg-surface-muted/70 p-3.5">
+                <span className="text-[11px] font-semibold uppercase tracking-wider text-text-muted">
                   User ID Sistem
                 </span>
-                <p className="mt-1 text-xs font-mono font-medium text-slate-600 break-all">{userId || "-"}</p>
+                <p className="mt-1 text-xs font-mono font-medium text-text-secondary break-all">{userId || "-"}</p>
               </div>
             </div>
           </div>
@@ -311,16 +311,16 @@ export default function ProfilePage() {
         {mode === "edit-profile" && (
           <div key="edit-profile" className="animate-profile-fade">
             <form onSubmit={handleSaveProfile}>
-              <div className="mb-4 sm:mb-5 border-b border-slate-100 pb-3 sm:pb-4">
-                <h2 className="text-base sm:text-lg font-bold text-slate-900">Form Ubah Nama Profil</h2>
-                <p className="text-xs text-slate-500">
+              <div className="mb-4 sm:mb-5 border-b border-border-subtle pb-3 sm:pb-4">
+                <h2 className="text-base sm:text-lg font-bold text-text-main">Form Ubah Nama Profil</h2>
+                <p className="text-xs text-text-muted">
                   Perbarui nama lengkap akun pengguna Anda.
                 </p>
               </div>
 
               <div className="grid grid-cols-1 gap-3.5 sm:gap-4 sm:grid-cols-2">
                 <div>
-                  <label htmlFor="profile-name" className="mb-1 block text-xs font-semibold text-slate-700">
+                  <label htmlFor="profile-name" className="mb-1 block text-xs font-semibold text-text-secondary">
                     Nama Lengkap <span className="text-red-500">*</span>
                   </label>
                   <input
@@ -335,7 +335,7 @@ export default function ProfilePage() {
                 </div>
 
                 <div>
-                  <label htmlFor="profile-email" className="mb-1 block text-xs font-semibold text-slate-700">
+                  <label htmlFor="profile-email" className="mb-1 block text-xs font-semibold text-text-secondary">
                     Alamat Email (Akun Login)
                   </label>
                   <input
@@ -346,13 +346,13 @@ export default function ProfilePage() {
                     title="Alamat email login dikelola oleh Administrator"
                     className={inputBaseStyle}
                   />
-                  <span className="mt-1 block text-xs text-slate-500">
+                  <span className="mt-1 block text-xs text-text-muted">
                     Email login bersifat permanen untuk autentikasi.
                   </span>
                 </div>
 
                 <div>
-                  <label htmlFor="profile-role" className="mb-1 block text-xs font-semibold text-slate-700">
+                  <label htmlFor="profile-role" className="mb-1 block text-xs font-semibold text-text-secondary">
                     Peran Akun
                   </label>
                   <input
@@ -365,7 +365,7 @@ export default function ProfilePage() {
                 </div>
 
                 <div>
-                  <label htmlFor="profile-company" className="mb-1 block text-xs font-semibold text-slate-700">
+                  <label htmlFor="profile-company" className="mb-1 block text-xs font-semibold text-text-secondary">
                     Instansi
                   </label>
                   <input
@@ -379,7 +379,7 @@ export default function ProfilePage() {
               </div>
 
               {/* ACTION BUTTONS */}
-              <div className="flex flex-col-reverse sm:flex-row items-stretch sm:items-center sm:justify-end gap-2 sm:gap-3 border-t border-slate-100 pt-4 mt-5 sm:mt-6">
+              <div className="flex flex-col-reverse sm:flex-row items-stretch sm:items-center sm:justify-end gap-2 sm:gap-3 border-t border-border-subtle pt-4 mt-5 sm:mt-6">
                 <Button type="button" variant="secondary" onClick={handleCancelMode} className="justify-center">
                   Batal
                 </Button>

@@ -24,7 +24,7 @@ import {
 import { masterDataRepository } from "@/lib/master-data/repository";
 
 import type { Book, BookCopy, Loan, Member } from "@/lib/types";
-import LoadingState from "@/components/ui/LoadingState";
+import Skeleton from "@/components/ui/Skeleton";
 import Pagination from "@/components/ui/Pagination";
 import Modal from "@/components/ui/Modal";
 import ConfirmationDialog from "@/components/ui/ConfirmationDialog";
@@ -851,11 +851,6 @@ export default function NewLoanPage() {
     const identityNumber = memberIdentityNumber.trim();
     const email = memberEmail.trim();
 
-    // Nomor Anggota
-    if (!cleanNumber) {
-      errors.memberNumber = "Nomor anggota wajib diisi.";
-    }
-
     // Nama
     if (!name) {
       errors.name = "Nama wajib diisi.";
@@ -912,7 +907,6 @@ export default function NewLoanPage() {
 
     try {
       const member = await createMemberApi({
-        memberNumber: memberNumber.trim(),
         name: memberName.trim(),
         phone: memberPhone.trim(),
         identityNumber: memberIdentityNumber.trim(),
@@ -1627,8 +1621,81 @@ export default function NewLoanPage() {
 
   if (pageLoading) {
     return (
-      <div className="min-h-screen bg-slate-50">
-        <LoadingState label="Memuat peminjaman..." />
+      <div className="min-h-screen bg-surface-subtle" role="status" aria-label="Memuat formulir peminjaman...">
+        <div className="page-container py-6">
+          {/* Header Skeleton */}
+          <div className="mb-6 space-y-3">
+            <Skeleton className="h-9 w-44 rounded-lg" />
+            <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+              <div className="space-y-1.5">
+                <Skeleton className="h-8 w-64 rounded-lg" />
+                <Skeleton className="h-4 w-96 max-w-full rounded" />
+              </div>
+              <Skeleton className="h-10 w-36 rounded-xl" />
+            </div>
+          </div>
+
+          {/* Form Content Grid Skeleton */}
+          <div className="grid grid-cols-1 gap-6 lg:grid-cols-12">
+            {/* Left Column (8 cols): Step 1 & Step 2 */}
+            <div className="space-y-6 lg:col-span-7 xl:col-span-8">
+              {/* Step 1: Cari Anggota Card Skeleton */}
+              <Card className="p-5 sm:p-6 space-y-4">
+                <div className="flex items-center justify-between">
+                  <div className="space-y-1">
+                    <Skeleton className="h-5 w-36 rounded" />
+                    <Skeleton className="h-3.5 w-72 max-w-full rounded" />
+                  </div>
+                  <Skeleton className="h-8 w-28 rounded-lg" />
+                </div>
+                <Skeleton className="h-11 w-full rounded-lg" />
+                <div className="space-y-2 pt-2">
+                  <Skeleton className="h-16 w-full rounded-xl" />
+                  <Skeleton className="h-16 w-full rounded-xl" />
+                </div>
+              </Card>
+
+              {/* Step 2: Pilih Buku Card Skeleton */}
+              <Card className="p-5 sm:p-6 space-y-4">
+                <div className="flex items-center justify-between">
+                  <div className="space-y-1">
+                    <Skeleton className="h-5 w-32 rounded" />
+                    <Skeleton className="h-3.5 w-64 max-w-full rounded" />
+                  </div>
+                  <Skeleton className="h-8 w-28 rounded-lg" />
+                </div>
+                <Skeleton className="h-11 w-full rounded-lg" />
+                <div className="space-y-2 pt-2">
+                  <Skeleton className="h-20 w-full rounded-xl" />
+                  <Skeleton className="h-20 w-full rounded-xl" />
+                </div>
+              </Card>
+            </div>
+
+            {/* Right Column (4-5 cols): Ringkasan Peminjaman */}
+            <div className="lg:col-span-5 xl:col-span-4">
+              <div className="sticky top-6">
+                <Card className="p-5 sm:p-6 space-y-5">
+                  <div className="space-y-1">
+                    <Skeleton className="h-5 w-44 rounded" />
+                    <Skeleton className="h-3.5 w-56 max-w-full rounded" />
+                  </div>
+                  <div className="space-y-3 divide-y divide-border-subtle">
+                    <div className="pt-2 space-y-2">
+                      <Skeleton className="h-4 w-28 rounded" />
+                      <Skeleton className="h-12 w-full rounded-lg" />
+                    </div>
+                    <div className="pt-3 space-y-2">
+                      <Skeleton className="h-4 w-32 rounded" />
+                      <Skeleton className="h-11 w-full rounded-lg" />
+                    </div>
+                  </div>
+                  <Skeleton className="h-12 w-full rounded-xl" />
+                </Card>
+              </div>
+            </div>
+          </div>
+        </div>
       </div>
     );
   }
@@ -1644,7 +1711,7 @@ export default function NewLoanPage() {
   );
 
   return (
-    <div className="min-h-screen bg-slate-50">
+    <div className="min-h-screen bg-surface-subtle">
       {/* =================================================
           HEADER
       ================================================= */}
@@ -1660,7 +1727,7 @@ export default function NewLoanPage() {
             title="Catat Peminjaman"
             description="Pilih anggota, buku, eksemplar buku, dan tanggal peminjaman."
             actions={
-              <div className="flex items-center gap-2.5 self-start rounded-xl border border-slate-200 bg-white px-3.5 py-2 shadow-sm sm:self-auto">
+              <div className="flex items-center gap-2.5 self-start rounded-xl border border-border bg-surface px-3.5 py-2 shadow-sm sm:self-auto">
                 <span className="relative flex h-2.5 w-2.5">
                   {scanLoading ? (
                     <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-blue-400 opacity-75" />
@@ -1668,12 +1735,12 @@ export default function NewLoanPage() {
                     <span className="relative inline-flex h-2.5 w-2.5 rounded-full bg-emerald-500" />
                   )}
                 </span>
-                <span className="text-xs font-semibold text-slate-700">
+                <span className="text-xs font-semibold text-text-secondary">
                   {scanLoading ? "Memproses Barcode..." : "Scanner Siap"}
                 </span>
                 {lastScannedCode && (
-                  <span className="border-l border-slate-200 pl-2.5 text-xs text-slate-500">
-                    Kode Terakhir: <code className="font-mono font-medium text-slate-800">{lastScannedCode}</code>
+                  <span className="border-l border-border pl-2.5 text-xs text-text-muted">
+                    Kode Terakhir: <code className="font-mono font-medium text-text-main">{lastScannedCode}</code>
                   </span>
                 )}
               </div>
@@ -1716,11 +1783,11 @@ export default function NewLoanPage() {
         >
           <div className="min-w-0">
             <Card className="p-4 sm:p-5">
-              <h2 className="text-base font-semibold text-slate-900">
+              <h2 className="text-base font-semibold text-text-main">
                 1. Cari Anggota
               </h2>
 
-              <p className="mt-1 text-sm text-slate-500">
+              <p className="mt-1 text-sm text-text-muted">
                 Cari berdasarkan nama, nomor anggota, NIK, atau nomor HP.
               </p>
 
@@ -1755,12 +1822,12 @@ export default function NewLoanPage() {
                     members.length === 0 &&
                     !memberError &&
                     !showMemberForm && (
-                      <div className="mt-5 rounded-lg border border-slate-200 bg-slate-50 p-4">
-                        <p className="font-medium text-slate-800">
+                      <div className="mt-5 rounded-lg border border-border bg-surface-subtle p-4">
+                        <p className="font-medium text-text-main">
                           Anggota tidak ditemukan
                         </p>
 
-                        <p className="mt-1 text-sm text-slate-500">
+                        <p className="mt-1 text-sm text-text-muted">
                           Anggota belum ditemukan. Anda dapat membuat anggota
                           baru.
                         </p>
@@ -1782,13 +1849,13 @@ export default function NewLoanPage() {
                   {members.length > 0 && (
                     <div className="mt-5 space-y-3">
                       <div className="flex items-center justify-between gap-3">
-                        <h3 className="text-sm font-semibold text-slate-700">
+                        <h3 className="text-sm font-semibold text-text-secondary">
                           {memberQuery.trim()
                             ? "Hasil pencarian"
                             : "Daftar anggota"}
                         </h3>
 
-                        <p className="shrink-0 text-xs text-slate-500">
+                        <p className="shrink-0 text-xs text-text-muted">
                           {memberTotal > 0 ? `${memberTotal} anggota` : `${members.length} anggota`}
                         </p>
                       </div>
@@ -1809,10 +1876,10 @@ export default function NewLoanPage() {
                             onClick={() => void handleSelectMember(member)}
                             className={`w-full h-auto rounded-lg border p-3 sm:px-4 sm:py-3 text-left justify-start font-normal transition ${
                               inactive
-                                ? "cursor-not-allowed border-slate-200 bg-slate-50 text-slate-400"
+                                ? "cursor-not-allowed border-border bg-surface-subtle text-text-subtle"
                                 : reachedMax
-                                ? "cursor-not-allowed border-amber-200 bg-amber-50/50 text-slate-700 hover:bg-amber-50/50"
-                                : "border-slate-200 bg-white hover:border-blue-300 hover:bg-blue-50"
+                                ? "cursor-not-allowed border-amber-200 bg-amber-50/50 text-text-secondary hover:bg-amber-50/50"
+                                : "border-border bg-surface hover:border-blue-300 hover:bg-blue-50"
                             }`}
                           >
                             <div className="flex w-full items-center justify-between gap-4">
@@ -1821,10 +1888,10 @@ export default function NewLoanPage() {
                                   <p
                                     className={`truncate font-semibold ${
                                       inactive
-                                        ? "text-slate-400"
+                                        ? "text-text-subtle"
                                         : reachedMax
-                                        ? "text-slate-700"
-                                        : "text-slate-900"
+                                        ? "text-text-secondary"
+                                        : "text-text-main"
                                     }`}
                                   >
                                     {member.name}
@@ -1835,7 +1902,7 @@ export default function NewLoanPage() {
                                       className={`rounded px-1.5 py-0.5 text-xs font-medium ${
                                         reachedMax
                                           ? "bg-amber-100 text-amber-900 font-semibold"
-                                          : "bg-slate-100 text-slate-600"
+                                          : "bg-surface-muted text-text-secondary"
                                       }`}
                                     >
                                       {activeCount}/{maxActiveLoans ?? "∞"} Transaksi Aktif
@@ -1846,15 +1913,15 @@ export default function NewLoanPage() {
                                 <p
                                   className={`mt-1 truncate text-sm ${
                                     inactive
-                                      ? "text-slate-400"
-                                      : "text-slate-500"
+                                      ? "text-text-subtle"
+                                      : "text-text-muted"
                                   }`}
                                 >
-                                  {member.memberNumber} <span className="mx-1 select-none text-slate-300" aria-hidden="true">&bull;</span> {member.phone || "-"}
+                                  {member.memberNumber} <span className="mx-1 select-none text-text-subtle" aria-hidden="true">&bull;</span> {member.phone || "-"}
                                 </p>
 
                                 {inactive ? (
-                                  <p className="mt-1 text-xs font-medium text-slate-500">
+                                  <p className="mt-1 text-xs font-medium text-text-muted">
                                     Anggota tidak aktif dan tidak dapat membuat peminjaman baru.
                                   </p>
                                 ) : reachedMax ? (
@@ -1867,7 +1934,7 @@ export default function NewLoanPage() {
                               <span
                                 className={`shrink-0 rounded-full px-2.5 py-1 text-xs font-medium ${
                                   inactive
-                                    ? "bg-slate-200 text-slate-500"
+                                    ? "bg-surface-muted text-text-muted"
                                     : reachedMax
                                     ? "bg-amber-100 text-amber-900 font-semibold border border-amber-200"
                                     : "bg-emerald-50 text-emerald-700"
@@ -1905,11 +1972,11 @@ export default function NewLoanPage() {
               {/* SELECTED MEMBER */}
 
               {selectedMember && (
-                <div className="mt-5 rounded-lg border border-slate-200 bg-slate-50 p-4">
+                <div className="mt-5 rounded-lg border border-border bg-surface-subtle p-4">
                   <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
                     <div>
                       <div className="flex flex-wrap items-center gap-2">
-                        <p className="font-semibold text-slate-900">
+                        <p className="font-semibold text-text-main">
                           {selectedMember.name}
                         </p>
                         <span className="rounded-full bg-blue-100 px-2.5 py-0.5 text-xs font-semibold text-blue-700">
@@ -1918,18 +1985,18 @@ export default function NewLoanPage() {
                             : "Tidak Aktif"}
                         </span>
                         {memberLoanStatsLoading ? (
-                          <span className="text-xs text-slate-500 animate-pulse">
+                          <span className="text-xs text-text-muted animate-pulse">
                             (Memeriksa transaksi aktif...)
                           </span>
                         ) : (
-                          <span className="text-xs font-medium text-slate-600">
+                          <span className="text-xs font-medium text-text-secondary">
                             (Transaksi Aktif: {memberActiveLoanCount}/{maxActiveLoans ?? "∞"})
                           </span>
                         )}
                       </div>
 
-                      <p className="mt-1 text-sm text-slate-500">
-                        {selectedMember.memberNumber} <span className="mx-1 select-none text-slate-300" aria-hidden="true">&bull;</span> {selectedMember.phone || "-"}
+                      <p className="mt-1 text-sm text-text-muted">
+                        {selectedMember.memberNumber} <span className="mx-1 select-none text-text-subtle" aria-hidden="true">&bull;</span> {selectedMember.phone || "-"}
                       </p>
 
                       {/* WARNING KUOTA MAKSIMAL TRANSAKSI AKTIF */}
@@ -1976,20 +2043,20 @@ export default function NewLoanPage() {
               size="xl"
               initialFocusRef={memberModalCloseRef}
               ariaLabelledBy="create-member-title"
-              className="w-full max-w-xl max-h-[90vh] overflow-y-auto rounded-xl bg-white shadow-xl"
+              className="w-full max-w-xl max-h-[90vh] overflow-y-auto rounded-xl bg-surface shadow-xl"
             >
               {showMemberForm && !selectedMember && (
                 <>
-                  <div className="flex items-start justify-between gap-4 border-b border-slate-200 px-5 py-4">
+                  <div className="flex items-start justify-between gap-4 border-b border-border px-5 py-4">
                     <div>
                       <h3
                         id="create-member-title"
-                        className="text-lg font-semibold text-slate-900"
+                        className="text-lg font-semibold text-text-main"
                       >
                         Buat Anggota Baru
                       </h3>
 
-                      <p className="mt-1 text-sm text-slate-500">
+                      <p className="mt-1 text-sm text-text-muted">
                         Isi data anggota untuk melanjutkan peminjaman.
                       </p>
                     </div>
@@ -2005,7 +2072,7 @@ export default function NewLoanPage() {
                         setShowMemberForm(false);
                         setMemberFormErrors(EMPTY_MEMBER_ERRORS);
                       }}
-                      className="min-h-[32px] min-w-[32px] p-2 text-slate-500 hover:bg-slate-100 hover:text-slate-700"
+                      className="min-h-[32px] min-w-[32px] p-2 text-text-muted hover:bg-surface-muted hover:text-text-secondary"
                     >
                       <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2} aria-hidden="true">
                         <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
@@ -2017,25 +2084,6 @@ export default function NewLoanPage() {
                     onSubmit={handleCreateMember}
                     className="grid gap-3.5 p-5 sm:grid-cols-2"
                   >
-                    <Input
-                      id="member-number"
-                      label="Nomor Anggota"
-                      value={memberNumber}
-                      onChange={(event) => {
-                        setMemberNumber(event.target.value);
-
-                        if (memberFormErrors.memberNumber) {
-                          setMemberFormErrors((current) => ({
-                            ...current,
-                            memberNumber: "",
-                          }));
-                        }
-                      }}
-                      error={memberFormErrors.memberNumber}
-                      placeholder="Contoh: MBR-001 (Wajib diisi)"
-                      required
-                    />
-
                     <Input
                       id="member-name"
                       label="Nama"
@@ -2052,6 +2100,32 @@ export default function NewLoanPage() {
                       }}
                       error={memberFormErrors.name}
                       autoComplete="name"
+                      required
+                    />
+
+                    <Input
+                      id="member-identity-number"
+                      label="NIK"
+                      type="text"
+                      inputMode="numeric"
+                      maxLength={16}
+                      value={memberIdentityNumber}
+                      onChange={(event) => {
+                        const value = event.target.value
+                          .replace(/\D/g, "")
+                          .slice(0, 16);
+
+                        setMemberIdentityNumber(value);
+
+                        if (memberFormErrors.identityNumber) {
+                          setMemberFormErrors((current) => ({
+                            ...current,
+                            identityNumber: "",
+                          }));
+                        }
+                      }}
+                      error={memberFormErrors.identityNumber}
+                      placeholder="16 digit NIK"
                       required
                     />
 
@@ -2083,32 +2157,6 @@ export default function NewLoanPage() {
                     />
 
                     <Input
-                      id="member-identity-number"
-                      label="NIK"
-                      type="text"
-                      inputMode="numeric"
-                      maxLength={16}
-                      value={memberIdentityNumber}
-                      onChange={(event) => {
-                        const value = event.target.value
-                          .replace(/\D/g, "")
-                          .slice(0, 16);
-
-                        setMemberIdentityNumber(value);
-
-                        if (memberFormErrors.identityNumber) {
-                          setMemberFormErrors((current) => ({
-                            ...current,
-                            identityNumber: "",
-                          }));
-                        }
-                      }}
-                      error={memberFormErrors.identityNumber}
-                      placeholder="16 digit NIK"
-                      required
-                    />
-
-                    <Input
                       id="member-email"
                       label="Email (opsional)"
                       type="email"
@@ -2128,7 +2176,7 @@ export default function NewLoanPage() {
                       autoComplete="email"
                     />
 
-                    <div className="mt-1 flex justify-end gap-2 border-t border-slate-100 pt-4 sm:col-span-2">
+                    <div className="mt-1 flex justify-end gap-2 border-t border-border-subtle pt-4 sm:col-span-2">
                       <Button
                         type="button"
                         variant="secondary"
@@ -2162,10 +2210,10 @@ export default function NewLoanPage() {
               <Card className="mt-5 p-4 sm:p-5">
                 <div className="flex items-center justify-between gap-3">
                   <div className="min-w-0">
-                    <h3 className="text-base font-semibold text-slate-900">
+                    <h3 className="text-base font-semibold text-text-main">
                       2. Pilih Buku
                     </h3>
-                    <p className="mt-0.5 text-xs sm:text-sm text-slate-500">
+                    <p className="mt-0.5 text-xs sm:text-sm text-text-muted">
                       Cari buku atau arahkan scanner USB.
                     </p>
                   </div>
@@ -2217,7 +2265,7 @@ export default function NewLoanPage() {
                 {/* LOADING */}
 
                 {bookLoading && (
-                  <p className="mt-5 text-sm text-slate-500">
+                  <p className="mt-5 text-sm text-text-muted">
                     Memuat daftar buku...
                   </p>
                 )}
@@ -2228,14 +2276,14 @@ export default function NewLoanPage() {
                   books.length === 0 &&
                   !bookError &&
                   !showBookForm && (
-                    <div className="mt-5 rounded-lg border border-slate-200 bg-slate-50 p-4">
-                      <p className="font-medium text-slate-800">
+                    <div className="mt-5 rounded-lg border border-border bg-surface-subtle p-4">
+                      <p className="font-medium text-text-main">
                         {bookQuery.trim()
                           ? "Buku tidak ditemukan"
                           : "Tidak ada buku tersedia"}
                       </p>
 
-                      <p className="mt-1 text-sm text-slate-500">
+                      <p className="mt-1 text-sm text-text-muted">
                         {bookQuery.trim()
                           ? "Buku belum ditemukan. Anda dapat membuat buku baru."
                           : "Saat ini tidak ada buku yang dapat dipinjam. Anda dapat membuat buku baru."}
@@ -2275,21 +2323,21 @@ export default function NewLoanPage() {
                   size="2xl"
                   initialFocusRef={bookModalCloseRef}
                   ariaLabelledBy="create-book-title"
-                  className="max-h-[90vh] w-full max-w-2xl overflow-y-auto rounded-xl bg-white shadow-xl"
+                  className="max-h-[90vh] w-full max-w-2xl overflow-y-auto rounded-xl bg-surface shadow-xl"
                 >
                   {showBookForm && (
                     <>
                       {/* HEADER */}
-                      <div className="flex items-start justify-between gap-4 border-b border-slate-200 px-5 py-4">
+                      <div className="flex items-start justify-between gap-4 border-b border-border px-5 py-4">
                         <div>
                           <h3
                             id="create-book-title"
-                            className="text-lg font-semibold text-slate-900"
+                            className="text-lg font-semibold text-text-main"
                           >
                             Tambah Buku Baru
                           </h3>
 
-                          <p className="mt-1 text-sm text-slate-500">
+                          <p className="mt-1 text-sm text-text-muted">
                             Isi data buku dan jumlah eksemplar awal.
                           </p>
                         </div>
@@ -2305,7 +2353,7 @@ export default function NewLoanPage() {
                             setShowBookForm(false);
                             setBookFormErrors(EMPTY_BOOK_ERRORS);
                           }}
-                          className="min-h-[32px] min-w-[32px] p-2 text-slate-500 hover:bg-slate-100 hover:text-slate-700"
+                          className="min-h-[32px] min-w-[32px] p-2 text-text-muted hover:bg-surface-muted hover:text-text-secondary"
                         >
                           <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2} aria-hidden="true">
                             <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
@@ -2456,7 +2504,7 @@ export default function NewLoanPage() {
                         </div>
 
                         {/* ACTION */}
-                        <div className="mt-1 flex justify-end gap-2 border-t border-slate-100 pt-4 sm:col-span-2">
+                        <div className="mt-1 flex justify-end gap-2 border-t border-border-subtle pt-4 sm:col-span-2">
                           <Button
                             type="button"
                             variant="secondary"
@@ -2487,11 +2535,11 @@ export default function NewLoanPage() {
                 {!bookLoading && books.length > 0 && (
                   <div className="mt-4 space-y-3">
                     <div className="flex items-center justify-between gap-3">
-                      <h4 className="text-sm font-semibold text-slate-700">
+                      <h4 className="text-sm font-semibold text-text-secondary">
                         {bookQuery.trim() ? "Hasil pencarian" : "Daftar buku"}
                       </h4>
 
-                      <p className="shrink-0 text-xs text-slate-500">
+                      <p className="shrink-0 text-xs text-text-muted">
                         {bookTotal > 0 ? `${bookTotal} buku` : `${books.length} buku`}
                       </p>
                     </div>
@@ -2516,8 +2564,8 @@ export default function NewLoanPage() {
                               : selected
                                 ? "border-blue-400 bg-blue-50/60"
                                 : unavailable
-                                  ? "border-slate-200 bg-slate-50"
-                                  : "border-slate-200 bg-white hover:border-slate-300"
+                                  ? "border-border bg-surface-subtle"
+                                  : "border-border bg-surface hover:border-border"
                           }`}
                         >
                           <div className="grid gap-3.5 xl:grid-cols-[minmax(0,1fr)_220px] xl:items-center">
@@ -2529,38 +2577,38 @@ export default function NewLoanPage() {
                                   <p
                                     className={`truncate text-sm sm:text-base font-semibold ${
                                       archived
-                                        ? "text-slate-400"
-                                        : "text-slate-900"
+                                        ? "text-text-subtle"
+                                        : "text-text-main"
                                     }`}
                                     title={book.title}
                                   >
                                     {book.title}
                                   </p>
 
-                                  <div className="mt-1.5 flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-slate-500">
+                                  <div className="mt-1.5 flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-text-muted">
                                     <p>
-                                      <span className="text-slate-500">
+                                      <span className="text-text-muted">
                                         Penulis:
                                       </span>{" "}
-                                      <span className="font-medium text-slate-700">
+                                      <span className="font-medium text-text-secondary">
                                         {book.author || "-"}
                                       </span>
                                     </p>
 
-                                    <span className="text-slate-300 select-none" aria-hidden="true">&bull;</span>
+                                    <span className="text-text-subtle select-none" aria-hidden="true">&bull;</span>
 
                                     <p>
-                                      <span className="text-slate-500">
+                                      <span className="text-text-muted">
                                         ISBN:
                                       </span>{" "}
-                                      <span className="font-medium text-slate-700">
+                                      <span className="font-medium text-text-secondary">
                                         {book.isbn || "-"}
                                       </span>
                                     </p>
                                   </div>
 
                                   {archived && (
-                                    <p className="mt-1.5 text-xs font-medium text-slate-500">
+                                    <p className="mt-1.5 text-xs font-medium text-text-muted">
                                       Buku diarsipkan dan tidak dapat dipinjam.
                                     </p>
                                   )}
@@ -2568,13 +2616,13 @@ export default function NewLoanPage() {
 
                                 {/* KODE BUKU + BADGE */}
                                 <div className="flex shrink-0 flex-col items-end gap-1">
-                                  <span className="font-semibold text-xs text-slate-700">
+                                  <span className="font-semibold text-xs text-text-secondary">
                                     {book.code}
                                   </span>
                                   <span
                                     className={`rounded-full px-2 py-0.5 text-xs font-semibold ${
                                       archived
-                                        ? "bg-slate-200 text-slate-500"
+                                        ? "bg-surface-muted text-text-muted"
                                         : "bg-emerald-50 text-emerald-700"
                                     }`}
                                   >
@@ -2585,13 +2633,13 @@ export default function NewLoanPage() {
                             </div>
 
                             {/* COPY INFO + ACTION */}
-                            <div className="border-t border-slate-100 pt-3 xl:border-l xl:border-t-0 xl:pl-4 xl:pt-0">
+                            <div className="border-t border-border-subtle pt-3 xl:border-l xl:border-t-0 xl:pl-4 xl:pt-0">
                               <div className="grid grid-cols-[1fr_1fr_auto] xl:grid-cols-2 gap-2 items-center">
-                                <div className="rounded-lg border border-slate-200 bg-slate-50 px-2.5 py-1.5 text-center">
-                                  <p className="text-[11px] font-semibold uppercase tracking-wide text-slate-500">
+                                <div className="rounded-lg border border-border bg-surface-subtle px-2.5 py-1.5 text-center">
+                                  <p className="text-[11px] font-semibold uppercase tracking-wide text-text-muted">
                                     Total eksemplar
                                   </p>
-                                  <p className="mt-0.5 text-base font-bold leading-none text-slate-900">
+                                  <p className="mt-0.5 text-base font-bold leading-none text-text-main">
                                     {book.totalCopies}
                                   </p>
                                 </div>
@@ -2656,7 +2704,7 @@ export default function NewLoanPage() {
                             <p
                               className={`mt-3 rounded-md px-3 py-2 text-xs font-medium ${
                                 archived
-                                  ? "bg-slate-100 text-slate-500"
+                                  ? "bg-surface-muted text-text-muted"
                                   : "bg-red-50 text-red-600"
                               }`}
                             >
@@ -2670,10 +2718,10 @@ export default function NewLoanPage() {
                             <div className="mt-4 border-t border-blue-200 pt-4">
                               <div className="flex items-center justify-between gap-3">
                                 <div>
-                                  <p className="text-sm font-semibold text-slate-900">
+                                  <p className="text-sm font-semibold text-text-main">
                                     Pilih eksemplar buku
                                   </p>
-                                  <p className="text-xs text-slate-500">
+                                  <p className="text-xs text-text-muted">
                                     Pilih satu atau lebih eksemplar yang tersedia.
                                   </p>
                                 </div>
@@ -2689,8 +2737,8 @@ export default function NewLoanPage() {
                               </div>
 
                               {selectedItem.copies.length === 0 ? (
-                                <div className="mt-3 rounded-lg border border-slate-200 bg-white p-3 text-center">
-                                  <p className="text-xs sm:text-sm font-medium text-slate-600">
+                                <div className="mt-3 rounded-lg border border-border bg-surface p-3 text-center">
+                                  <p className="text-xs sm:text-sm font-medium text-text-secondary">
                                     Tidak ada eksemplar buku yang tersedia.
                                   </p>
                                 </div>
@@ -2728,10 +2776,10 @@ export default function NewLoanPage() {
                                             key={copy.id}
                                             className={`flex items-center justify-between gap-3 rounded-lg border p-2.5 transition ${
                                               copyDisabled
-                                                ? "cursor-not-allowed bg-slate-50 opacity-60 border-slate-200"
+                                                ? "cursor-not-allowed bg-surface-subtle opacity-60 border-border"
                                                 : checked
                                                   ? "border-blue-500 bg-blue-50/50 cursor-pointer ring-1 ring-blue-200"
-                                                  : "border-slate-200 bg-white hover:border-slate-300 cursor-pointer"
+                                                  : "border-border bg-surface hover:border-border cursor-pointer"
                                             }`}
                                           >
                                             <div className="flex items-center gap-2.5 min-w-0">
@@ -2742,9 +2790,9 @@ export default function NewLoanPage() {
                                                 onChange={() =>
                                                   toggleCopy(book.id, copy)
                                                 }
-                                                className="h-4 w-4 rounded border-slate-300 text-blue-600 focus:ring-blue-500 disabled:cursor-not-allowed"
+                                                className="h-4 w-4 rounded border-border text-blue-600 focus:ring-blue-500 disabled:cursor-not-allowed"
                                               />
-                                              <p className="truncate text-xs sm:text-sm font-semibold text-slate-800">
+                                              <p className="truncate text-xs sm:text-sm font-semibold text-text-main">
                                                 {copy.code}
                                               </p>
                                             </div>
@@ -2756,7 +2804,7 @@ export default function NewLoanPage() {
                                                   : copy.status === "BORROWED"
                                                     ? "bg-amber-50 text-amber-700"
                                                     : copy.status === "INACTIVE"
-                                                      ? "bg-slate-100 text-slate-500"
+                                                      ? "bg-surface-muted text-text-muted"
                                                       : "bg-red-50 text-red-600"
                                               }`}
                                             >
@@ -2796,7 +2844,7 @@ export default function NewLoanPage() {
                                 );
                               })()}
 
-                              <p className="mt-3 text-xs sm:text-sm text-slate-600">
+                              <p className="mt-3 text-xs sm:text-sm text-text-secondary">
                                 Eksemplar dipilih:{" "}
                                 <span className="font-semibold text-blue-700">
                                   {selectedItem.selectedCopyIds.length}
@@ -2836,22 +2884,22 @@ export default function NewLoanPage() {
             {/* CARD 1: INFORMASI BUKU TERPILIH */}
             <Card className="p-4 sm:p-5">
               <div className="flex items-center justify-between gap-3">
-                <h3 className="text-base font-semibold text-slate-900">
+                <h3 className="text-base font-semibold text-text-main">
                   Buku yang Dipilih
                 </h3>
-                <span className="shrink-0 rounded-full bg-slate-100 px-2.5 py-0.5 text-xs font-semibold text-slate-700">
+                <span className="shrink-0 rounded-full bg-surface-muted px-2.5 py-0.5 text-xs font-semibold text-text-secondary">
                   {selectedBooks.length} Buku
                 </span>
               </div>
 
               {selectedBooks.length === 0 ? (
-                <div className="mt-3 rounded-lg border border-dashed border-slate-200 p-4 text-center">
-                  <p className="text-xs text-slate-500">
+                <div className="mt-3 rounded-lg border border-dashed border-border p-4 text-center">
+                  <p className="text-xs text-text-muted">
                     Belum ada buku yang dipilih. Pilih atau scan barcode buku di langkah 2.
                   </p>
                 </div>
               ) : (
-                <div className="mt-3 divide-y divide-slate-200 overflow-hidden rounded-lg border border-slate-200 bg-white">
+                <div className="mt-3 divide-y divide-border overflow-hidden rounded-lg border border-border bg-surface">
                   {selectedBooks.map((item) => {
                     const selectedCopies = item.copies
                       .filter((copy) => item.selectedCopyIds.includes(copy.id))
@@ -2869,14 +2917,14 @@ export default function NewLoanPage() {
                       >
                         <div className="min-w-0 flex-1">
                           <div className="flex min-w-0 items-center gap-2">
-                            <p className="truncate text-sm font-semibold text-slate-900">
+                            <p className="truncate text-sm font-semibold text-text-main">
                               {item.book.title}
                             </p>
-                            <span className="shrink-0 text-xs text-slate-500">
+                            <span className="shrink-0 text-xs text-text-muted">
                               {item.book.code}
                             </span>
                           </div>
-                          <p className="mt-0.5 truncate text-xs text-slate-500">
+                          <p className="mt-0.5 truncate text-xs text-text-muted">
                             {item.selectedCopyIds.length > 0
                               ? `${item.selectedCopyIds.length} eksemplar - ${selectedCopies.join(", ")}`
                               : "Belum memilih eksemplar"}
@@ -2890,7 +2938,7 @@ export default function NewLoanPage() {
                           aria-label={`Batal pilih ${item.book.title}`}
                           title="Batal pilih"
                           onClick={() => removeSelectedBook(item.book.id)}
-                          className="h-8 w-8 min-h-0 min-w-0 p-0 text-slate-400 hover:bg-red-50 hover:text-red-600 flex items-center justify-center"
+                          className="h-8 w-8 min-h-0 min-w-0 p-0 text-text-subtle hover:bg-red-50 hover:text-red-600 flex items-center justify-center"
                         >
                           <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2} aria-hidden="true">
                             <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
@@ -2905,10 +2953,10 @@ export default function NewLoanPage() {
 
             {/* CARD 2: TANGGAL PEMINJAMAN */}
             <Card className="p-4 sm:p-5">
-              <h3 className="text-base font-semibold text-slate-900">
+              <h3 className="text-base font-semibold text-text-main">
                 3. Tanggal Peminjaman
               </h3>
-              <p className="mt-0.5 text-xs text-slate-500">
+              <p className="mt-0.5 text-xs text-text-muted">
                 {settingsPending || defaultLoanDuration === null
                   ? "Durasi pinjam belum dikonfigurasi di sistem. Pilih tanggal jatuh tempo secara manual."
                   : `Tanggal pinjam otomatis hari ini & durasi standar ${defaultLoanDuration} hari.`}
@@ -2963,16 +3011,16 @@ export default function NewLoanPage() {
 
             {/* CARD 3: RINGKASAN & SUBMIT BUTTON (SELALU TAMPIL DENGAN CHECKLIST) */}
             <Card className="p-4 sm:p-5">
-              <h3 className="text-base font-semibold text-slate-900">
+              <h3 className="text-base font-semibold text-text-main">
                 4. Ringkasan & Konfirmasi
               </h3>
 
               {/* CHECKLIST STATUS LANGKAH */}
-              <div className="mt-3 space-y-2 rounded-lg border border-slate-200 bg-slate-50 p-3 text-xs">
-                <p className="font-semibold text-slate-700">Checklist Kelengkapan:</p>
+              <div className="mt-3 space-y-2 rounded-lg border border-border bg-surface-subtle p-3 text-xs">
+                <p className="font-semibold text-text-secondary">Checklist Kelengkapan:</p>
                 <div
                   className={`flex items-center gap-2 ${
-                    selectedMember ? "text-emerald-700 font-medium" : "text-slate-500"
+                    selectedMember ? "text-emerald-700 font-medium" : "text-text-muted"
                   }`}
                 >
                   <span className="text-sm font-bold leading-none">{selectedMember ? "✓" : "○"}</span>
@@ -2983,7 +3031,7 @@ export default function NewLoanPage() {
                     selectedBooks.length > 0 &&
                     selectedBooks.every((item) => item.selectedCopyIds.length > 0)
                       ? "text-emerald-700 font-medium"
-                      : "text-slate-500"
+                      : "text-text-muted"
                   }`}
                 >
                   <span className="text-sm font-bold leading-none">
@@ -3001,7 +3049,7 @@ export default function NewLoanPage() {
                 </div>
                 <div
                   className={`flex items-center gap-2 ${
-                    borrowedAt && dueAt && !dateError ? "text-emerald-700 font-medium" : "text-slate-500"
+                    borrowedAt && dueAt && !dateError ? "text-emerald-700 font-medium" : "text-text-muted"
                   }`}
                 >
                   <span className="text-sm font-bold leading-none">
@@ -3016,18 +3064,18 @@ export default function NewLoanPage() {
 
               {/* RINGKASAN DATA JIKA SUDAH ADA */}
               {selectedMember && selectedBooks.length > 0 && (
-                <div className="mt-3 space-y-2 border-t border-slate-100 pt-3 text-xs">
+                <div className="mt-3 space-y-2 border-t border-border-subtle pt-3 text-xs">
                   <div className="flex justify-between">
-                    <span className="text-slate-500">Peminjam:</span>
-                    <span className="font-semibold text-slate-900">{selectedMember.name}</span>
+                    <span className="text-text-muted">Peminjam:</span>
+                    <span className="font-semibold text-text-main">{selectedMember.name}</span>
                   </div>
                   <div className="flex justify-between">
-                    <span className="text-slate-500">Jumlah Buku:</span>
-                    <span className="font-semibold text-slate-900">{selectedBooks.length} buku</span>
+                    <span className="text-text-muted">Jumlah Buku:</span>
+                    <span className="font-semibold text-text-main">{selectedBooks.length} buku</span>
                   </div>
                   <div className="flex justify-between">
-                    <span className="text-slate-500">Jatuh Tempo:</span>
-                    <span className="font-semibold text-slate-900">{formatDate(dueAt)}</span>
+                    <span className="text-text-muted">Jatuh Tempo:</span>
+                    <span className="font-semibold text-text-main">{formatDate(dueAt)}</span>
                   </div>
                 </div>
               )}
@@ -3043,7 +3091,7 @@ export default function NewLoanPage() {
               )}
 
               {/* TOMBOL SUBMIT */}
-              <div className="mt-4 border-t border-slate-200 pt-4">
+              <div className="mt-4 border-t border-border pt-4">
                 <Button
                   type="button"
                   loading={submitLoading}
@@ -3084,11 +3132,11 @@ export default function NewLoanPage() {
           size="2xl"
           initialFocusRef={newLoanBtnRef}
           ariaLabelledBy="loan-success-title"
-          className="w-full max-w-2xl rounded-xl bg-white shadow-2xl"
+          className="w-full max-w-2xl rounded-xl bg-surface shadow-2xl"
         >
           {successLoan && (
             <>
-              <div className="flex items-start justify-between gap-4 border-b border-slate-200 px-5 py-4">
+              <div className="flex items-start justify-between gap-4 border-b border-border px-5 py-4">
                 <div className="flex items-start gap-3">
                   <div
                     className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-emerald-100 text-emerald-700"
@@ -3099,11 +3147,11 @@ export default function NewLoanPage() {
                   <div>
                     <h2
                       id="loan-success-title"
-                      className="text-lg font-semibold text-slate-900"
+                      className="text-lg font-semibold text-text-main"
                     >
                       Peminjaman berhasil
                     </h2>
-                    <p className="mt-1 text-sm text-slate-500">
+                    <p className="mt-1 text-sm text-text-muted">
                       Peminjaman berhasil dicatat.
                     </p>
                   </div>
@@ -3116,7 +3164,7 @@ export default function NewLoanPage() {
                   size="sm"
                   aria-label="Tutup peminjaman berhasil"
                   onClick={closeSuccessModal}
-                  className="min-h-[32px] min-w-[32px] p-2 text-slate-500 hover:bg-slate-100 hover:text-slate-700"
+                  className="min-h-[32px] min-w-[32px] p-2 text-text-muted hover:bg-surface-muted hover:text-text-secondary"
                 >
                   <svg className="h-5 w-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" aria-hidden="true"><path d="M18 6 6 18M6 6l12 12" /></svg>
                 </Button>
@@ -3124,27 +3172,27 @@ export default function NewLoanPage() {
 
               <div className="space-y-4 p-5">
                 <div className="rounded-lg border border-emerald-200 bg-emerald-50 px-4 py-3">
-                  <p className="text-xs text-slate-500">Nomor peminjaman</p>
-                  <p className="mt-1 text-xl font-bold text-slate-900">
+                  <p className="text-xs text-text-muted">Nomor peminjaman</p>
+                  <p className="mt-1 text-xl font-bold text-text-main">
                     {successLoan.loanNumber}
                   </p>
                 </div>
 
                 <div className="grid gap-4 text-sm sm:grid-cols-2">
                   <div>
-                    <p className="text-xs text-slate-500">Anggota</p>
-                    <p className="mt-1 font-medium text-slate-900">
+                    <p className="text-xs text-text-muted">Anggota</p>
+                    <p className="mt-1 font-medium text-text-main">
                       {selectedMember?.name ?? "-"}
                     </p>
                   </div>
 
                   <div>
-                    <p className="text-xs text-slate-500">Buku</p>
+                    <p className="text-xs text-text-muted">Buku</p>
                     <div className="mt-1 space-y-1">
                       {selectedBooks.map((item) => (
                         <p
                           key={item.book.id}
-                          className="font-medium text-slate-900"
+                          className="font-medium text-text-main"
                         >
                           {item.book.title}
                         </p>
@@ -3153,7 +3201,7 @@ export default function NewLoanPage() {
                   </div>
 
                   <div>
-                    <p className="text-xs text-slate-500">Eksemplar</p>
+                    <p className="text-xs text-text-muted">Eksemplar</p>
                     <div className="mt-1 space-y-1">
                       {selectedBooks
                         .flatMap((item) =>
@@ -3165,7 +3213,7 @@ export default function NewLoanPage() {
                           }),
                         )
                         .map((code) => (
-                          <p key={code} className="font-medium text-slate-900">
+                          <p key={code} className="font-medium text-text-main">
                             {code}
                           </p>
                         ))}
@@ -3173,22 +3221,22 @@ export default function NewLoanPage() {
                   </div>
 
                   <div>
-                    <p className="text-xs text-slate-500">Tanggal peminjaman</p>
-                    <p className="mt-1 font-medium text-slate-900">
+                    <p className="text-xs text-text-muted">Tanggal peminjaman</p>
+                    <p className="mt-1 font-medium text-text-main">
                       {formatDate(successLoan.borrowedAt)}
                     </p>
                   </div>
 
                   <div>
-                    <p className="text-xs text-slate-500">Jatuh tempo</p>
-                    <p className="mt-1 font-medium text-slate-900">
+                    <p className="text-xs text-text-muted">Jatuh tempo</p>
+                    <p className="mt-1 font-medium text-text-main">
                       {formatDate(successLoan.dueAt)}
                     </p>
                   </div>
                 </div>
               </div>
 
-              <div className="flex flex-col-reverse gap-2 border-t border-slate-200 px-5 py-4 sm:flex-row sm:justify-end">
+              <div className="flex flex-col-reverse gap-2 border-t border-border px-5 py-4 sm:flex-row sm:justify-end">
                 <Button
                   type="button"
                   variant="secondary"

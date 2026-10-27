@@ -1,61 +1,252 @@
 @import "tailwindcss";
 
-@custom-variant dark (&:where(.dark, .dark *));
+@custom-variant dark (&:where([data-theme="dark"], [data-theme="dark"] *));
 
-.dark {
-  --background: #0f172a;
-  --foreground: #f8fafc;
-  --color-background: #0f172a;
-  --color-foreground: #f8fafc;
-  --color-app-background: #0f172a;
-  --color-app-surface: #1e293b;
-  --color-app-text: #f8fafc;
-  --color-app-text-muted: #94a3b8;
-  --color-app-border: #334155;
-  --color-neutral-surface: #1e293b;
-  --color-neutral-border: #334155;
-}
-
+/* ==========================================================================
+   SEMANTIC DESIGN TOKENS (LIGHT DEFAULT / DATA-THEME="LIGHT")
+   ========================================================================== */
 :root {
-  --background: #f8fafc;
-  --foreground: #0f172a;
+  color-scheme: light;
+
+  /* Surfaces & Backgrounds */
+  --bg-canvas: #f8fafc;            /* slate-50 */
+  --bg-surface: #ffffff;           /* white */
+  --bg-surface-muted: #f1f5f9;     /* slate-100 */
+  --bg-surface-subtle: #f8fafc;    /* slate-50 */
+  --bg-overlay: rgba(15, 23, 42, 0.45); /* slate-900 / 45% */
+  --bg-input: #ffffff;
+
+  /* Borders & Dividers */
+  --border-default: #e2e8f0;       /* slate-200 */
+  --border-strong: #cbd5e1;        /* slate-300 */
+  --border-subtle: #f1f5f9;        /* slate-100 */
+
+  /* Typography / Text */
+  --text-main: #0f172a;            /* slate-900 */
+  --text-secondary: #334155;       /* slate-700 */
+  --text-muted: #475569;           /* slate-600 */
+  --text-subtle: #94a3b8;          /* slate-400 */
+  --text-placeholder: #94a3b8;     /* slate-400 */
+  --text-inverse: #ffffff;
+
+  /* Focus & Rings */
+  --ring-focus: #2563eb;           /* blue-600 */
+  --ring-offset: #ffffff;
+
+  /* Brand / Primary (Blue) */
+  --brand-solid: #2563eb;          /* blue-600 */
+  --brand-hover: #1d4ed8;          /* blue-700 */
+  --brand-soft: #eff6ff;           /* blue-50 */
+  --brand-border: #bfdbfe;         /* blue-200 */
+  --brand-text: #1d4ed8;           /* blue-700 */
+
+  /* Semantic - Success (Emerald / Green) */
+  --success-solid: #16a34a;        /* green-600 */
+  --success-hover: #15803d;        /* green-700 */
+  --success-soft: #f0fdf4;         /* green-50 */
+  --success-border: #bbf7d0;        /* green-200 */
+  --success-text: #166534;          /* green-800 */
+
+  /* Semantic - Warning / Overdue (Amber / Yellow) */
+  --warning-solid: #d97706;        /* amber-600 */
+  --warning-hover: #b45309;        /* amber-700 */
+  --warning-soft: #fffbeb;         /* amber-50 */
+  --warning-border: #fde68a;        /* amber-200 */
+  --warning-text: #92400e;          /* amber-800 */
+
+  /* Semantic - Danger (Red) */
+  --danger-solid: #dc2626;         /* red-600 */
+  --danger-hover: #b91c1c;         /* red-700 */
+  --danger-soft: #fef2f2;          /* red-50 */
+  --danger-border: #fecaca;         /* red-200 */
+  --danger-text: #991b1b;           /* red-800 */
+
+  /* Semantic - Info (Sky / Blue) */
+  --info-solid: #0284c7;           /* sky-600 */
+  --info-hover: #0369a1;           /* sky-700 */
+  --info-soft: #f0f9ff;            /* sky-50 */
+  --info-border: #bae6fd;          /* sky-200 */
+  --info-text: #075985;            /* sky-800 */
+
+  /* Radii & Shadows */
+  --radius-app: 0.75rem;
+  --shadow-card: 0 1px 3px 0 rgb(15 23 42 / 0.06), 0 1px 2px -1px rgb(15 23 42 / 0.04);
+  --shadow-dropdown: 0 10px 15px -3px rgb(15 23 42 / 0.1), 0 4px 6px -4px rgb(15 23 42 / 0.05);
+
+  /* Scrollbar */
+  --scrollbar-thumb: #cbd5e1;
+  --scrollbar-track: #f8fafc;
 }
 
+/* ==========================================================================
+   SEMANTIC DESIGN TOKENS (DARK MODE [data-theme="dark"])
+   ========================================================================== */
+[data-theme="dark"] {
+  color-scheme: dark;
+
+  /* Surfaces & Backgrounds */
+  --bg-canvas: #0b1120;            /* ultra dark slate / background */
+  --bg-surface: #131d31;           /* elevated surface */
+  --bg-surface-muted: #1e293b;     /* muted elements, cards subtle, hover */
+  --bg-surface-subtle: #182235;    /* table headers, subtle backgrounds */
+  --bg-overlay: rgba(3, 7, 18, 0.75);
+  --bg-input: #131d31;
+
+  /* Borders & Dividers */
+  --border-default: #1e2e4a;       /* visible subtle border */
+  --border-strong: #334767;        /* active/interactive border */
+  --border-subtle: #17243b;
+
+  /* Typography / Text */
+  --text-main: #f8fafc;            /* slate-50 (kontras > 12:1) */
+  --text-secondary: #cbd5e1;       /* slate-300 (kontras > 7:1) */
+  --text-muted: #94a3b8;           /* slate-400 (kontras > 4.5:1 WCAG AA) */
+  --text-subtle: #64748b;          /* slate-500 */
+  --text-placeholder: #64748b;     /* slate-500 */
+  --text-inverse: #0f172a;
+
+  /* Focus & Rings */
+  --ring-focus: #3b82f6;           /* blue-500 */
+  --ring-offset: #0b1120;
+
+  /* Brand / Primary (Blue) */
+  --brand-solid: #3b82f6;          /* blue-500 */
+  --brand-hover: #2563eb;          /* blue-600 */
+  --brand-soft: #172554;           /* blue-950 */
+  --brand-border: #1e3a8a;         /* blue-900 */
+  --brand-text: #60a5fa;           /* blue-400 */
+
+  /* Semantic - Success (Emerald / Green) */
+  --success-solid: #22c55e;        /* green-500 */
+  --success-hover: #16a34a;        /* green-600 */
+  --success-soft: #052e16;         /* green-950 */
+  --success-border: #14532d;        /* green-900 */
+  --success-text: #4ade80;          /* green-400 */
+
+  /* Semantic - Warning / Overdue (Amber / Yellow) */
+  --warning-solid: #f59e0b;        /* amber-500 */
+  --warning-hover: #d97706;        /* amber-600 */
+  --warning-soft: #451a03;         /* amber-950 */
+  --warning-border: #78350f;        /* amber-900 */
+  --warning-text: #fbbf24;          /* amber-400 */
+
+  /* Semantic - Danger (Red) */
+  --danger-solid: #ef4444;         /* red-500 */
+  --danger-hover: #dc2626;         /* red-600 */
+  --danger-soft: #450a0a;          /* red-950 */
+  --danger-border: #7f1d1d;         /* red-900 */
+  --danger-text: #f87171;           /* red-400 */
+
+  /* Semantic - Info (Sky / Blue) */
+  --info-solid: #38bdf8;           /* sky-400 */
+  --info-hover: #0284c7;           /* sky-600 */
+  --info-soft: #082f49;            /* sky-950 */
+  --info-border: #0c4a6e;          /* sky-900 */
+  --info-text: #7dd3fc;            /* sky-300 */
+
+  /* Shadows (less blur, supplemented by borders in dark mode) */
+  --shadow-card: 0 1px 3px 0 rgb(0 0 0 / 0.35);
+  --shadow-dropdown: 0 10px 25px -5px rgb(0 0 0 / 0.5), 0 8px 10px -6px rgb(0 0 0 / 0.4);
+
+  /* Scrollbar */
+  --scrollbar-thumb: #334155;
+  --scrollbar-track: #0b1120;
+}
+
+/* ==========================================================================
+   TAILWIND THEME BINDINGS
+   ========================================================================== */
 @theme inline {
-  --color-background: var(--background);
-  --color-foreground: var(--foreground);
-  --color-brand: #2563eb;
-  --color-brand-strong: #1d4ed8;
-  --color-app-background: #f8fafc;
-  --color-app-surface: #ffffff;
-  --color-app-text: #0f172a;
-  --color-app-text-muted: #475569;
-  --color-app-border: #e2e8f0;
-  --color-success: #15803d;
-  --color-success-surface: #f0fdf4;
-  --color-success-border: #bbf7d0;
-  --color-warning: #a16207;
-  --color-warning-surface: #fefce8;
-  --color-warning-border: #fef08a;
-  --color-danger: #b91c1c;
-  --color-danger-surface: #fef2f2;
-  --color-danger-border: #fecaca;
-  --color-neutral-surface: #f8fafc;
-  --color-neutral-border: #e2e8f0;
-  --radius-app: 0.75rem;
-  --shadow-app: 0 1px 3px rgb(15 23 42 / 0.08);
+  --color-canvas: var(--bg-canvas);
+  --color-surface: var(--bg-surface);
+  --color-surface-muted: var(--bg-surface-muted);
+  --color-surface-subtle: var(--bg-surface-subtle);
+  --color-overlay: var(--bg-overlay);
+  --color-input: var(--bg-input);
+
+  --color-border: var(--border-default);
+  --color-border-strong: var(--border-strong);
+  --color-border-subtle: var(--border-subtle);
+
+  --color-text-main: var(--text-main);
+  --color-text-secondary: var(--text-secondary);
+  --color-text-muted: var(--text-muted);
+  --color-text-subtle: var(--text-subtle);
+  --color-placeholder: var(--text-placeholder);
+  --color-text-inverse: var(--text-inverse);
+
+  --color-brand: var(--brand-solid);
+  --color-brand-hover: var(--brand-hover);
+  --color-brand-soft: var(--brand-soft);
+  --color-brand-border: var(--brand-border);
+  --color-brand-text: var(--brand-text);
+
+  --color-success: var(--success-solid);
+  --color-success-hover: var(--success-hover);
+  --color-success-soft: var(--success-soft);
+  --color-success-border: var(--success-border);
+  --color-success-text: var(--success-text);
+
+  --color-warning: var(--warning-solid);
+  --color-warning-hover: var(--warning-hover);
+  --color-warning-soft: var(--warning-soft);
+  --color-warning-border: var(--warning-border);
+  --color-warning-text: var(--warning-text);
+
+  --color-danger: var(--danger-solid);
+  --color-danger-hover: var(--danger-hover);
+  --color-danger-soft: var(--danger-soft);
+  --color-danger-border: var(--danger-border);
+  --color-danger-text: var(--danger-text);
+
+  --color-info: var(--info-solid);
+  --color-info-hover: var(--info-hover);
+  --color-info-soft: var(--info-soft);
+  --color-info-border: var(--info-border);
+  --color-info-text: var(--info-text);
+
   --font-sans: var(--font-geist-sans);
   --font-mono: var(--font-geist-mono);
+
+  /* Legacy alias compatibility */
+  --color-app-border: var(--border-default);
+  --color-app-surface: var(--bg-surface);
+  --color-app-text: var(--text-main);
+  --color-app-text-muted: var(--text-muted);
+}
+
+/* ==========================================================================
+   GLOBAL BASE STYLES & PREFLIGHT RESETS
+   ========================================================================== */
+@layer base {
+  *,
+  *::before,
+  *::after,
+  ::backdrop,
+  ::file-selector-button {
+    border-color: var(--border-default);
+  }
+}
+
+html {
+  background-color: var(--bg-canvas);
+  color: var(--text-main);
+  color-scheme: light;
+}
+
+[data-theme="dark"] {
+  color-scheme: dark;
 }
 
 body {
-  background: var(--background);
-  color: var(--foreground);
+  background-color: var(--bg-canvas);
+  color: var(--text-main);
   font-family: var(--font-geist-sans), Arial, Helvetica, sans-serif;
+  min-height: 100%;
 }
 
 * {
-  scrollbar-color: #94a3b8 #f8fafc;
+  scrollbar-color: var(--scrollbar-thumb) var(--scrollbar-track);
   scrollbar-width: thin;
 }
 
@@ -77,8 +268,17 @@ select {
 }
 
 ::selection {
-  background: #dbeafe;
-  color: #172554;
+  background: var(--brand-soft);
+  color: var(--brand-text);
+}
+
+/* Autofill styling in dark mode */
+[data-theme="dark"] input:-webkit-autofill,
+[data-theme="dark"] input:-webkit-autofill:hover,
+[data-theme="dark"] input:-webkit-autofill:focus {
+  -webkit-text-fill-color: var(--text-main);
+  -webkit-box-shadow: 0 0 0px 1000px var(--bg-surface) inset;
+  transition: background-color 5000s ease-in-out 0s;
 }
 
 .page-container {
@@ -111,7 +311,6 @@ select {
   100% {
     transform: translateY(0) scale(1);
   }
-
   50% {
     transform: translateY(-3px) scale(1.08);
   }
@@ -131,3 +330,77 @@ select {
 .animate-profile-fade {
   animation: profileFadeIn 0.22s cubic-bezier(0.16, 1, 0.3, 1) forwards;
 }
+
+/* ==========================================================================
+   POIN 6: ATURAN CETAK (@MEDIA PRINT & PRATINJAU KERTAS)
+   Tetap TERANG apa pun temanya: pratinjau kertas, barcode, dan cetak.
+   ========================================================================== */
+@media print {
+  :root,
+  [data-theme="dark"],
+  html {
+    color-scheme: light !important;
+    --bg-canvas: #ffffff !important;
+    --bg-surface: #ffffff !important;
+    --bg-surface-muted: #f8fafc !important;
+    --border-default: #e2e8f0 !important;
+    --border-strong: #cbd5e1 !important;
+    --text-main: #000000 !important;
+    --text-secondary: #1e293b !important;
+    --text-muted: #475569 !important;
+    background: #ffffff !important;
+    color: #000000 !important;
+  }
+
+  body {
+    background-color: #ffffff !important;
+    color: #000000 !important;
+  }
+}
+
+.paper-preview,
+#loan-print-iframe,
+.barcode-print-canvas,
+.barcode-print-svg {
+  color-scheme: light !important;
+  background-color: #ffffff !important;
+  color: #000000 !important;
+}
+
+
+/* ==========================================================================
+   POIN 6: ATURAN CETAK (@MEDIA PRINT & PRATINJAU KERTAS)
+   Tetap TERANG apa pun temanya: pratinjau kertas, barcode, dan cetak.
+   ========================================================================== */
+@media print {
+  :root,
+  [data-theme="dark"],
+  html {
+    color-scheme: light !important;
+    --bg-canvas: #ffffff !important;
+    --bg-surface: #ffffff !important;
+    --bg-surface-muted: #f8fafc !important;
+    --border-default: #e2e8f0 !important;
+    --border-strong: #cbd5e1 !important;
+    --text-main: #000000 !important;
+    --text-secondary: #1e293b !important;
+    --text-muted: #475569 !important;
+    background: #ffffff !important;
+    color: #000000 !important;
+  }
+
+  body {
+    background-color: #ffffff !important;
+    color: #000000 !important;
+  }
+}
+
+.paper-preview,
+#loan-print-iframe,
+.barcode-print-canvas,
+.barcode-print-svg {
+  color-scheme: light !important;
+  background-color: #ffffff !important;
+  color: #000000 !important;
+}
+

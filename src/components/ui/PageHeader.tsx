@@ -32,13 +32,13 @@ export default function PageHeader({
       <div className="min-w-0 flex-1">
         {renderedBackLink && <div className="mb-2">{renderedBackLink}</div>}
         <div className="flex items-center gap-3 flex-wrap">
-          <h1 className="text-2xl font-bold tracking-tight text-slate-900 sm:text-3xl">
+          <h1 className="text-2xl font-bold tracking-tight text-text-main sm:text-3xl">
             {title}
           </h1>
           {badge}
         </div>
         {description && (
-          <p className="mt-1 text-sm text-slate-500 leading-relaxed max-w-2xl">
+          <p className="mt-1 text-sm text-text-muted leading-relaxed max-w-2xl">
             {description}
           </p>
         )}

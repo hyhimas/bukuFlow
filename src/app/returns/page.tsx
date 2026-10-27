@@ -8,6 +8,7 @@ import { canAccessReturns, canManageReturns } from "@/lib/authorization";
 import Button from "@/components/ui/Button";
 import Card from "@/components/ui/Card";
 import Input from "@/components/ui/Input";
+import DatePicker from "@/components/ui/DatePicker";
 import Badge from "@/components/ui/Badge";
 import PageHeader from "@/components/ui/PageHeader";
 import EmptyState from "@/components/ui/EmptyState";
@@ -618,7 +619,8 @@ export default function ReturnsPage() {
         selectedLoan.loan.id,
         selectedCopies,
         selectedItemIds,
-        selectedLoan.loan.companyId
+        selectedLoan.loan.companyId,
+        returnDate
       );
 
       const returnedIdSet = new Set(selectedItemIds);
@@ -813,7 +815,7 @@ export default function ReturnsPage() {
     : [];
 
   return (
-    <div className="min-h-screen bg-slate-50">
+    <div className="min-h-screen bg-surface-subtle">
       <div className="page-container py-5 sm:py-6">
         <div className="mb-5">
           <PageHeader
@@ -821,7 +823,7 @@ export default function ReturnsPage() {
             title="Pengembalian Buku"
             description="Cari peminjaman aktif atau scan barcode untuk memproses pengembalian buku."
             actions={
-              <div className="flex items-center gap-2 self-start rounded-full border border-slate-200 bg-white px-3 py-1.5 text-xs text-slate-600 shadow-2xs sm:self-auto">
+              <div className="flex items-center gap-2 self-start rounded-full border border-border bg-surface px-3 py-1.5 text-xs text-text-secondary shadow-2xs sm:self-auto">
                 <span
                   className={`h-2 w-2 rounded-full ${
                     scanLoading ? "bg-amber-500 animate-pulse" : "bg-emerald-500"
@@ -854,10 +856,10 @@ export default function ReturnsPage() {
             <Card className="p-4 sm:p-5">
               <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
                 <div>
-                  <h2 className="text-lg font-semibold text-slate-900">
+                  <h2 className="text-lg font-semibold text-text-main">
                     1. Cari Peminjaman
                   </h2>
-                  <p className="mt-1 text-sm text-slate-500">
+                  <p className="mt-1 text-sm text-text-muted">
                     Cari berdasarkan nomor peminjaman, nama anggota, judul buku, atau kode eksemplar.
                   </p>
                 </div>
@@ -892,16 +894,16 @@ export default function ReturnsPage() {
               <Card className="mt-5 p-4 sm:p-5">
               <div className="flex items-center justify-between gap-3">
                 <div>
-                  <h3 className="text-lg font-semibold text-slate-900">
+                  <h3 className="text-lg font-semibold text-text-main">
                     2. Daftar Peminjaman
                   </h3>
-                  <p className="mt-1 text-sm text-slate-500">
+                  <p className="mt-1 text-sm text-text-muted">
                     Pilih peminjaman untuk melihat detail pengembalian.
                   </p>
                 </div>
 
                 {loans.length > 0 && (
-                  <p className="shrink-0 text-xs text-slate-500">
+                  <p className="shrink-0 text-xs text-text-muted">
                     {totalItems > 0 ? `${totalItems} peminjaman` : `${loans.length} peminjaman`}
                   </p>
                 )}
@@ -910,7 +912,7 @@ export default function ReturnsPage() {
               {loading && loans.length === 0 && (
                 <div className="mt-4 space-y-2.5">
                   {Array.from({ length: 4 }).map((_, i) => (
-                    <div key={i} className="p-3.5 rounded-xl border border-slate-200 bg-white space-y-2">
+                    <div key={i} className="p-3.5 rounded-xl border border-border bg-surface space-y-2">
                       <Skeleton className="h-4 w-36" />
                       <Skeleton className="h-3 w-48" />
                     </div>
@@ -950,20 +952,20 @@ export default function ReturnsPage() {
                         className={`w-full h-auto rounded-xl border p-3 text-left justify-start font-normal transition ${
                           selectedLoan?.loan.id === item.loan.id
                             ? "border-blue-500 bg-blue-50 ring-1 ring-blue-200"
-                            : "border-slate-200 bg-white hover:border-blue-300 hover:bg-blue-50"
+                            : "border-border bg-surface hover:border-blue-300 hover:bg-blue-50"
                         }`}
                       >
                         <div className="grid w-full grid-cols-[minmax(0,1fr)_auto] items-start gap-3">
                           <div className="min-w-0">
-                            <p className="truncate font-semibold text-slate-900">
+                            <p className="truncate font-semibold text-text-main">
                               {item.loan.loanNumber}
                             </p>
-                            <p className="mt-1 truncate text-sm text-slate-600">
+                            <p className="mt-1 truncate text-sm text-text-secondary">
                               {item.member.name}
                             </p>
-                            <p className="mt-1 text-xs text-slate-500">
-                              {item.items.length} item <span className="mx-1 select-none text-slate-400" aria-hidden="true">&bull;</span>{" "}
-                              {formatDate(item.loan.borrowedAt)} <span className="mx-1 select-none text-slate-400" aria-hidden="true">&rarr;</span>{" "}
+                            <p className="mt-1 text-xs text-text-muted">
+                              {item.items.length} item <span className="mx-1 select-none text-text-subtle" aria-hidden="true">&bull;</span>{" "}
+                              {formatDate(item.loan.borrowedAt)} <span className="mx-1 select-none text-text-subtle" aria-hidden="true">&rarr;</span>{" "}
                               {formatDate(item.loan.dueAt)}
                             </p>
                           </div>
@@ -1108,7 +1110,7 @@ export default function ReturnsPage() {
                                     const target = memberActiveLoans.find((l) => l.loan.id === e.target.value);
                                     if (target) selectLoan(target);
                                   }}
-                                  className="w-full h-9 rounded-lg border border-blue-300 bg-white pl-3 pr-8 text-xs font-semibold text-slate-800 shadow-2xs focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 cursor-pointer"
+                                  className="w-full h-9 rounded-lg border border-blue-300 bg-surface pl-3 pr-8 text-xs font-semibold text-text-main shadow-2xs focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 cursor-pointer"
                                 >
                                   {memberActiveLoans.map((l) => {
                                     const unreturnedCount = l.items.filter(
@@ -1121,7 +1123,7 @@ export default function ReturnsPage() {
                                     );
                                   })}
                                 </select>
-                                <div className="pointer-events-none absolute inset-y-0 right-0 flex items-center px-2.5 text-slate-500">
+                                <div className="pointer-events-none absolute inset-y-0 right-0 flex items-center px-2.5 text-text-muted">
                                   <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" aria-hidden="true">
                                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
                                   </svg>
@@ -1132,25 +1134,25 @@ export default function ReturnsPage() {
                         </div>
                       )}
 
-                      <div className="border-b border-slate-200 pb-4">
-                        <p className="text-xs font-medium uppercase tracking-wide text-slate-500">
+                      <div className="border-b border-border pb-4">
+                        <p className="text-xs font-medium uppercase tracking-wide text-text-muted">
                           3. Detail Pengembalian
                         </p>
 
                         <div className="mt-2 flex items-start gap-3">
                           <div className="min-w-0 flex-1">
                             <h3
-                              className="break-words text-xl font-bold leading-tight text-slate-900"
+                              className="break-words text-xl font-bold leading-tight text-text-main"
                               title={selectedLoan.loan.loanNumber}
                             >
                               {selectedLoan.loan.loanNumber}
                             </h3>
 
                             <p
-                              className="mt-1 break-words text-sm text-slate-600"
+                              className="mt-1 break-words text-sm text-text-secondary"
                               title={`${selectedLoan.member.name} - ${selectedLoan.member.memberNumber}`}
                             >
-                              {selectedLoan.member.name} <span className="mx-1 select-none text-slate-400" aria-hidden="true">&bull;</span>{" "}
+                              {selectedLoan.member.name} <span className="mx-1 select-none text-text-subtle" aria-hidden="true">&bull;</span>{" "}
                               {selectedLoan.member.memberNumber}
                             </p>
                           </div>
@@ -1164,34 +1166,72 @@ export default function ReturnsPage() {
                       </div>
 
                       <div className="mt-4 grid gap-3 sm:grid-cols-2">
-                        <div className="rounded-lg bg-slate-50 p-3">
-                          <p className="text-xs text-slate-500">Tanggal pinjam</p>
-                          <p className="mt-1 font-semibold text-slate-900">
+                        <div className="rounded-lg bg-surface-subtle p-3">
+                          <p className="text-xs text-text-muted">Tanggal pinjam</p>
+                          <p className="mt-1 font-semibold text-text-main">
                             {formatDate(selectedLoan.loan.borrowedAt)}
                           </p>
                         </div>
 
-                        <div className="rounded-lg bg-slate-50 p-3">
-                          <p className="text-xs text-slate-500">Jatuh tempo</p>
-                          <p className="mt-1 font-semibold text-slate-900">
+                        <div className="rounded-lg bg-surface-subtle p-3">
+                          <p className="text-xs text-text-muted">Jatuh tempo</p>
+                          <p className="mt-1 font-semibold text-text-main">
                             {formatDate(selectedLoan.loan.dueAt)}
                           </p>
                         </div>
 
-                        <div className="rounded-lg bg-slate-50 p-3">
-                          <p className="text-xs text-slate-500">Dipinjam</p>
+                        <div className="rounded-lg bg-surface-subtle p-3">
+                          <p className="text-xs text-text-muted">Dipinjam</p>
                           <p className="mt-1 font-semibold text-amber-700">
                             {borrowedCount} buku
                           </p>
                         </div>
 
-                        <div className="rounded-lg bg-slate-50 p-3">
-                          <p className="text-xs text-slate-500">Dikembalikan</p>
+                        <div className="rounded-lg bg-surface-subtle p-3">
+                          <p className="text-xs text-text-muted">Dikembalikan</p>
                           <p className="mt-1 font-semibold text-emerald-700">
                             {returnedCount} buku
                           </p>
                         </div>
                       </div>
+
+                      {/* Pemilihan Tanggal Pengembalian (Mendukung Pengembalian Lampau / Book Drop) */}
+                      {isStaff && (
+                        <div className="mt-4 rounded-xl border border-border bg-surface-subtle p-3.5">
+                          <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+                            <div className="space-y-0.5">
+                              <label htmlFor="return-date-picker" className="text-xs font-semibold text-text-main flex items-center gap-1.5">
+                                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="text-primary-600" aria-hidden="true">
+                                  <rect x="3" y="4" width="18" height="18" rx="2" ry="2" />
+                                  <line x1="16" y1="2" x2="16" y2="6" />
+                                  <line x1="8" y1="2" x2="8" y2="6" />
+                                  <line x1="3" y1="10" x2="21" y2="10" />
+                                </svg>
+                                Tanggal Pengembalian Fisik
+                              </label>
+                              <p className="text-[11px] text-text-muted">
+                                Default hari ini ({formatDate(getTodayLocal())}). Ubah ke tanggal lampau jika buku dikembalikan melalui kotak pengembalian (book drop).
+                              </p>
+                            </div>
+
+                            <div className="w-full sm:w-56 shrink-0">
+                              <DatePicker
+                                id="return-date-picker"
+                                value={returnDate}
+                                onChange={(val) => setReturnDate(val || getTodayLocal())}
+                                max={getTodayLocal()}
+                                min={selectedLoan.loan.borrowedAt ? selectedLoan.loan.borrowedAt.slice(0, 10) : undefined}
+                              />
+                            </div>
+                          </div>
+                          {returnDate < getTodayLocal() && (
+                            <div className="mt-2.5 flex items-center gap-1.5 text-xs text-amber-800 bg-amber-50 rounded-lg px-2.5 py-1.5 border border-amber-200">
+                              <span className="font-semibold text-amber-900">Mode Pengembalian Lampau:</span>
+                              Denda dan keterlambatan dihitung berdasarkan tanggal fisik pengembalian ({formatDate(returnDate)}).
+                            </div>
+                          )}
+                        </div>
+                      )}
 
 
 
@@ -1227,7 +1267,7 @@ export default function ReturnsPage() {
 
                       <div className="mt-5">
                         <div className="flex items-center justify-between">
-                          <h4 className="font-semibold text-slate-900">
+                          <h4 className="font-semibold text-text-main">
                             Detail buku
                           </h4>
                           {isStaff && borrowedCount > 1 && (
@@ -1245,7 +1285,7 @@ export default function ReturnsPage() {
                           )}
                         </div>
 
-                        <p className="mt-1 text-sm text-slate-500">
+                        <p className="mt-1 text-sm text-text-muted">
                           {isStaff
                             ? "Pilih buku yang ingin dikembalikan. Buku yang sudah dikembalikan tetap ditampilkan sebagai riwayat status."
                             : "Daftar buku dalam transaksi peminjaman ini beserta riwayat statusnya."}
@@ -1253,8 +1293,8 @@ export default function ReturnsPage() {
 
                         {/* Checkbox "Pilih semua" Bar */}
                         {isStaff && borrowedCount > 1 && (
-                          <div className="mt-3 flex items-center justify-between rounded-lg bg-slate-100/80 px-3 py-2 text-xs">
-                            <label className="flex cursor-pointer items-center gap-2 font-medium text-slate-700">
+                          <div className="mt-3 flex items-center justify-between rounded-lg bg-surface-muted/80 px-3 py-2 text-xs">
+                            <label className="flex cursor-pointer items-center gap-2 font-medium text-text-secondary">
                               <input
                                 type="checkbox"
                                 checked={allBorrowedSelected}
@@ -1262,11 +1302,11 @@ export default function ReturnsPage() {
                                   if (el) el.indeterminate = isPartiallySelected;
                                 }}
                                 onChange={handleSelectAllToggle}
-                                className="h-4 w-4 rounded border-slate-300 text-blue-600 focus:ring-2 focus:ring-blue-500"
+                                className="h-4 w-4 rounded border-border text-blue-600 focus:ring-2 focus:ring-blue-500"
                               />
                               Pilih Semua Buku Dipinjam
                             </label>
-                            <span className="text-slate-500">
+                            <span className="text-text-muted">
                               {selectedItemIds.length} dari {borrowedCount} dipilih
                             </span>
                           </div>
@@ -1288,14 +1328,14 @@ export default function ReturnsPage() {
                                       checked={selected}
                                       disabled={!isBorrowed || returnLoading}
                                       onChange={() => toggleItem(loanItem.id)}
-                                      className="mt-1 h-4 w-4 shrink-0 rounded border-slate-300 text-blue-600 focus:ring-2 focus:ring-blue-500 disabled:cursor-not-allowed"
+                                      className="mt-1 h-4 w-4 shrink-0 rounded border-border text-blue-600 focus:ring-2 focus:ring-blue-500 disabled:cursor-not-allowed"
                                     />
                                   )}
 
                                   <div className="min-w-0 flex-1">
                                     <div className="flex items-start justify-between gap-2">
                                       <p
-                                        className="font-semibold text-sm leading-snug text-slate-900 line-clamp-2"
+                                        className="font-semibold text-sm leading-snug text-text-main line-clamp-2"
                                         title={book.title}
                                       >
                                         {book.title}
@@ -1316,14 +1356,14 @@ export default function ReturnsPage() {
                                       </div>
                                     </div>
 
-                                    <div className="mt-1 flex flex-wrap items-center gap-x-2 gap-y-0.5 text-xs text-slate-500">
+                                    <div className="mt-1 flex flex-wrap items-center gap-x-2 gap-y-0.5 text-xs text-text-muted">
                                       {book.code && <span>{book.code}</span>}
                                       {book.code && bookCopy.code && (
-                                        <span className="text-slate-300 select-none" aria-hidden="true">
+                                        <span className="text-text-subtle select-none" aria-hidden="true">
                                           &bull;
                                         </span>
                                       )}
-                                      <span className="font-medium text-slate-700">
+                                      <span className="font-medium text-text-secondary">
                                         {bookCopy.code}
                                       </span>
                                     </div>
@@ -1345,7 +1385,7 @@ export default function ReturnsPage() {
                                     key={loanItem.id}
                                     className={`flex items-start gap-3 rounded-xl border p-3.5 ${
                                       isBorrowed
-                                        ? "border-slate-200 bg-white"
+                                        ? "border-border bg-surface"
                                         : "border-emerald-200 bg-emerald-50/40"
                                     }`}
                                   >
@@ -1362,7 +1402,7 @@ export default function ReturnsPage() {
                                     isBorrowed
                                       ? selected
                                         ? "border-blue-500 bg-blue-50/70 shadow-2xs cursor-pointer"
-                                        : "border-slate-200 bg-white hover:border-blue-300 cursor-pointer"
+                                        : "border-border bg-surface hover:border-blue-300 cursor-pointer"
                                       : "border-emerald-200 bg-emerald-50/40 cursor-default"
                                   }`}
                                 >
@@ -1376,7 +1416,7 @@ export default function ReturnsPage() {
 
                       {/* INLINE ACTION BUTTONS (SINGLE MODAL FLOW) */}
                       {isStaff && (
-                        <div className="mt-5 flex flex-col-reverse gap-2 border-t border-slate-200 pt-4 sm:flex-row sm:justify-end">
+                        <div className="mt-5 flex flex-col-reverse gap-2 border-t border-border pt-4 sm:flex-row sm:justify-end">
                           <Button
                             type="button"
                             variant="secondary"
@@ -1428,23 +1468,23 @@ export default function ReturnsPage() {
         size="lg"
         initialFocusRef={successModalCloseRef}
         ariaLabelledBy="return-success-title"
-        className="w-full max-w-lg rounded-2xl bg-white shadow-2xl"
+        className="w-full max-w-lg rounded-2xl bg-surface shadow-2xl"
       >
         {successLoan ? (
           <>
-            <div className="flex items-start justify-between gap-4 border-b border-slate-200 px-5 py-4">
+            <div className="flex items-start justify-between gap-4 border-b border-border px-5 py-4">
               <div className="flex items-start gap-3">
                 <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-emerald-100 text-emerald-700" aria-hidden="true"><svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5} aria-hidden="true"><path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" /></svg></div>
 
                 <div>
                   <h2
                     id="return-success-title"
-                    className="text-lg font-semibold text-slate-900"
+                    className="text-lg font-semibold text-text-main"
                   >
                     Pengembalian Berhasil
                   </h2>
 
-                  <p className="mt-1 text-sm text-slate-500">
+                  <p className="mt-1 text-sm text-text-muted">
                     {lastReturnDetails?.isPartial
                       ? `Pengembalian sebagian berhasil (${lastReturnDetails.remainingCount} buku masih dipinjam).`
                       : "Semua buku telah dikembalikan dan transaksi selesai."}
@@ -1459,7 +1499,7 @@ export default function ReturnsPage() {
                 size="sm"
                 aria-label="Tutup pengembalian berhasil"
                 onClick={() => setSuccessLoan(null)}
-                className="min-h-[32px] min-w-[32px] p-2 text-slate-500 hover:bg-slate-100 hover:text-slate-700"
+                className="min-h-[32px] min-w-[32px] p-2 text-text-muted hover:bg-surface-muted hover:text-text-secondary"
               >
                 <svg className="h-5 w-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" aria-hidden="true"><path d="M18 6 6 18M6 6l12 12" /></svg>
               </Button>
@@ -1468,8 +1508,8 @@ export default function ReturnsPage() {
             <div className="space-y-4 p-5">
               <div className="flex items-center justify-between gap-3 rounded-lg border border-emerald-200 bg-emerald-50 px-4 py-3">
                 <div>
-                  <p className="text-xs text-slate-500">Nomor peminjaman</p>
-                  <p className="mt-1 font-semibold text-slate-900">
+                  <p className="text-xs text-text-muted">Nomor peminjaman</p>
+                  <p className="mt-1 font-semibold text-text-main">
                     {successLoan.loanNumber}
                   </p>
                 </div>
@@ -1498,15 +1538,15 @@ export default function ReturnsPage() {
                   </div>
                   <div className="mt-2.5 grid grid-cols-2 gap-2 text-xs">
                     <div>
-                      <span className="text-slate-500">Tarif Denda:</span>
-                      <p className="font-semibold text-slate-800">
+                      <span className="text-text-muted">Tarif Denda:</span>
+                      <p className="font-semibold text-text-main">
                         {dailyFineRate !== null
                           ? `Rp ${dailyFineRate.toLocaleString("id-ID")} / hari / buku`
                           : "Belum dikonfigurasi"}
                       </p>
                     </div>
                     <div>
-                      <span className="text-slate-500">Total Denda:</span>
+                      <span className="text-text-muted">Total Denda:</span>
                       <p className="font-bold text-red-600 text-sm">
                         {dailyFineRate !== null
                           ? `Rp ${lastReturnDetails.totalFine.toLocaleString("id-ID")}`
@@ -1519,17 +1559,17 @@ export default function ReturnsPage() {
 
               <div className="grid gap-4 text-sm sm:grid-cols-2">
                 <div>
-                  <p className="text-xs text-slate-500">
+                  <p className="text-xs text-text-muted">
                     Buku/copy dikembalikan ({returnedCopies.length})
                   </p>
-                  <p className="mt-1 font-medium text-slate-900">
+                  <p className="mt-1 font-medium text-text-main">
                     {returnedCopies.join(", ") || "-"}
                   </p>
                 </div>
 
                 <div>
-                  <p className="text-xs text-slate-500">Tanggal pengembalian</p>
-                  <p className="mt-1 font-medium text-slate-900">
+                  <p className="text-xs text-text-muted">Tanggal pengembalian</p>
+                  <p className="mt-1 font-medium text-text-main">
                     {formatDate(
                       successLoan.returnedAt || lastReturnDetails?.returnDate
                     )}
@@ -1538,7 +1578,7 @@ export default function ReturnsPage() {
               </div>
             </div>
 
-            <div className="flex justify-end border-t border-slate-200 px-5 py-4">
+            <div className="flex justify-end border-t border-border px-5 py-4">
               <Button type="button" onClick={() => setSuccessLoan(null)}>
                 Selesai
               </Button>

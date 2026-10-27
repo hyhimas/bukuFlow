@@ -816,7 +816,7 @@ export default function MasterBooksPage() {
       return "bg-red-50 text-red-600";
     }
 
-    return "bg-slate-100 text-slate-600";
+    return "bg-surface-muted text-text-secondary";
   }
 
   // =====================================================
@@ -1005,7 +1005,7 @@ export default function MasterBooksPage() {
         sortable: true,
         render: (book) => (
           <span
-            className="font-semibold text-slate-900 truncate text-xs font-mono block"
+            className="font-semibold text-text-main truncate text-xs font-mono block"
             title={book.code}
           >
             {book.code}
@@ -1019,21 +1019,21 @@ export default function MasterBooksPage() {
         render: (book) => (
           <div className="min-w-0">
             <p
-              className="truncate font-semibold text-slate-800 text-xs sm:text-sm"
+              className="truncate font-semibold text-text-main text-xs sm:text-sm"
               title={book.title}
             >
               {book.title}
             </p>
             {(book.author && book.author !== "-") ||
             (book.isbn && book.isbn !== "-") ? (
-              <p className="mt-0.5 truncate text-xs text-slate-500">
+              <p className="mt-0.5 truncate text-xs text-text-muted">
                 {book.author &&
                 book.author !== "-" &&
                 book.isbn &&
                 book.isbn !== "-" ? (
                   <>
                     <span>{book.author}</span>
-                    <span className="mx-1 select-none text-slate-300" aria-hidden="true">&bull;</span>
+                    <span className="mx-1 select-none text-text-subtle" aria-hidden="true">&bull;</span>
                     <span>ISBN {book.isbn}</span>
                   </>
                 ) : book.author && book.author !== "-" ? (
@@ -1052,7 +1052,7 @@ export default function MasterBooksPage() {
         width: "110px",
         render: (book) => (
           <span
-            className="text-slate-600 truncate text-xs block"
+            className="text-text-secondary truncate text-xs block"
             title={book.category ?? "-"}
           >
             {book.category ?? "-"}
@@ -1067,10 +1067,10 @@ export default function MasterBooksPage() {
         isNumeric: true,
         render: (book) => (
           <span className="tabular-nums text-xs">
-            <span className="font-bold text-slate-900">
+            <span className="font-bold text-text-main">
               {book.availableCopies}
             </span>
-            <span className="text-slate-500"> / {book.totalCopies}</span>
+            <span className="text-text-muted"> / {book.totalCopies}</span>
           </span>
         ),
       },
@@ -1202,7 +1202,7 @@ export default function MasterBooksPage() {
   // =====================================================
 
   return (
-    <div className="min-h-screen bg-slate-50 print:bg-white print:min-h-0">
+    <div className="min-h-screen bg-surface-subtle print:bg-surface print:min-h-0">
       <div className="barcode-page-content print:hidden mx-auto w-full max-w-7xl px-3 py-4 sm:px-5 sm:py-5 lg:px-6">
         {/* HEADER */}
 
@@ -1293,7 +1293,7 @@ export default function MasterBooksPage() {
             <div className="min-w-0 xl:hidden">
               <label
                 htmlFor="book-sort"
-                className="mb-1.5 block text-xs sm:text-sm font-medium text-slate-700 truncate"
+                className="mb-1.5 block text-xs sm:text-sm font-medium text-text-secondary truncate"
               >
                 Urutan
               </label>
@@ -1339,19 +1339,19 @@ export default function MasterBooksPage() {
               order={sortOrder}
               onSortChange={handleSortChange}
               mobileBreakpoint="xl"
-              cardGridClassName="bg-slate-50/60 p-3"
+              cardGridClassName="bg-surface-subtle/60 p-3"
               className="border-0 shadow-none rounded-none"
               emptyState={
                 <div className="px-4 py-12 text-center">
-                  <div className="mx-auto flex h-11 w-11 items-center justify-center rounded-full bg-slate-100 text-slate-400">
+                  <div className="mx-auto flex h-11 w-11 items-center justify-center rounded-full bg-surface-muted text-text-subtle">
                     ?
                   </div>
 
-                  <h3 className="mt-3 text-sm font-semibold text-slate-900">
+                  <h3 className="mt-3 text-sm font-semibold text-text-main">
                     Buku tidak ditemukan
                   </h3>
 
-                  <p className="mx-auto mt-1 max-w-sm text-xs leading-5 text-slate-500">
+                  <p className="mx-auto mt-1 max-w-sm text-xs leading-5 text-text-muted">
                     Coba ubah kata pencarian atau filter status, atau tambahkan buku baru ke katalog perpustakaan.
                   </p>
 
@@ -1374,17 +1374,17 @@ export default function MasterBooksPage() {
                 return (
                   <div
                     key={book.id}
-                    className="rounded-xl border border-slate-200 bg-white p-3.5 shadow-sm flex flex-col justify-between h-full"
+                    className="rounded-xl border border-border bg-surface p-3.5 shadow-sm flex flex-col justify-between h-full"
                   >
                     <div>
                       <div className="flex items-start justify-between gap-3">
                         <div className="min-w-0">
-                          <p className="text-xs font-medium text-slate-500 font-mono">
+                          <p className="text-xs font-medium text-text-muted font-mono">
                             {book.code}
                           </p>
 
                           <p
-                            className="mt-0.5 truncate text-sm font-semibold text-slate-900"
+                            className="mt-0.5 truncate text-sm font-semibold text-text-main"
                             title={book.title}
                           >
                             {book.title}
@@ -1402,13 +1402,13 @@ export default function MasterBooksPage() {
 
                       {/* UNIFORM 2x2 INFO GRID */}
                       <div className="mt-3 grid grid-cols-2 gap-2">
-                        <div className="rounded-lg border border-slate-100 bg-slate-50 px-3 py-2">
-                          <p className="text-[11px] font-semibold uppercase tracking-wide text-slate-500">
+                        <div className="rounded-lg border border-border-subtle bg-surface-subtle px-3 py-2">
+                          <p className="text-[11px] font-semibold uppercase tracking-wide text-text-muted">
                             Kategori
                           </p>
 
                           <p
-                            className="mt-0.5 truncate text-xs font-medium text-slate-700"
+                            className="mt-0.5 truncate text-xs font-medium text-text-secondary"
                             title={book.category || "-"}
                           >
                             {book.category && book.category !== "-"
@@ -1417,12 +1417,12 @@ export default function MasterBooksPage() {
                           </p>
                         </div>
 
-                        <div className="rounded-lg border border-slate-100 bg-slate-50 px-3 py-2">
-                          <p className="text-[11px] font-semibold uppercase tracking-wide text-slate-500">
+                        <div className="rounded-lg border border-border-subtle bg-surface-subtle px-3 py-2">
+                          <p className="text-[11px] font-semibold uppercase tracking-wide text-text-muted">
                             Eksemplar
                           </p>
 
-                          <p className="mt-0.5 text-xs font-medium text-slate-700">
+                          <p className="mt-0.5 text-xs font-medium text-text-secondary">
                             <span className="font-bold">
                               {book.availableCopies}
                             </span>
@@ -1431,13 +1431,13 @@ export default function MasterBooksPage() {
                           </p>
                         </div>
 
-                        <div className="rounded-lg border border-slate-100 bg-slate-50 px-3 py-2">
-                          <p className="text-[11px] font-semibold uppercase tracking-wide text-slate-500">
+                        <div className="rounded-lg border border-border-subtle bg-surface-subtle px-3 py-2">
+                          <p className="text-[11px] font-semibold uppercase tracking-wide text-text-muted">
                             ISBN
                           </p>
 
                           <p
-                            className="mt-0.5 truncate text-xs font-medium text-slate-700"
+                            className="mt-0.5 truncate text-xs font-medium text-text-secondary"
                             title={book.isbn || "-"}
                           >
                             {book.isbn && book.isbn !== "-"
@@ -1446,13 +1446,13 @@ export default function MasterBooksPage() {
                           </p>
                         </div>
 
-                        <div className="rounded-lg border border-slate-100 bg-slate-50 px-3 py-2">
-                          <p className="text-[11px] font-semibold uppercase tracking-wide text-slate-500">
+                        <div className="rounded-lg border border-border-subtle bg-surface-subtle px-3 py-2">
+                          <p className="text-[11px] font-semibold uppercase tracking-wide text-text-muted">
                             Pengarang
                           </p>
 
                           <p
-                            className="mt-0.5 truncate text-xs font-medium text-slate-700"
+                            className="mt-0.5 truncate text-xs font-medium text-text-secondary"
                             title={book.author || "-"}
                           >
                             {book.author && book.author !== "-"
@@ -1463,8 +1463,8 @@ export default function MasterBooksPage() {
                       </div>
                     </div>
 
-                    <div className="mt-3.5 pt-2.5 border-t border-slate-100 flex items-center justify-between">
-                      <span className="text-xs font-medium text-slate-500">
+                    <div className="mt-3.5 pt-2.5 border-t border-border-subtle flex items-center justify-between">
+                      <span className="text-xs font-medium text-text-muted">
                         Pilihan Aksi
                       </span>
                       <RowActions
@@ -1592,18 +1592,18 @@ export default function MasterBooksPage() {
         size="2xl"
         initialFocusRef={formCloseRef}
         ariaLabelledBy="book-form-title"
-        className="w-full max-w-2xl overflow-hidden rounded-xl bg-white shadow-2xl"
+        className="w-full max-w-2xl overflow-hidden rounded-xl bg-surface shadow-2xl"
       >
-            <div className="flex items-center justify-between border-b border-slate-200 px-4 py-3">
+            <div className="flex items-center justify-between border-b border-border px-4 py-3">
               <div>
                 <h2
                   id="book-form-title"
-                  className="text-base font-semibold text-slate-900"
+                  className="text-base font-semibold text-text-main"
                 >
                   {editingBook ? "Ubah Buku" : "Tambah Buku"}
                 </h2>
 
-                <p className="mt-0.5 text-xs text-slate-500">
+                <p className="mt-0.5 text-xs text-text-muted">
                   {editingBook
                     ? "Perbarui informasi buku."
                     : "Masukkan data buku dan jumlah eksemplar awal."}
@@ -1618,7 +1618,7 @@ export default function MasterBooksPage() {
                 disabled={bookFormLoading}
                 aria-label="Tutup form"
                 onClick={handleRequestCloseForm}
-                className="h-8 w-8 p-0 text-slate-500 hover:text-slate-700"
+                className="h-8 w-8 p-0 text-text-muted hover:text-text-secondary"
               ><svg className="h-5 w-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" aria-hidden="true"><path d="M18 6 6 18M6 6l12 12" /></svg></Button>
             </div>
 
@@ -1723,22 +1723,22 @@ export default function MasterBooksPage() {
               )}
 
               {editingBook && (
-                <div className="rounded-lg border border-slate-100 bg-slate-50 px-3 py-2.5">
-                  <p className="text-[11px] font-semibold uppercase tracking-wide text-slate-500">
+                <div className="rounded-lg border border-border-subtle bg-surface-subtle px-3 py-2.5">
+                  <p className="text-[11px] font-semibold uppercase tracking-wide text-text-muted">
                     Eksemplar
                   </p>
 
-                  <p className="mt-0.5 text-sm font-semibold text-slate-800">
+                  <p className="mt-0.5 text-sm font-semibold text-text-main">
                     {editingBook.totalCopies} eksemplar
                   </p>
 
-                  <p className="mt-0.5 text-xs text-slate-500">
+                  <p className="mt-0.5 text-xs text-text-muted">
                     Tambah eksemplar dilakukan dari detail buku.
                   </p>
                 </div>
               )}
 
-              <div className="flex flex-col-reverse gap-2 border-t border-slate-100 pt-3 sm:col-span-2 sm:flex-row sm:justify-end">
+              <div className="flex flex-col-reverse gap-2 border-t border-border-subtle pt-3 sm:col-span-2 sm:flex-row sm:justify-end">
                 <Button
                   type="button"
                   variant="secondary"
@@ -1772,22 +1772,22 @@ export default function MasterBooksPage() {
         size="3xl"
         initialFocusRef={detailCloseRef}
         ariaLabelledBy="book-detail-title"
-        className="flex max-h-[92vh] w-full max-w-3xl flex-col overflow-hidden rounded-xl border border-slate-200 bg-white shadow-xl"
+        className="flex max-h-[92vh] w-full max-w-3xl flex-col overflow-hidden rounded-xl border border-border bg-surface shadow-xl"
       >
         {detailBook && (
           <>
             {/* HEADER */}
 
-            <div className="border-b border-slate-200 px-4 py-4 sm:px-6 sm:py-5">
+            <div className="border-b border-border px-4 py-4 sm:px-6 sm:py-5">
               <div className="flex items-start justify-between gap-3">
                 <div className="min-w-0">
-                  <p className="text-xs font-medium text-slate-500 font-mono">
+                  <p className="text-xs font-medium text-text-muted font-mono">
                     {detailBook.code}
                   </p>
 
                   <h2
                     id="book-detail-title"
-                    className="mt-0.5 text-base sm:text-xl font-bold text-slate-900 leading-snug break-words"
+                    className="mt-0.5 text-base sm:text-xl font-bold text-text-main leading-snug break-words"
                   >
                     {detailBook.title}
                   </h2>
@@ -1801,7 +1801,7 @@ export default function MasterBooksPage() {
                       {getBookStatusLabel(detailBook.status)}
                     </span>
 
-                    <span className="text-xs text-slate-500">
+                    <span className="text-xs text-text-muted">
                       {detailBook.availableCopies} tersedia dari{" "}
                       {detailBook.totalCopies} copy
                     </span>
@@ -1815,7 +1815,7 @@ export default function MasterBooksPage() {
                   size="sm"
                   aria-label="Tutup detail buku"
                   onClick={() => setDetailBook(null)}
-                  className="shrink-0 h-8 w-8 p-0 text-slate-500 hover:text-slate-700"
+                  className="shrink-0 h-8 w-8 p-0 text-text-muted hover:text-text-secondary"
                 >
                   <svg
                     className="h-5 w-5"
@@ -1836,7 +1836,7 @@ export default function MasterBooksPage() {
 
             {/* BODY */}
 
-            <div className="min-h-0 flex-1 overflow-y-auto bg-slate-50/60 p-3.5 sm:p-5">
+            <div className="min-h-0 flex-1 overflow-y-auto bg-surface-subtle/60 p-3.5 sm:p-5">
               {detailError && (
                 <ErrorState
                   title="Gagal Memuat Detail Buku"
@@ -1850,42 +1850,42 @@ export default function MasterBooksPage() {
               {/* INFORMATION: 2 kolom di mobile dan desktop agar hemat ruang */}
 
               <div className="grid grid-cols-2 gap-2 sm:gap-3">
-                <div className="rounded-xl border border-slate-200/80 bg-white p-2.5 sm:px-4 sm:py-3 shadow-2xs">
-                  <p className="text-[11px] font-semibold uppercase tracking-wider text-slate-500">
+                <div className="rounded-xl border border-border/80 bg-surface p-2.5 sm:px-4 sm:py-3 shadow-2xs">
+                  <p className="text-[11px] font-semibold uppercase tracking-wider text-text-muted">
                     Kode Buku
                   </p>
 
-                  <p className="mt-0.5 sm:mt-1 truncate text-xs sm:text-sm font-semibold text-slate-800">
+                  <p className="mt-0.5 sm:mt-1 truncate text-xs sm:text-sm font-semibold text-text-main">
                     {detailBook.code}
                   </p>
                 </div>
 
-                <div className="rounded-xl border border-slate-200/80 bg-white p-2.5 sm:px-4 sm:py-3 shadow-2xs">
-                  <p className="text-[11px] font-semibold uppercase tracking-wider text-slate-500">
+                <div className="rounded-xl border border-border/80 bg-surface p-2.5 sm:px-4 sm:py-3 shadow-2xs">
+                  <p className="text-[11px] font-semibold uppercase tracking-wider text-text-muted">
                     ISBN
                   </p>
 
-                  <p className="mt-0.5 sm:mt-1 truncate text-xs sm:text-sm font-semibold text-slate-800">
+                  <p className="mt-0.5 sm:mt-1 truncate text-xs sm:text-sm font-semibold text-text-main">
                     {detailBook.isbn ?? "-"}
                   </p>
                 </div>
 
-                <div className="rounded-xl border border-slate-200/80 bg-white p-2.5 sm:px-4 sm:py-3 shadow-2xs">
-                  <p className="text-[11px] font-semibold uppercase tracking-wider text-slate-500">
+                <div className="rounded-xl border border-border/80 bg-surface p-2.5 sm:px-4 sm:py-3 shadow-2xs">
+                  <p className="text-[11px] font-semibold uppercase tracking-wider text-text-muted">
                     Pengarang
                   </p>
 
-                  <p className="mt-0.5 sm:mt-1 truncate text-xs sm:text-sm font-semibold text-slate-800">
+                  <p className="mt-0.5 sm:mt-1 truncate text-xs sm:text-sm font-semibold text-text-main">
                     {detailBook.author ?? "-"}
                   </p>
                 </div>
 
-                <div className="rounded-xl border border-slate-200/80 bg-white p-2.5 sm:px-4 sm:py-3 shadow-2xs">
-                  <p className="text-[11px] font-semibold uppercase tracking-wider text-slate-500">
+                <div className="rounded-xl border border-border/80 bg-surface p-2.5 sm:px-4 sm:py-3 shadow-2xs">
+                  <p className="text-[11px] font-semibold uppercase tracking-wider text-text-muted">
                     Kategori
                   </p>
 
-                  <p className="mt-0.5 sm:mt-1 truncate text-xs sm:text-sm font-semibold text-slate-800">
+                  <p className="mt-0.5 sm:mt-1 truncate text-xs sm:text-sm font-semibold text-text-main">
                     {detailBook.category ?? "-"}
                   </p>
                 </div>
@@ -1893,14 +1893,14 @@ export default function MasterBooksPage() {
 
               {/* COPY */}
 
-              <div className="relative mt-3.5 sm:mt-5 rounded-xl border border-slate-200 bg-white shadow-2xs">
-                <div className="flex flex-col gap-2.5 border-b border-slate-100 px-3.5 py-3 sm:px-4 sm:flex-row sm:items-center sm:justify-between">
+              <div className="relative mt-3.5 sm:mt-5 rounded-xl border border-border bg-surface shadow-2xs">
+                <div className="flex flex-col gap-2.5 border-b border-border-subtle px-3.5 py-3 sm:px-4 sm:flex-row sm:items-center sm:justify-between">
                   <div>
-                    <h3 className="text-sm font-semibold text-slate-900">
+                    <h3 className="text-sm font-semibold text-text-main">
                       Daftar Eksemplar
                     </h3>
 
-                    <p className="mt-0.5 text-xs text-slate-500">
+                    <p className="mt-0.5 text-xs text-text-muted">
                       Total {detailCopies.length} eksemplar fisik.
                     </p>
                   </div>
@@ -1975,11 +1975,11 @@ export default function MasterBooksPage() {
                 )}
 
                 {detailLoading ? (
-                  <div className="px-4 py-8 text-center text-sm text-slate-500">
+                  <div className="px-4 py-8 text-center text-sm text-text-muted">
                     Memuat daftar eksemplar...
                   </div>
                 ) : detailCopies.length === 0 ? (
-                  <div className="px-4 py-8 text-center text-sm text-slate-500">
+                  <div className="px-4 py-8 text-center text-sm text-text-muted">
                     Belum ada eksemplar buku.
                   </div>
                 ) : (() => {
@@ -1992,7 +1992,7 @@ export default function MasterBooksPage() {
 
                   return (
                     <>
-                      <div className="divide-y divide-slate-100">
+                      <div className="divide-y divide-border-subtle">
                         {paginatedCopies.map((copy) => {
                           const isBorrowed = copy.status === "BORROWED";
 
@@ -2002,10 +2002,10 @@ export default function MasterBooksPage() {
                               className="flex items-center justify-between gap-2.5 px-3.5 py-2.5 sm:px-4 sm:py-3"
                             >
                               <div className="min-w-0">
-                                <p className="font-mono text-xs sm:text-sm font-semibold text-slate-800 truncate">
+                                <p className="font-mono text-xs sm:text-sm font-semibold text-text-main truncate">
                                   {copy.code}
                                 </p>
-                                <p className="text-xs text-slate-500">
+                                <p className="text-xs text-text-muted">
                                   Eksemplar Fisik
                                 </p>
                               </div>
@@ -2092,7 +2092,7 @@ export default function MasterBooksPage() {
                           onPageChange={(nextPage) => setCopyPage(nextPage)}
                           totalItems={detailCopies.length}
                           pageSize={COPY_PAGE_SIZE}
-                          className="rounded-b-xl border-t border-slate-100 bg-slate-50/50"
+                          className="rounded-b-xl border-t border-border-subtle bg-surface-subtle"
                         />
                       )}
                     </>
@@ -2103,7 +2103,7 @@ export default function MasterBooksPage() {
 
             {/* FOOTER */}
 
-            <div className="flex shrink-0 flex-col-reverse sm:flex-row sm:items-center sm:justify-end gap-2 border-t border-slate-200 bg-white px-4 py-3 sm:px-5">
+            <div className="flex shrink-0 flex-col-reverse sm:flex-row sm:items-center sm:justify-end gap-2 border-t border-border bg-surface px-4 py-3 sm:px-5">
               <Button
                 type="button"
                 variant="secondary"
@@ -2142,21 +2142,21 @@ export default function MasterBooksPage() {
         size="md"
         ariaLabelledBy="add-copy-modal-title"
         overlayClassName="fixed inset-0 z-[60] flex items-center justify-center bg-black/50 p-4 backdrop-blur-xs"
-        className="w-full max-w-md overflow-hidden rounded-xl border border-slate-200 bg-white shadow-2xl"
+        className="w-full max-w-md overflow-hidden rounded-xl border border-border bg-surface shadow-2xl"
       >
         {addCopyModalOpen && detailBook && (
           <>
             {/* Header */}
-            <div className="border-b border-slate-100 bg-slate-50/70 px-5 py-4">
+            <div className="border-b border-border-subtle bg-surface-subtle px-5 py-4">
               <div className="flex items-center justify-between">
                 <div>
                   <h3
                     id="add-copy-modal-title"
-                    className="text-base font-bold text-slate-900"
+                    className="text-base font-bold text-text-main"
                   >
                     Tambah Eksemplar Fisik
                   </h3>
-                  <p className="mt-0.5 text-xs text-slate-500 line-clamp-1">
+                  <p className="mt-0.5 text-xs text-text-muted line-clamp-1">
                     {detailBook.title} ({detailBook.code})
                   </p>
                 </div>
@@ -2167,7 +2167,7 @@ export default function MasterBooksPage() {
                   aria-label="Tutup modal"
                   onClick={() => !addCopyLoading && setAddCopyModalOpen(false)}
                   disabled={addCopyLoading}
-                  className="h-8 w-8 p-0 text-slate-500 hover:text-slate-700"
+                  className="h-8 w-8 p-0 text-text-muted hover:text-text-secondary"
                 >
                   <svg className="h-5 w-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" aria-hidden="true"><path d="M18 6 6 18M6 6l12 12" /></svg></Button>
               </div>
@@ -2182,7 +2182,7 @@ export default function MasterBooksPage() {
               className="p-5 space-y-4"
             >
               <div>
-                <label className="block text-xs font-semibold text-slate-700 mb-1.5">
+                <label className="block text-xs font-semibold text-text-secondary mb-1.5">
                   Jumlah Eksemplar yang Ingin Ditambahkan
                 </label>
                 <div className="flex items-center gap-3">
@@ -2206,7 +2206,7 @@ export default function MasterBooksPage() {
                       setAddCopyCount(isNaN(val) ? 1 : Math.max(1, Math.min(100, val)));
                     }}
                     disabled={addCopyLoading}
-                    className="h-10 flex-1 rounded-lg border border-slate-200 px-3 text-center text-base font-bold text-slate-900 focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-500/20"
+                    className="h-10 flex-1 rounded-lg border border-border px-3 text-center text-base font-bold text-text-main focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-500/20"
                   />
                   <Button
                     type="button"
@@ -2237,23 +2237,23 @@ export default function MasterBooksPage() {
               </div>
 
               {/* Information Preview Box */}
-              <div className="rounded-xl border border-slate-100 bg-slate-50/80 p-3 text-xs space-y-1.5 text-slate-600">
+              <div className="rounded-xl border border-border-subtle bg-surface-subtle p-3 text-xs space-y-1.5 text-text-secondary">
                 <div className="flex justify-between">
                   <span>Total eksemplar saat ini:</span>
-                  <span className="font-semibold text-slate-800">{detailCopies.length} eksemplar</span>
+                  <span className="font-semibold text-text-main">{detailCopies.length} eksemplar</span>
                 </div>
                 <div className="flex justify-between">
                   <span>Akan ditambahkan:</span>
                   <span className="font-semibold text-blue-600">+{addCopyCount} eksemplar</span>
                 </div>
-                <div className="border-t border-slate-200/60 pt-1.5 flex justify-between font-medium">
-                  <span className="text-slate-800">Total setelah penambahan:</span>
-                  <span className="font-bold text-slate-900">{detailCopies.length + addCopyCount} eksemplar</span>
+                <div className="border-t border-border/60 pt-1.5 flex justify-between font-medium">
+                  <span className="text-text-main">Total setelah penambahan:</span>
+                  <span className="font-bold text-text-main">{detailCopies.length + addCopyCount} eksemplar</span>
                 </div>
               </div>
 
               {/* Actions */}
-              <div className="flex items-center justify-end gap-2 pt-2 border-t border-slate-100">
+              <div className="flex items-center justify-end gap-2 pt-2 border-t border-border-subtle">
                 <Button
                   type="button"
                   variant="secondary"

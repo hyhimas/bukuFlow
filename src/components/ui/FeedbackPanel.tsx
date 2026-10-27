@@ -12,9 +12,9 @@ export default function FeedbackPanel({
   className = "",
 }: FeedbackPanelProps) {
   const styles = {
-    error: "border-danger-border bg-danger-surface text-danger",
-    success: "border-success-border bg-success-surface text-success",
-    info: "border-neutral-border bg-neutral-surface text-app-text",
+    error: "border-danger-border bg-danger-soft text-danger-text",
+    success: "border-success-border bg-success-soft text-success-text",
+    info: "border-border bg-surface-muted text-text-main",
   };
 
   return (

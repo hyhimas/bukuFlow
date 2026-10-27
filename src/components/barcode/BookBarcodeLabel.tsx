@@ -95,7 +95,7 @@ export default function BookBarcodeLabel({
 
   return (
     <div
-      className={`barcode-sticker-card relative flex flex-col justify-between rounded-lg border border-slate-300 bg-white p-2.5 sm:p-3 text-slate-900 shadow-xs print:border-slate-800 print:shadow-none ${
+      className={`barcode-sticker-card relative flex flex-col justify-between rounded-lg border border-border bg-surface p-2.5 sm:p-3 text-text-main shadow-xs print:border-slate-800 print:shadow-none ${
         size === "sm"
           ? "w-[240px] text-[10px]"
           : size === "lg"
@@ -108,9 +108,9 @@ export default function BookBarcodeLabel({
       }}
     >
       {/* Header Instansi */}
-      <div className="border-b border-slate-200 pb-1 text-center font-bold tracking-wider text-slate-800 uppercase">
+      <div className="border-b border-border pb-1 text-center font-bold tracking-wider text-text-main uppercase">
         <p className="truncate text-[10px] sm:text-[11px] font-extrabold">{companyName}</p>
-        <p className="text-[9px] font-medium text-slate-500">
+        <p className="text-[9px] font-medium text-text-muted">
           {type === "member" ? "KARTU ANGGOTA PERPUSTAKAAN" : "PERPUSTAKAAN DIGITAL"}
         </p>
       </div>
@@ -118,18 +118,18 @@ export default function BookBarcodeLabel({
       {/* Meta Info */}
       {type === "member" ? (
         <div className="my-1.5 space-y-0.5 text-center">
-          <p className="font-bold text-slate-900 text-xs sm:text-sm line-clamp-1">{memberName}</p>
-          <div className="flex items-center justify-center gap-2 text-[10px] text-slate-500 font-mono">
-            <span>No: <strong className="text-slate-800 font-semibold">{cleanCode}</strong></span>
-            <span className="text-slate-300 select-none" aria-hidden="true">&bull;</span>
-            <span>Tipe: <strong className="text-slate-800 font-semibold">{memberType}</strong></span>
+          <p className="font-bold text-text-main text-xs sm:text-sm line-clamp-1">{memberName}</p>
+          <div className="flex items-center justify-center gap-2 text-[10px] text-text-muted font-mono">
+            <span>No: <strong className="text-text-main font-semibold">{cleanCode}</strong></span>
+            <span className="text-text-subtle select-none" aria-hidden="true">&bull;</span>
+            <span>Tipe: <strong className="text-text-main font-semibold">{memberType}</strong></span>
           </div>
         </div>
       ) : (
         <div className="my-1 space-y-0.5 text-center">
-          <p className="font-bold text-slate-900 line-clamp-1">{bookTitle}</p>
-          <p className="text-[10px] text-slate-500 font-mono">
-            Kategori: <span className="font-semibold text-slate-700">{category}</span>
+          <p className="font-bold text-text-main line-clamp-1">{bookTitle}</p>
+          <p className="text-[10px] text-text-muted font-mono">
+            Kategori: <span className="font-semibold text-text-secondary">{category}</span>
           </p>
         </div>
       )}
@@ -144,7 +144,7 @@ export default function BookBarcodeLabel({
               alt={`Barcode ${cleanCode}`}
               className="max-h-12 sm:max-h-14 object-contain"
             />
-            <span className="mt-0.5 font-mono text-[10px] font-bold tracking-widest text-slate-900">
+            <span className="mt-0.5 font-mono text-[10px] font-bold tracking-widest text-text-main">
               {cleanCode}
             </span>
           </div>
@@ -156,7 +156,7 @@ export default function BookBarcodeLabel({
             <img
               src={qrDataUrl}
               alt={`QR ${cleanCode}`}
-              className={`rounded border border-slate-100 ${
+              className={`rounded border border-border-subtle ${
                 size === "sm" ? "h-11 w-11" : size === "lg" ? "h-16 w-16" : "h-13 w-13"
               }`}
             />
@@ -165,7 +165,7 @@ export default function BookBarcodeLabel({
       </div>
 
       {/* Footer Label */}
-      <div className="border-t border-slate-100 pt-1 text-center text-[9px] font-mono text-slate-500">
+      <div className="border-t border-border-subtle pt-1 text-center text-[9px] font-mono text-text-muted">
         BukuFlow Integrated Library System
       </div>
     </div>
