@@ -46,9 +46,8 @@ export default function OfficeCompaniesPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
 
-  // Search, Filter & Pagination (Server-side via GET /office/company?page=&size=)
+  // Search & Pagination (Server-side via GET /office/company?page=&size=)
   const [search, setSearch] = useState("");
-  const [statusFilter, setStatusFilter] = useState<CompanyStatus | "">("");
   const [sortBy, setSortBy] = useState<string>("name");
   const [sortOrder, setSortOrder] = useState<"asc" | "desc">("asc");
   const [page, setPage] = useState(1);
@@ -182,6 +181,11 @@ export default function OfficeCompaniesPage() {
         setConfigDuration(cfg.default_loan_duration);
         setConfigMaxLoans(cfg.max_active_loans);
         setConfigLateFee(cfg.late_fee_per_day);
+      } else {
+        // Jika belum ada konfigurasi di DB backend, berikan nilai default rekomendasi agar bisa langsung diedit dan disimpan
+        setConfigDuration(7);
+        setConfigMaxLoans(3);
+        setConfigLateFee(1000);
       }
     } catch (err: unknown) {
       toast.error(getErrorMessage(err, "Gagal memuat konfigurasi peminjaman instansi."));
@@ -258,7 +262,12 @@ export default function OfficeCompaniesPage() {
       setShowModal(false);
       await loadCompanies(true);
     } catch (err: unknown) {
-      toast.error(getErrorMessage(err, "Gagal menyimpan data instansi."));
+      const msg = getErrorMessage(err, "Gagal menyimpan data instansi.");
+      if (msg.toLowerCase().includes("konflik") || msg.toLowerCase().includes("conflict")) {
+        toast.error("Nama atau inisial/kode instansi sudah pernah terdaftar. Gunakan nama atau inisial lain.");
+      } else {
+        toast.error(msg);
+      }
     } finally {
       setFormLoading(false);
     }
@@ -316,14 +325,12 @@ export default function OfficeCompaniesPage() {
 
   // Filtered List on Current Page
   const filteredCompanies = companies.filter((c) => {
-    const matchesSearch =
+    return (
       search.trim() === "" ||
       c.name.toLowerCase().includes(search.toLowerCase()) ||
       c.code.toLowerCase().includes(search.toLowerCase()) ||
-      (c.address && c.address.toLowerCase().includes(search.toLowerCase()));
-
-    const matchesStatus = !statusFilter || c.status === statusFilter;
-    return matchesSearch && matchesStatus;
+      (c.address && c.address.toLowerCase().includes(search.toLowerCase()))
+    );
   });
 
   const sortedCompanies = useMemo(() => {
@@ -568,9 +575,9 @@ export default function OfficeCompaniesPage() {
           </Card>
         </div>
 
-        {/* SEARCH & FILTERS */}
+        {/* SEARCH & MOBILE/TABLET SORT */}
         <Card className="mt-6 p-4">
-          <div className="grid gap-3 sm:grid-cols-[minmax(0,1fr)_180px_180px]">
+          <div className="grid gap-3 md:grid-cols-[minmax(0,1fr)_200px] lg:grid-cols-1">
             <Input
               ref={searchInputRef}
               id="company-search"
@@ -584,26 +591,8 @@ export default function OfficeCompaniesPage() {
               placeholder="Cari nama sekolah atau kode instansi... (tekan /)"
             />
 
-            <div>
-              <Dropdown
-                id="status-filter"
-                label="Filter Status"
-                value={statusFilter}
-                disabled={Boolean(error) || loading}
-                onChange={(val) => {
-                  setStatusFilter(val as CompanyStatus | "");
-                  setPage(1);
-                }}
-                options={[
-                  { value: "", label: "Semua Status" },
-                  { value: "ACTIVE", label: "Aktif" },
-                  { value: "SUSPENDED", label: "Ditangguhkan" },
-                  { value: "INACTIVE", label: "Nonaktif" },
-                ]}
-              />
-            </div>
-
-            <div>
+            {/* Sort hanya untuk Mobile & Tablet (di Desktop disembunyikan karena sudah ada sortable header di tabel) */}
+            <div className="lg:hidden">
               <Dropdown
                 id="sort-filter"
                 label="Urutan"
@@ -645,15 +634,15 @@ export default function OfficeCompaniesPage() {
               }
               setPage(1);
             }}
-            mobileBreakpoint="xl"
+            mobileBreakpoint="lg"
             cardGridClassName="bg-surface-subtle/60 p-3.5"
             className="border-0 shadow-none rounded-none"
             emptyState={
               <div className="p-8">
                 <EmptyState
-                  title={search || statusFilter ? "Instansi Tidak Ditemukan" : "Belum Ada Instansi"}
+                  title={search ? "Instansi Tidak Ditemukan" : "Belum Ada Instansi"}
                   description={
-                    search || statusFilter
+                    search
                       ? `Tidak ada instansi yang sesuai dengan kriteria pencarian "${search}".`
                       : "Mulai dengan mendaftarkan sekolah atau perpustakaan pertama Anda."
                   }

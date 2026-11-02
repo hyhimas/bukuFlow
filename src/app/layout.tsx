@@ -59,9 +59,12 @@ export default function RootLayout({ children }: LayoutProps<"/">) {
     >
       <head>
         <meta charSet="utf-8" />
-        <script dangerouslySetInnerHTML={{ __html: themeScript }} />
+        <script
+          dangerouslySetInnerHTML={{ __html: themeScript }}
+          suppressHydrationWarning
+        />
       </head>
-      <body className="min-h-full flex flex-col bg-canvas text-text-main">
+      <body suppressHydrationWarning className="min-h-full flex flex-col bg-canvas text-text-main">
         <ToastProvider>
           <AppShell>{children}</AppShell>
         </ToastProvider>

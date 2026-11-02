@@ -271,7 +271,7 @@ export default function ReturnsPage() {
           const memberLoansRes = await listLoansApi({
             member_id: foundMemberObj.id,
             status: ["ACTIVE", "OVERDUE"],
-            size: 50,
+            size: 10,
           });
 
           if (memberLoansRes.items.length > 0) {

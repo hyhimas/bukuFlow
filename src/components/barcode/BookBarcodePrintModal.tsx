@@ -302,6 +302,7 @@ export default function BookBarcodePrintModal({
               onClick={onClose}
               className="rounded-lg p-1.5 text-text-subtle transition hover:bg-surface-muted hover:text-text-secondary focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 shrink-0 mt-0.5 sm:mt-0"
               title="Tutup Modal"
+              aria-label="Tutup modal pratinjau barcode"
             >
               <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2} aria-hidden="true">
                 <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />

@@ -386,151 +386,68 @@ function OfficeLoansContent() {
     () => [
       {
         key: "loanNumber",
-        header: "Nomor peminjaman",
-        width: "145px",
+        header: "Transaksi / Member",
         sortable: true,
         sortKey: "loanNumber",
         render: (loan) => (
-          <span
-            className="truncate whitespace-nowrap font-semibold tracking-tight text-text-main font-mono text-xs tabular-nums block"
-            title={
-              loan.rawLoanNumber
-                ? `ID Sistem: ${loan.rawLoanNumber}`
-                : loan.loanNumber
-            }
-          >
-            {loan.loanNumber}
-          </span>
-        ),
-      },
-      {
-        key: "member",
-        header: "Anggota",
-        width: "140px",
-        render: (loan) => (
           <div>
+            <span
+              className="truncate whitespace-nowrap font-bold tracking-tight text-text-main font-mono text-xs sm:text-sm tabular-nums block"
+              title={
+                loan.rawLoanNumber
+                  ? `ID Sistem: ${loan.rawLoanNumber}`
+                  : loan.loanNumber
+              }
+            >
+              {loan.loanNumber}
+            </span>
             <p
-              className="truncate text-text-main font-medium text-xs font-medium"
+              className="truncate text-text-secondary text-xs mt-0.5"
               title={loan.memberName || "-"}
             >
-              {loan.memberName ||
-                (loan.memberNumber
-                  ? `Anggota (${loan.memberNumber})`
-                  : "Anggota")}
+              <span className="font-medium text-text-main">
+                {loan.memberName ||
+                  (loan.memberNumber
+                    ? `Anggota (${loan.memberNumber})`
+                    : "Anggota")}
+              </span>
+              {loan.memberNumber && loan.memberNumber !== "-" && (
+                <span className="ml-1 text-[11px] text-text-muted font-mono">
+                  ({loan.memberNumber})
+                </span>
+              )}
             </p>
-            {loan.memberNumber && loan.memberNumber !== "-" && (
-              <p className="text-xs text-text-muted font-mono truncate">
-                {loan.memberNumber}
-              </p>
-            )}
           </div>
-        ),
-      },
-      {
-        key: "books",
-        header: "Buku",
-        render: (loan) => {
-          const bookItems =
-            loan.items && loan.items.length > 0
-              ? loan.items
-              : loan.copyIds.map((cid, idx) => ({
-                  id: cid,
-                  bookTitle: `Salinan Buku #${idx + 1}`,
-                  copyCode: cid,
-                }));
-          if (bookItems.length === 0) {
-            return <span className="text-text-muted text-xs">-</span>;
-          }
-          return (
-            <ul className="min-w-0 space-y-0.5">
-              {bookItems.map((item, idx) => (
-                <li
-                  key={item.id || idx}
-                  className="grid min-w-0 grid-cols-[10px_minmax(0,1fr)] text-xs"
-                >
-                  <span className="text-text-subtle select-none" aria-hidden="true">
-                    &bull;
-                  </span>
-                  <span
-                    className="min-w-0 leading-5 text-text-secondary truncate"
-                    title={`${item.bookTitle}${item.copyCode ? ` (${item.copyCode})` : ""}`}
-                  >
-                    <span className="font-medium text-text-main">
-                      {item.bookTitle}
-                    </span>
-                    {item.copyCode && (
-                      <span className="ml-1 text-text-muted text-xs font-mono">
-                        ({item.copyCode})
-                      </span>
-                    )}
-                  </span>
-                </li>
-              ))}
-            </ul>
-          );
-        },
-      },
-      {
-        key: "officer",
-        header: "Petugas",
-        width: "105px",
-        render: (loan) => (
-          <p
-            className="truncate text-text-secondary text-xs font-medium"
-            title={loan.officerName || "Petugas"}
-          >
-            {loan.officerName || "Petugas"}
-          </p>
-        ),
-      },
-      {
-        key: "borrowedAt",
-        header: "Peminjaman",
-        width: "105px",
-        sortable: true,
-        sortKey: "borrowedAt",
-        isNumeric: true,
-        render: (loan) => (
-          <span className="whitespace-nowrap text-text-secondary tabular-nums text-xs font-medium">
-            {formatDate(loan.borrowedAt)}
-          </span>
         ),
       },
       {
         key: "dueAt",
         header: "Jatuh tempo",
-        width: "105px",
+        width: "160px",
         sortable: true,
         sortKey: "dueAt",
-        isNumeric: true,
         render: (loan) => {
           const isOverdue = loan.status === "OVERDUE";
           return (
-            <span
-              className={`whitespace-nowrap tabular-nums text-xs font-medium ${
-                isOverdue ? "font-bold text-red-600" : "text-text-secondary"
-              }`}
-            >
-              {formatDate(loan.dueAt)}
-            </span>
+            <div>
+              <span
+                className={`whitespace-nowrap tabular-nums text-xs font-semibold ${
+                  isOverdue ? "text-danger-text" : "text-text-main"
+                }`}
+              >
+                {formatDate(loan.dueAt)}
+              </span>
+              <span className="block text-[11px] text-text-muted whitespace-nowrap tabular-nums mt-0.5">
+                Pinjam: {formatDate(loan.borrowedAt)}
+              </span>
+            </div>
           );
         },
       },
       {
-        key: "returnedAt",
-        header: "Pengembalian",
-        width: "105px",
-        isNumeric: true,
-        render: (loan) => (
-          <span className="whitespace-nowrap text-text-secondary tabular-nums text-xs font-medium">
-            {formatDate(loan.returnedAt)}
-          </span>
-        ),
-      },
-      {
         key: "status",
         header: "Status",
-        width: "100px",
+        width: "140px",
         render: (loan) => (
           <Badge variant={getStatusVariant(loan.status)}>
             {getStatusLabel(loan.status)}
@@ -540,7 +457,7 @@ function OfficeLoansContent() {
       {
         key: "actions",
         header: "Aksi",
-        width: "60px",
+        width: "80px",
         align: "right",
         render: (loan) => (
           <RowActions
@@ -1042,7 +959,7 @@ function OfficeLoansContent() {
                   mobileBreakpoint="lg"
                   rowClassName={(loan) =>
                     loan.status === "OVERDUE"
-                      ? "border-l-4 border-l-red-500 bg-red-50/35 hover:bg-red-50/60"
+                      ? "shadow-[inset_4px_0_0_0_#ef4444] bg-red-50/35 hover:bg-red-50/60"
                       : "hover:bg-surface-subtle"
                   }
                   renderMobileCard={(loan) => {
@@ -1142,9 +1059,9 @@ function OfficeLoansContent() {
                             </span>
                             <p
                               className="mt-0.5 truncate font-semibold text-text-secondary"
-                              title={loan.officerName || "Petugas"}
+                              title={loan.officerName || "-"}
                             >
-                              {loan.officerName || "Petugas"}
+                              {loan.officerName || "-"}
                             </p>
                           </div>
 
@@ -1497,51 +1414,96 @@ function OfficeLoansContent() {
           <Modal
             open={Boolean(selectedLoan)}
             onClose={() => setSelectedLoan(null)}
-            title="Detail Informasi Peminjaman"
-            size="lg"
+            title="Detail Transaksi Peminjaman"
+            description="Informasi lengkap transaksi peminjaman pada instansi terpilih."
+            size="4xl"
           >
-            <div className="space-y-4">
-              <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+            <div className="space-y-5">
+              {/* Ringkasan Metadata Transaksi */}
+              <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-3.5 p-4 rounded-xl bg-surface-subtle border border-border text-xs">
                 <div>
-                  <label className="text-xs font-medium text-text-muted">
-                    ID Transaksi (Internal)
-                  </label>
-                  <p className="mt-1 font-mono text-sm font-semibold text-text-main break-all">
-                    {selectedLoan.id}
-                  </p>
-                </div>
-
-                <div>
-                  <label className="text-xs font-medium text-text-muted">
-                    ID Instansi
-                  </label>
-                  <p className="mt-1 font-mono text-sm text-text-secondary break-all">
-                    {selectedLoan.companyId}
-                  </p>
-                </div>
-
-                <div>
-                  <label className="text-xs font-medium text-text-muted">
-                    Nomor Peminjaman
-                  </label>
-                  <p className="mt-1 font-mono text-sm font-bold text-text-main">
+                  <span className="text-text-muted block text-[11px] uppercase tracking-wider font-semibold">
+                    Kode Transaksi
+                  </span>
+                  <span className="font-mono font-bold text-text-main text-sm">
                     {selectedLoan.loanNumber}
-                  </p>
+                  </span>
                   {selectedLoan.rawLoanNumber &&
                     selectedLoan.rawLoanNumber !== selectedLoan.loanNumber && (
-                      <p
-                        className="mt-1 font-mono text-xs text-text-muted break-all bg-surface-subtle p-1.5 rounded border border-border"
-                        title="ID Sistem Internal"
-                      >
+                      <span className="block mt-0.5 text-[11px] text-text-muted font-mono truncate" title={selectedLoan.rawLoanNumber}>
                         ID Sistem: {selectedLoan.rawLoanNumber}
-                      </p>
+                      </span>
                     )}
                 </div>
 
                 <div>
-                  <label className="text-xs font-medium text-text-muted">
-                    Status Peminjaman
-                  </label>
+                  <span className="text-text-muted block text-[11px] uppercase tracking-wider font-semibold">
+                    Member
+                  </span>
+                  <span className="font-semibold text-text-main text-sm block truncate">
+                    {selectedLoan.memberName ||
+                      (selectedLoan.memberNumber
+                        ? `Anggota (${selectedLoan.memberNumber})`
+                        : "Anggota")}
+                  </span>
+                  {selectedLoan.memberNumber && selectedLoan.memberNumber !== "-" && (
+                    <span className="text-[11px] text-text-muted font-mono">
+                      No. Anggota: {selectedLoan.memberNumber}
+                    </span>
+                  )}
+                </div>
+
+                <div>
+                  <span className="text-text-muted block text-[11px] uppercase tracking-wider font-semibold">
+                    Petugas
+                  </span>
+                  <span className="font-medium text-text-main text-sm block truncate">
+                    {selectedLoan.officerName || "-"}
+                  </span>
+                  {selectedLoan.borrowedBy && selectedLoan.borrowedBy !== "-" && (
+                    <span className="text-[11px] text-text-muted font-mono truncate block" title={selectedLoan.borrowedBy}>
+                      ID: {selectedLoan.borrowedBy}
+                    </span>
+                  )}
+                </div>
+
+                <div>
+                  <span className="text-text-muted block text-[11px] uppercase tracking-wider font-semibold">
+                    Tanggal Pinjam
+                  </span>
+                  <span className="font-medium text-text-main text-sm">
+                    {formatDate(selectedLoan.borrowedAt)}
+                  </span>
+                </div>
+
+                <div>
+                  <span className="text-text-muted block text-[11px] uppercase tracking-wider font-semibold">
+                    Jatuh Tempo
+                  </span>
+                  <span
+                    className={`text-sm font-semibold tabular-nums ${
+                      selectedLoan.status === "OVERDUE"
+                        ? "text-danger-text"
+                        : "text-text-main"
+                    }`}
+                  >
+                    {formatDate(selectedLoan.dueAt)}
+                  </span>
+                </div>
+
+                <div>
+                  <span className="text-text-muted block text-[11px] uppercase tracking-wider font-semibold">
+                    Pengembalian
+                  </span>
+                  <span className="font-medium text-text-secondary text-sm">
+                    {selectedLoan.returnedAt ? formatDate(selectedLoan.returnedAt) : "-"}
+                  </span>
+                </div>
+
+                <div>
+                  <span className="text-text-muted block text-[11px] uppercase tracking-wider font-semibold">
+                    Status Transaksi
+                  </span>
                   <div className="mt-1">
                     <Badge variant={getStatusVariant(selectedLoan.status)}>
                       {getStatusLabel(selectedLoan.status)}
@@ -1550,152 +1512,88 @@ function OfficeLoansContent() {
                 </div>
 
                 <div>
-                  <label className="text-xs font-medium text-text-muted">
-                    Nama Peminjam
-                  </label>
-                  <p className="mt-1 text-sm font-semibold text-text-main">
-                    {selectedLoan.memberName ||
-                      (selectedLoan.memberNumber
-                        ? `Anggota (${selectedLoan.memberNumber})`
-                        : "Anggota")}
-                  </p>
-                  {selectedLoan.memberNumber &&
-                    selectedLoan.memberNumber !== "-" && (
-                      <p className="text-xs text-text-muted font-mono mt-0.5">
-                        No. Anggota: {selectedLoan.memberNumber}
-                      </p>
-                    )}
-                </div>
-
-                <div>
-                  <label className="text-xs font-medium text-text-muted">
-                    Petugas Peminjaman
-                  </label>
-                  <p className="mt-1 text-sm font-semibold text-text-main">
-                    {selectedLoan.officerName || "Petugas"}
-                  </p>
-                  {selectedLoan.borrowedBy &&
-                    selectedLoan.borrowedBy !== "-" && (
-                      <p
-                        className="text-xs text-text-muted font-mono mt-0.5"
-                        title="ID Akun Petugas"
-                      >
-                        ID Petugas: {selectedLoan.borrowedBy}
-                      </p>
-                    )}
-                </div>
-
-                <div>
-                  <label className="text-xs font-medium text-text-muted">
-                    ID Member (Sistem)
-                  </label>
-                  <p className="mt-1 font-mono text-xs text-text-secondary break-all bg-surface-subtle p-2 rounded border border-border">
-                    {selectedLoan.memberId}
-                  </p>
-                </div>
-
-                <div>
-                  <label className="text-xs font-medium text-text-muted">
-                    Tanggal Peminjaman
-                  </label>
-                  <p className="mt-1 text-sm text-text-secondary">
-                    {formatDate(selectedLoan.borrowedAt)}
-                  </p>
-                </div>
-
-                <div>
-                  <label className="text-xs font-medium text-text-muted">
-                    Tanggal Jatuh Tempo
-                  </label>
-                  <p
-                    className={`mt-1 text-sm ${
-                      selectedLoan.status === "OVERDUE"
-                        ? "font-semibold text-red-600"
-                        : "text-text-secondary"
-                    }`}
-                  >
-                    {formatDate(selectedLoan.dueAt)}
-                  </p>
-                </div>
-
-                <div>
-                  <label className="text-xs font-medium text-text-muted">
-                    Tanggal Dikembalikan
-                  </label>
-                  <p className="mt-1 text-sm text-text-secondary">
-                    {formatDate(selectedLoan.returnedAt)}
-                  </p>
-                </div>
-
-                <div className="sm:col-span-2">
-                  <label className="text-xs font-medium text-text-muted">
-                    Buku & Salinan Dipinjam (
-                    {selectedLoan.items?.length || selectedLoan.copyIds.length}{" "}
-                    buku)
-                  </label>
-                  <div className="mt-1.5 space-y-1.5">
-                    {selectedLoan.items && selectedLoan.items.length > 0 ? (
-                      selectedLoan.items.map((item, idx) => (
-                        <div
-                          key={item.id || idx}
-                          className="flex items-center justify-between rounded-lg border border-border bg-surface-subtle px-3 py-2 text-xs"
-                        >
-                          <span className="font-semibold text-text-main">
-                            {item.bookTitle}
-                          </span>
-                          {item.copyCode && (
-                            <span className="font-mono text-text-secondary bg-surface px-2 py-0.5 rounded border border-border">
-                              {item.copyCode}
-                            </span>
-                          )}
-                        </div>
-                      ))
-                    ) : selectedLoan.copyIds.length === 0 ? (
-                      <span className="text-sm text-text-muted">-</span>
-                    ) : (
-                      selectedLoan.copyIds.map((cid, idx) => (
-                        <span
-                          key={idx}
-                          className="font-mono text-xs bg-surface-muted text-text-secondary px-2 py-1 rounded border border-border mr-1.5 inline-block"
-                        >
-                          {cid}
-                        </span>
-                      ))
-                    )}
-                  </div>
-                </div>
-
-                <div>
-                  <label className="text-xs font-medium text-text-muted">
-                    Waktu Dibuat
-                  </label>
-                  <p className="mt-1 text-sm text-text-secondary">
-                    {formatDate(selectedLoan.createdAt)}
-                  </p>
-                </div>
-
-                <div>
-                  <label className="text-xs font-medium text-text-muted">
-                    Waktu Diperbarui
-                  </label>
-                  <p className="mt-1 text-sm text-text-secondary">
-                    {formatDate(selectedLoan.updatedAt)}
-                  </p>
+                  <span className="text-text-muted block text-[11px] uppercase tracking-wider font-semibold">
+                    ID Instansi
+                  </span>
+                  <span className="font-mono text-xs text-text-secondary truncate block mt-0.5">
+                    {selectedLoan.companyId}
+                  </span>
                 </div>
               </div>
 
-              <div className="mt-6 flex items-center justify-between border-t border-border pt-4">
+              {/* Daftar Eksemplar Buku */}
+              <div className="space-y-2">
+                <h4 className="text-xs font-bold uppercase tracking-wider text-text-secondary">
+                  Daftar Eksemplar ({selectedLoan.items?.length || selectedLoan.copyIds.length})
+                </h4>
+                <div className="rounded-lg border border-border">
+                  <table className="w-full text-left text-xs table-auto">
+                    <thead className="border-b border-border bg-slate-100 dark:bg-slate-800 text-[11px] font-bold uppercase tracking-wider text-slate-700 dark:text-slate-200">
+                      <tr>
+                        <th className="px-3.5 py-2.5 whitespace-nowrap">Kode Eksemplar</th>
+                        <th className="px-3.5 py-2.5">Judul Buku</th>
+                        <th className="px-3.5 py-2.5 whitespace-nowrap">Status Pengembalian</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-border-subtle bg-surface">
+                      {selectedLoan.items && selectedLoan.items.length > 0 ? (
+                        selectedLoan.items.map((item, idx) => (
+                          <tr key={item.id || idx} className="hover:bg-surface-subtle/70">
+                            <td className="px-3.5 py-2.5 font-mono font-medium text-text-main whitespace-nowrap">
+                              {item.copyCode || "-"}
+                            </td>
+                            <td className="px-3.5 py-2.5 text-text-main font-medium min-w-[140px]" title={item.bookTitle}>
+                              {item.bookTitle}
+                            </td>
+                            <td className="px-3.5 py-2.5 whitespace-nowrap">
+                              <Badge variant={selectedLoan.status === "COMPLETED" ? "success" : "neutral"}>
+                                {selectedLoan.status === "COMPLETED" ? "Dikembalikan" : "Dipinjam"}
+                              </Badge>
+                            </td>
+                          </tr>
+                        ))
+                      ) : selectedLoan.copyIds.length === 0 ? (
+                        <tr>
+                          <td colSpan={3} className="px-3.5 py-4 text-center text-text-muted">
+                            Tidak ada data eksemplar
+                          </td>
+                        </tr>
+                      ) : (
+                        selectedLoan.copyIds.map((cid, idx) => (
+                          <tr key={idx} className="hover:bg-surface-subtle/70">
+                            <td className="px-3.5 py-2.5 font-mono font-medium text-text-main whitespace-nowrap">
+                              {cid}
+                            </td>
+                            <td className="px-3.5 py-2.5 text-text-main font-medium">
+                              Salinan Buku #{idx + 1}
+                            </td>
+                            <td className="px-3.5 py-2.5 whitespace-nowrap">
+                              <Badge variant={selectedLoan.status === "COMPLETED" ? "success" : "neutral"}>
+                                {selectedLoan.status === "COMPLETED" ? "Dikembalikan" : "Dipinjam"}
+                              </Badge>
+                            </td>
+                          </tr>
+                        ))
+                      )}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+
+              {/* Modal Actions */}
+              <div className="pt-4 border-t border-border flex items-center justify-between">
                 <Link
                   href="/office/members"
                   className="text-xs font-semibold text-text-secondary hover:text-text-main transition flex items-center gap-1"
                 >
                   Lihat Profil Anggota
-                  <span aria-hidden="true">→</span>
+                  <span aria-hidden="true">&rarr;</span>
                 </Link>
 
                 <Button
                   type="button"
                   variant="secondary"
+                  size="sm"
                   onClick={() => setSelectedLoan(null)}
                 >
                   Tutup

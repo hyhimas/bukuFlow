@@ -173,6 +173,7 @@ export interface ReturnLoanItem {
 export interface ReturnLoanData {
   loan: Loan;
   member: Member;
+  user?: User | null;
   items: ReturnLoanItem[];
 }
 

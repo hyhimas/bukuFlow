@@ -1,6 +1,7 @@
 "use client";
 
 import { Suspense, useCallback, useEffect, useMemo, useRef, useState } from "react";
+import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 
 import Badge from "@/components/ui/Badge";
@@ -34,6 +35,7 @@ import {
 } from "@/lib/export/excel";
 
 import type { Loan, TransactionData, TransactionLoanItem, UserRole } from "@/lib/types";
+import { calculateTransactionCirculation } from "@/lib/circulation";
 import { useToast } from "@/components/ui/Toast";
 
 type TransactionStatus = "ACTIVE" | "OVERDUE" | "COMPLETED";
@@ -60,7 +62,7 @@ const STATUS_OPTIONS: {
   },
 ];
 
-type SortField = "borrowedAt" | "dueAt" | "loanNumber";
+type SortField = "borrowedAt" | "dueAt" | "returnedAt" | "loanNumber";
 
 function getOverdueDays(loan: Loan): number {
   if (loan.status === "COMPLETED" && loan.returnedAt) {
@@ -116,19 +118,13 @@ function TransactionsContent() {
   const [transactions, setTransactions] = useState<TransactionData[]>([]);
   const [pageSize, setPageSize] = useState(10);
   const [dailyFineRate, setDailyFineRate] = useState<number | null>(null);
+  const [selectedDetailTransaction, setSelectedDetailTransaction] = useState<TransactionData | null>(null);
   const [configError, setConfigError] = useState("");
 
   const [loading, setLoading] = useState(true);
   const [tableLoading, setTableLoading] = useState(false);
   const hasLoadedTransactions = useRef(false);
   const [error, setError] = useState("");
-
-  function getLoanFine(loan: Loan, itemCount: number = 1): number | null {
-    const overdueDays = getOverdueDays(loan);
-    if (overdueDays <= 0) return 0;
-    if (dailyFineRate === null) return null;
-    return overdueDays * dailyFineRate * Math.max(1, itemCount);
-  }
 
   // Interactive Sorting
   const [sortBy, setSortBy] = useState<SortField>("borrowedAt");
@@ -232,6 +228,33 @@ function TransactionsContent() {
           );
         });
     }
+
+    const handleSettingsUpdated = (e: Event) => {
+      const customEvent = e as CustomEvent<{ dailyFineRate?: number }>;
+      if (customEvent.detail && typeof customEvent.detail.dailyFineRate === "number") {
+        setDailyFineRate(customEvent.detail.dailyFineRate);
+      }
+    };
+
+    const handleWindowFocus = () => {
+      const currentSession = getSession();
+      if (currentSession?.user?.companyId) {
+        getCompanySettingsApi(currentSession.user.companyId)
+          .then((settings) => {
+            if (settings && typeof settings.dailyFineRate === "number") {
+              setDailyFineRate(settings.dailyFineRate);
+            }
+          })
+          .catch(() => {});
+      }
+    };
+
+    window.addEventListener("company-settings-updated", handleSettingsUpdated);
+    window.addEventListener("focus", handleWindowFocus);
+    return () => {
+      window.removeEventListener("company-settings-updated", handleSettingsUpdated);
+      window.removeEventListener("focus", handleWindowFocus);
+    };
   }, [router]);
 
   const canViewMember = userRole ? canAccessMasterData(userRole) : false;
@@ -291,6 +314,8 @@ function TransactionsContent() {
           ? "borrowed_at"
           : sortBy === "dueAt"
           ? "due_at"
+          : sortBy === "returnedAt"
+          ? "returned_at"
           : sortBy === "loanNumber"
           ? "loan_number"
           : undefined;
@@ -354,168 +379,130 @@ function TransactionsContent() {
     () => [
       {
         key: "loanNumber",
-        header: "Nomor peminjaman",
-        width: "145px",
+        header: "Transaksi / Member",
         sortable: true,
         sortKey: "loanNumber",
         render: (t) => (
-          <p
-            className="truncate whitespace-nowrap font-semibold tracking-tight text-text-main font-mono text-xs tabular-nums"
-            title={t.loan.loanNumber}
-          >
-            {t.loan.loanNumber}
-          </p>
-        ),
-      },
-      {
-        key: "member",
-        header: "Anggota",
-        width: "120px",
-        render: (t) => (
-          <p
-            className="truncate text-text-main font-medium text-xs 2xl:text-sm"
-            title={t.member?.name ?? "-"}
-          >
-            {t.member?.name ?? "-"}
-          </p>
-        ),
-      },
-      {
-        key: "books",
-        header: "Buku",
-        render: (t) =>
-          t.items.length === 0 ? (
-            <span className="text-text-muted">-</span>
-          ) : (
-            <ul className="min-w-0 space-y-0.5">
-              {t.items.map(({ book, bookCopy }) => (
-                <li
-                  key={`${t.loan.id}-${book?.id ?? "book"}-${bookCopy?.id ?? "copy"}`}
-                  className="grid min-w-0 grid-cols-[10px_minmax(0,1fr)]"
-                >
-                  <span className="text-text-secondary select-none" aria-hidden="true">
-                    &bull;
-                  </span>
-                  <span
-                    className="min-w-0 leading-5 text-text-secondary text-xs"
-                    title={`${book?.title ?? "-"}${bookCopy?.code ? ` (${bookCopy.code})` : ""}`}
-                  >
-                    <span className="font-medium text-text-main">
-                      {book?.title ?? "-"}
-                    </span>
-                    {bookCopy?.code && (
-                      <span className="ml-1 text-text-muted text-xs font-mono">
-                        ({bookCopy.code})
-                      </span>
-                    )}
-                  </span>
-                </li>
-              ))}
-            </ul>
-          ),
-      },
-      {
-        key: "officer",
-        header: "Petugas",
-        width: "90px",
-        render: (t) => (
-          <p
-            className="truncate text-text-secondary text-xs 2xl:text-sm font-medium"
-            title={t.user?.name ?? "-"}
-          >
-            {t.user?.name ?? "-"}
-          </p>
-        ),
-      },
-      {
-        key: "borrowedAt",
-        header: "Peminjaman",
-        width: "105px",
-        sortable: true,
-        sortKey: "borrowedAt",
-        isNumeric: true,
-        render: (t) => (
-          <span className="whitespace-nowrap text-text-secondary tabular-nums text-xs font-medium">
-            {formatDate(t.loan.borrowedAt)}
-          </span>
+          <div>
+            <p
+              className="truncate whitespace-nowrap font-bold tracking-tight text-text-main font-mono text-xs sm:text-sm tabular-nums"
+              title={t.loan.loanNumber}
+            >
+              {t.loan.loanNumber}
+            </p>
+            <p
+              className="truncate text-text-secondary text-xs mt-0.5"
+              title={t.member?.name ?? "-"}
+            >
+              <span className="font-medium text-text-main">{t.member?.name ?? "-"}</span>
+              {t.member?.memberNumber && (
+                <span className="ml-1 text-[11px] text-text-muted font-mono">
+                  ({t.member.memberNumber})
+                </span>
+              )}
+            </p>
+          </div>
         ),
       },
       {
         key: "dueAt",
         header: "Jatuh tempo",
-        width: "105px",
+        width: "140px",
         sortable: true,
         sortKey: "dueAt",
-        isNumeric: true,
         render: (t) => (
-          <span className="whitespace-nowrap text-text-secondary tabular-nums text-xs font-medium">
-            {formatDate(t.loan.dueAt)}
-          </span>
+          <div>
+            <span className="whitespace-nowrap text-text-main tabular-nums text-xs font-semibold">
+              {formatDate(t.loan.dueAt)}
+            </span>
+            <span className="block text-[11px] text-text-muted whitespace-nowrap tabular-nums mt-0.5">
+              Pinjam: {formatDate(t.loan.borrowedAt)}
+            </span>
+          </div>
         ),
       },
       {
         key: "returnedAt",
-        header: "Pengembalian",
-        width: "105px",
-        isNumeric: true,
+        header: "Tanggal kembali",
+        width: "140px",
+        sortable: true,
+        sortKey: "returnedAt",
         render: (t) => (
-          <span className="whitespace-nowrap text-text-secondary tabular-nums text-xs font-medium">
-            {formatDate(t.loan.returnedAt)}
+          <span className="whitespace-nowrap text-text-main tabular-nums text-xs font-semibold">
+            {t.loan.returnedAt ? formatDate(t.loan.returnedAt) : "-"}
           </span>
         ),
       },
       {
         key: "status",
         header: "Status",
-        width: "120px",
+        width: "140px",
         render: (t) => {
-          const overdueDays = getOverdueDays(t.loan);
-          const isOverdue = t.loan.status === "OVERDUE" || overdueDays > 0;
-          if (isOverdue && overdueDays > 0) {
+          const circ = calculateTransactionCirculation(t.loan, t.items, dailyFineRate);
+          const isCompleted = circ.overallStatus === "COMPLETED";
+          const isOverdue = circ.overallStatus === "OVERDUE";
+
+          if (isCompleted) {
+            return <Badge variant="success">Selesai</Badge>;
+          }
+
+          if (isOverdue) {
             return (
-              <div>
-                <Badge variant="danger">
-                  Terlambat ({overdueDays} hr)
-                </Badge>
-                {getLoanFine(t.loan, t.items.length) === null ? (
-                  <span className="mt-0.5 block text-xs font-semibold text-amber-600 whitespace-nowrap">
-                    Denda: Menunggu konfigurasi
-                  </span>
-                ) : (
-                  <span className="mt-0.5 block text-xs font-semibold text-red-600 tabular-nums whitespace-nowrap">
-                    Denda: Rp {getLoanFine(t.loan, t.items.length)!.toLocaleString("id-ID")}
-                  </span>
-                )}
-              </div>
+              <Badge variant="danger">
+                Terlambat ({circ.maxDaysOverdue} hr)
+              </Badge>
+            );
+          }
+
+          return <Badge variant="neutral">Aktif</Badge>;
+        },
+      },
+      {
+        key: "fine",
+        header: "Denda",
+        width: "140px",
+        render: (t) => {
+          const circ = calculateTransactionCirculation(t.loan, t.items, dailyFineRate);
+          if (circ.totalFine === null) {
+            return (
+              <span className="text-xs font-semibold text-warning-text whitespace-nowrap">
+                Menunggu konfigurasi
+              </span>
+            );
+          }
+          if (circ.totalFine > 0) {
+            return (
+              <span className="text-xs sm:text-sm font-bold text-danger-text tabular-nums whitespace-nowrap">
+                Rp {circ.totalFine.toLocaleString("id-ID")}
+              </span>
             );
           }
           return (
-            <div>
-              <Badge variant={getStatusVariant(t.loan.status)}>
-                {getStatusLabel(t.loan.status)}
-              </Badge>
-              {overdueDays > 0 &&
-                (getLoanFine(t.loan, t.items.length) === null ? (
-                  <span className="mt-0.5 block text-xs font-medium text-amber-600 whitespace-nowrap">
-                    Denda: Menunggu konfigurasi
-                  </span>
-                ) : (
-                  <span className="mt-0.5 block text-xs font-medium text-text-muted tabular-nums whitespace-nowrap">
-                    Denda: Rp {getLoanFine(t.loan, t.items.length)!.toLocaleString("id-ID")}
-                  </span>
-                ))}
-            </div>
+            <span className="text-xs sm:text-sm font-medium text-text-muted tabular-nums whitespace-nowrap">
+              Rp 0
+            </span>
           );
         },
       },
       {
         key: "actions",
         header: "Aksi",
-        width: "50px",
+        width: "80px",
         align: "right",
         render: (t) => (
           <RowActions
             actions={[
+              {
+                label: "Detail",
+                onClick: () => setSelectedDetailTransaction(t),
+                icon: (
+                  <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden="true">
+                    <circle cx="12" cy="12" r="10" />
+                    <line x1="12" y1="16" x2="12" y2="12" />
+                    <line x1="12" y1="8" x2="12.01" y2="8" />
+                  </svg>
+                ),
+              },
               ...(canReturn && t.loan.status !== "COMPLETED"
                 ? [
                     {
@@ -855,8 +842,8 @@ function TransactionsContent() {
       );
 
       const rows = exportTransactions.map(({ loan, member, items, user }) => {
-        const overdueDays = getOverdueDays(loan);
-        const fine = getLoanFine(loan, items.length);
+        const circ = calculateTransactionCirculation(loan, items, dailyFineRate);
+        const fine = circ.totalFine;
         return {
           "Nomor Peminjaman": loan.loanNumber,
           Anggota: member?.name ?? "-",
@@ -872,8 +859,14 @@ function TransactionsContent() {
           "Tanggal Peminjaman": formatDate(loan.borrowedAt || loan.createdAt),
           "Jatuh Tempo": formatDate(loan.dueAt),
           "Tanggal Pengembalian": formatDate(loan.returnedAt),
-          Status: getStatusLabel(loan.status),
-          "Hari Terlambat": overdueDays > 0 ? `${overdueDays} hari` : "-",
+          Status:
+            circ.overallStatus === "COMPLETED"
+              ? "Selesai"
+              : circ.overallStatus === "OVERDUE"
+              ? "Terlambat"
+              : "Aktif",
+          "Hari Terlambat":
+            circ.maxDaysOverdue > 0 ? `${circ.maxDaysOverdue} hari` : "-",
           Denda:
             fine === null
               ? "Menunggu konfigurasi"
@@ -1533,13 +1526,15 @@ function TransactionsContent() {
               sortBy={sortBy}
               order={sortOrder}
               onSortChange={(k) => toggleSort(k as SortField)}
-              mobileBreakpoint="xl"
+              mobileBreakpoint="lg"
               rowClassName={(transaction) => {
-                const overdueDays = getOverdueDays(transaction.loan);
-                const isOverdue =
-                  transaction.loan.status === "OVERDUE" || overdueDays > 0;
-                return isOverdue
-                  ? "border-l-4 border-l-red-500 bg-red-50/35 hover:bg-red-50/60"
+                const circ = calculateTransactionCirculation(
+                  transaction.loan,
+                  transaction.items,
+                  dailyFineRate
+                );
+                return circ.overallStatus === "OVERDUE"
+                  ? "shadow-[inset_4px_0_0_0_#ef4444] bg-red-50/35 hover:bg-red-50/60"
                   : "hover:bg-surface-subtle";
               }}
               emptyState={
@@ -1559,9 +1554,13 @@ function TransactionsContent() {
                 </Card>
               }
               renderMobileCard={(transaction) => {
-                const overdueDays = getOverdueDays(transaction.loan);
-                const isOverdue =
-                  transaction.loan.status === "OVERDUE" || overdueDays > 0;
+                const circ = calculateTransactionCirculation(
+                  transaction.loan,
+                  transaction.items,
+                  dailyFineRate
+                );
+                const isOverdue = circ.overallStatus === "OVERDUE";
+                const isCompleted = circ.overallStatus === "COMPLETED";
 
                 return (
                   <Card
@@ -1592,18 +1591,27 @@ function TransactionsContent() {
                         </div>
 
                         <div className="shrink-0 text-right">
-                          {isOverdue && overdueDays > 0 ? (
+                          {isCompleted ? (
+                            <div>
+                              <Badge variant="success">Selesai</Badge>
+                              {circ.totalFine !== null && circ.totalFine > 0 && (
+                                <span className="mt-0.5 block text-xs font-medium text-text-muted tabular-nums">
+                                  Denda: Rp {circ.totalFine.toLocaleString("id-ID")}
+                                </span>
+                              )}
+                            </div>
+                          ) : isOverdue ? (
                             <div>
                               <Badge variant="danger">
-                                Terlambat ({overdueDays} hr)
+                                Terlambat ({circ.maxDaysOverdue} hr)
                               </Badge>
-                              {getLoanFine(transaction.loan, transaction.items.length) === null ? (
+                              {circ.totalFine === null ? (
                                 <span className="mt-0.5 block text-xs font-semibold text-amber-600">
                                   Denda: Menunggu konfigurasi
                                 </span>
                               ) : (
                                 <span className="mt-0.5 block text-xs font-semibold text-red-600 tabular-nums">
-                                  Denda: Rp {getLoanFine(transaction.loan, transaction.items.length)!.toLocaleString("id-ID")}
+                                  Denda: Rp {circ.totalFine.toLocaleString("id-ID")}
                                 </span>
                               )}
                             </div>
@@ -1616,17 +1624,6 @@ function TransactionsContent() {
                               >
                                 {getStatusLabel(transaction.loan.status)}
                               </Badge>
-                              {overdueDays > 0 && (
-                                getLoanFine(transaction.loan, transaction.items.length) === null ? (
-                                  <span className="mt-0.5 block text-xs font-medium text-amber-600">
-                                    Denda: Menunggu konfigurasi
-                                  </span>
-                                ) : (
-                                  <span className="mt-0.5 block text-xs font-medium text-text-muted tabular-nums">
-                                    Denda: Rp {getLoanFine(transaction.loan, transaction.items.length)!.toLocaleString("id-ID")}
-                                  </span>
-                                )
-                              )}
                             </div>
                           )}
                         </div>
@@ -1710,7 +1707,7 @@ function TransactionsContent() {
 
                       <div className="rounded-lg border border-border-subtle bg-surface-subtle px-2.5 py-1.5">
                         <span className="text-[11px] font-semibold uppercase tracking-wide text-text-muted block">
-                          Pengembalian
+                          Tanggal Kembali
                         </span>
                         <p
                           className="mt-0.5 truncate font-semibold text-text-secondary tabular-nums"
@@ -1726,6 +1723,17 @@ function TransactionsContent() {
                       <span className="text-xs font-medium text-text-secondary">Pilihan Aksi</span>
                       <RowActions
                         actions={[
+                          {
+                            label: "Detail",
+                            onClick: () => setSelectedDetailTransaction(transaction),
+                            icon: (
+                              <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden="true">
+                                <circle cx="12" cy="12" r="10" />
+                                <line x1="12" y1="16" x2="12" y2="12" />
+                                <line x1="12" y1="8" x2="12.01" y2="8" />
+                              </svg>
+                            ),
+                          },
                           ...(canReturn && transaction.loan.status !== "COMPLETED"
                             ? [
                                 {
@@ -1783,6 +1791,207 @@ function TransactionsContent() {
             )}
           </div>
         )}
+
+        {/* MODAL DETAIL TRANSAKSI */}
+        {selectedDetailTransaction && (() => {
+          const detailCirc = calculateTransactionCirculation(
+            selectedDetailTransaction.loan,
+            selectedDetailTransaction.items,
+            dailyFineRate
+          );
+
+          return (
+            <Modal
+              open={Boolean(selectedDetailTransaction)}
+              onClose={() => setSelectedDetailTransaction(null)}
+              size="4xl"
+              title="Detail Transaksi Peminjaman"
+              description="Informasi lengkap transaksi dan rincian denda per eksemplar."
+            >
+              <div className="space-y-5">
+                {/* Ringkasan Metadata Transaksi */}
+                <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-3.5 p-4 rounded-xl bg-surface-subtle border border-border text-xs">
+                  <div>
+                    <span className="text-text-muted block text-[11px] uppercase tracking-wider font-semibold">
+                      Kode Transaksi
+                    </span>
+                    <span className="font-mono font-bold text-text-main text-sm">
+                      {selectedDetailTransaction.loan.loanNumber}
+                    </span>
+                  </div>
+                  <div>
+                    <span className="text-text-muted block text-[11px] uppercase tracking-wider font-semibold">
+                      Member
+                    </span>
+                    <span className="font-semibold text-text-main text-sm block truncate">
+                      {selectedDetailTransaction.member?.name || "-"}
+                    </span>
+                    {selectedDetailTransaction.member?.memberNumber && (
+                      <span className="text-[11px] text-text-muted font-mono">
+                        {selectedDetailTransaction.member.memberNumber}
+                      </span>
+                    )}
+                  </div>
+                  <div>
+                    <span className="text-text-muted block text-[11px] uppercase tracking-wider font-semibold">
+                      Petugas
+                    </span>
+                    <span className="font-medium text-text-main text-sm block truncate">
+                      {selectedDetailTransaction.user?.name || "-"}
+                    </span>
+                  </div>
+                  <div>
+                    <span className="text-text-muted block text-[11px] uppercase tracking-wider font-semibold">
+                      Tanggal Pinjam
+                    </span>
+                    <span className="font-medium text-text-main">
+                      {formatDate(selectedDetailTransaction.loan.borrowedAt || selectedDetailTransaction.loan.createdAt)}
+                    </span>
+                  </div>
+                  <div>
+                    <span className="text-text-muted block text-[11px] uppercase tracking-wider font-semibold">
+                      Jatuh Tempo
+                    </span>
+                    <span className="font-medium text-text-main">
+                      {formatDate(selectedDetailTransaction.loan.dueAt)}
+                    </span>
+                  </div>
+                  <div>
+                    <span className="text-text-muted block text-[11px] uppercase tracking-wider font-semibold">
+                      Tanggal Kembali
+                    </span>
+                    <span className="font-medium text-text-main">
+                      {selectedDetailTransaction.loan.returnedAt
+                        ? formatDate(selectedDetailTransaction.loan.returnedAt)
+                        : "-"}
+                    </span>
+                  </div>
+                  <div>
+                    <span className="text-text-muted block text-[11px] uppercase tracking-wider font-semibold">
+                      Status Transaksi
+                    </span>
+                    <div className="mt-1">
+                      <Badge
+                        variant={
+                          detailCirc.overallStatus === "COMPLETED"
+                            ? "success"
+                            : detailCirc.overallStatus === "OVERDUE"
+                            ? "danger"
+                            : "neutral"
+                        }
+                      >
+                        {detailCirc.overallStatus === "COMPLETED"
+                          ? "Selesai"
+                          : detailCirc.overallStatus === "OVERDUE"
+                          ? `Terlambat (${detailCirc.maxDaysOverdue} hari)`
+                          : "Aktif"}
+                      </Badge>
+                    </div>
+                  </div>
+                  <div>
+                    <span className="text-text-muted block text-[11px] uppercase tracking-wider font-semibold">
+                      Total Denda
+                    </span>
+                    <span
+                      className={`text-sm font-bold block mt-0.5 tabular-nums ${
+                        detailCirc.totalFine === null
+                          ? "text-warning-text"
+                          : detailCirc.totalFine > 0
+                          ? "text-danger-text"
+                          : "text-text-main"
+                      }`}
+                    >
+                      {detailCirc.totalFine === null
+                        ? "Menunggu konfigurasi"
+                        : detailCirc.totalFine > 0
+                        ? `Rp ${detailCirc.totalFine.toLocaleString("id-ID")}`
+                        : "Rp 0"}
+                    </span>
+                  </div>
+                </div>
+
+                {/* Daftar Eksemplar Buku */}
+                <div className="space-y-2">
+                  <h4 className="text-xs font-bold uppercase tracking-wider text-text-secondary">
+                    Daftar Eksemplar ({detailCirc.items.length})
+                  </h4>
+                  <div className="rounded-lg border border-border">
+                    <table className="w-full text-left text-xs table-auto">
+                      <thead className="border-b border-border bg-slate-100 dark:bg-slate-800 text-[11px] font-bold uppercase tracking-wider text-slate-700 dark:text-slate-200">
+                        <tr>
+                          <th className="px-3.5 py-2.5 whitespace-nowrap">Kode Eksemplar</th>
+                          <th className="px-3.5 py-2.5">Judul Buku</th>
+                          <th className="px-3.5 py-2.5 whitespace-nowrap">Status Pengembalian</th>
+                          <th className="px-3.5 py-2.5 whitespace-nowrap">Tanggal Kembali</th>
+                          <th className="px-3.5 py-2.5 text-center whitespace-nowrap">Hari Terlambat</th>
+                          <th className="px-3.5 py-2.5 text-right whitespace-nowrap">Denda</th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-border-subtle bg-surface">
+                        {detailCirc.items.map((ex) => (
+                          <tr key={ex.id} className="hover:bg-surface-subtle/70">
+                            <td className="px-3.5 py-2.5 font-mono font-medium text-text-main whitespace-nowrap">
+                              {ex.copyCode}
+                            </td>
+                            <td className="px-3.5 py-2.5 text-text-main font-medium min-w-[140px]" title={ex.bookTitle}>
+                              {ex.bookTitle}
+                            </td>
+                            <td className="px-3.5 py-2.5 whitespace-nowrap">
+                              <Badge variant={ex.status === "RETURNED" ? "success" : "neutral"}>
+                                {ex.status === "RETURNED" ? "Dikembalikan" : "Dipinjam"}
+                              </Badge>
+                            </td>
+                            <td className="px-3.5 py-2.5 whitespace-nowrap text-text-secondary tabular-nums">
+                              {ex.returnedAt ? formatDate(ex.returnedAt) : "-"}
+                            </td>
+                            <td className="px-3.5 py-2.5 whitespace-nowrap text-center tabular-nums">
+                              {ex.daysOverdue > 0 ? (
+                                <span className="font-semibold text-danger-text">{ex.daysOverdue} hari</span>
+                              ) : (
+                                <span className="text-text-muted">0 hari</span>
+                              )}
+                            </td>
+                            <td className="px-3.5 py-2.5 whitespace-nowrap text-right tabular-nums">
+                              {ex.fineAmount === null ? (
+                                <span className="text-warning-text font-medium">Menunggu konfigurasi</span>
+                              ) : ex.fineAmount > 0 ? (
+                                <span className="font-bold text-danger-text">
+                                  Rp {ex.fineAmount.toLocaleString("id-ID")}
+                                </span>
+                              ) : (
+                                <span className="text-text-muted">Rp 0</span>
+                              )}
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
+
+                {/* Modal Actions */}
+                <div className="pt-4 border-t border-border flex items-center justify-end gap-2">
+                  {detailCirc.overallStatus !== "COMPLETED" && canReturn && (
+                    <Link
+                      href={`/returns?loanNumber=${encodeURIComponent(selectedDetailTransaction.loan.loanNumber)}&loanId=${encodeURIComponent(selectedDetailTransaction.loan.id)}`}
+                      className="inline-flex items-center gap-1.5 rounded-lg bg-blue-600 px-3.5 py-2 text-xs font-semibold text-white shadow-2xs hover:bg-blue-700 transition"
+                    >
+                      Proses Pengembalian
+                    </Link>
+                  )}
+                  <Button
+                    type="button"
+                    variant="secondary"
+                    size="sm"
+                    onClick={() => setSelectedDetailTransaction(null)}
+                  >
+                    Tutup
+                  </Button>
+                </div>
+              </div>
+            </Modal>
+          );
+        })()}
       </div>
     </div>
   );

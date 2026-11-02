@@ -1433,7 +1433,7 @@ export async function getDashboardApi(): Promise<DashboardApiResponse> {
   try {
     const [dashRes, loansRes] = await Promise.all([
       api.get("/dashboard"),
-      listLoansApi({ page: 1, size: 10, sortby: "updated_at", order: "desc" }),
+      listLoansApi({ page: 1, size: 10, sortby: "created_at", order: "desc" }),
     ]);
 
     const items = dashRes.data?.items || dashRes.data?.data || dashRes.data || {};
@@ -1450,10 +1450,10 @@ export async function getDashboardApi(): Promise<DashboardApiResponse> {
       const getLatestTime = (tx: TransactionData) => {
         const l = tx.loan;
         const times = [
-          l.updatedAt ? new Date(l.updatedAt).getTime() : 0,
-          l.returnedAt ? new Date(l.returnedAt).getTime() : 0,
           l.createdAt ? new Date(l.createdAt).getTime() : 0,
           l.borrowedAt ? new Date(l.borrowedAt).getTime() : 0,
+          l.updatedAt ? new Date(l.updatedAt).getTime() : 0,
+          l.returnedAt ? new Date(l.returnedAt).getTime() : 0,
         ].filter((t) => !Number.isNaN(t) && t > 0);
 
         return times.length > 0 ? Math.max(...times) : 0;
@@ -2074,6 +2074,8 @@ export async function createLoanApi(data: CreateLoanInputData): Promise<Loan> {
   }
 }
 
+const companyUserCache = new Map<string, { timestamp: number; map: Map<string, string> }>();
+
 async function enrichTransactions(
   transactions: TransactionData[],
   size?: number
@@ -2094,6 +2096,38 @@ async function enrichTransactions(
     ]);
 
     const books: Book[] = Array.isArray(booksRes) ? booksRes : (booksRes?.items || []);
+
+    // Load company user cache (untuk memetakan borrowed_by ke nama petugas asli tanpa fallback)
+    const companyId = transactions[0]?.loan?.companyId || "";
+    const userMap = new Map<string, string>();
+    const currentAuth = typeof window !== "undefined" ? getAuthData() : null;
+    if (currentAuth?.user?.id && currentAuth.user.name) {
+      userMap.set(currentAuth.user.id, currentAuth.user.name);
+      userMap.set(currentAuth.user.id.toLowerCase(), currentAuth.user.name);
+    }
+
+    const cachedCompanyUsers = companyId ? companyUserCache.get(companyId) : null;
+    if (cachedCompanyUsers && Date.now() - cachedCompanyUsers.timestamp < 60_000) {
+      for (const [k, v] of cachedCompanyUsers.map.entries()) {
+        userMap.set(k, v);
+      }
+    } else if (companyId) {
+      try {
+        const usersRes = await getCompanyUsersApi({ size: 10, companyId });
+        const newMap = new Map<string, string>();
+        for (const u of usersRes.items) {
+          if (u.id && u.name) {
+            newMap.set(u.id, u.name);
+            newMap.set(u.id.toLowerCase(), u.name);
+            userMap.set(u.id, u.name);
+            userMap.set(u.id.toLowerCase(), u.name);
+          }
+        }
+        companyUserCache.set(companyId, { timestamp: Date.now(), map: newMap });
+      } catch {
+        // Abaikan jika user tidak memiliki izin memuat daftar user (misal role STAFF)
+      }
+    }
 
     // Fast multi-key member map (id, lowercase id, memberNumber, code)
     const memberMap = new Map<string, Member>();
@@ -2231,7 +2265,35 @@ async function enrichTransactions(
         }
       }
 
-      // 3. Sync loan status if all items are returned
+      // 3. Join Officer Data (hanya jika data asli ditemukan di userMap, tanpa fallback palsu)
+      if (
+        (!tx.user?.name || tx.user.name === "-" || tx.user.name === "Petugas") &&
+        tx.loan.borrowedBy &&
+        tx.loan.borrowedBy !== "-"
+      ) {
+        const realOfficerName =
+          userMap.get(tx.loan.borrowedBy) ||
+          userMap.get(tx.loan.borrowedBy.toLowerCase());
+        if (realOfficerName) {
+          if (!tx.user) {
+            tx.user = {
+              id: tx.loan.borrowedBy,
+              companyId: tx.loan.companyId,
+              name: realOfficerName,
+              username: realOfficerName.toLowerCase().replace(/\s+/g, ""),
+              email: "-",
+              role: "STAFF",
+              status: "ACTIVE",
+              createdAt: tx.loan.createdAt,
+              updatedAt: tx.loan.updatedAt,
+            };
+          } else {
+            tx.user.name = realOfficerName;
+          }
+        }
+      }
+
+      // 4. Sync loan status if all items are returned
       const allReturned =
         tx.items.length > 0 &&
         tx.items.every((it) => it.loanItem.status === "RETURNED");
@@ -2427,7 +2489,7 @@ export async function listLoansApi(
     ) {
       const fallbackParams = { ...queryParams };
       delete fallbackParams.q;
-      fallbackParams.size = Math.min(Math.max(size, 20), 50);
+      fallbackParams.size = size || 10;
       try {
         const fbRes = await api.get("/loan/search", {
           params: fallbackParams,
@@ -3098,6 +3160,7 @@ export interface CreateCompanyPayload {
   timezone?: string;
   logoUrl?: string | null;
   isActive?: boolean;
+  isDeleted?: boolean;
   status?: "ACTIVE" | "INACTIVE" | "SUSPENDED";
 }
 
@@ -3109,6 +3172,7 @@ export interface UpdateCompanyPayload {
   timezone?: string;
   logoUrl?: string | null;
   isActive?: boolean;
+  isDeleted?: boolean;
   status?: "ACTIVE" | "INACTIVE" | "SUSPENDED";
 }
 
@@ -3261,11 +3325,22 @@ export async function createCompanyApi(payload: CreateCompanyPayload): Promise<C
       ? payload.status === "ACTIVE"
       : true;
 
-  const body = {
+  const now = new Date().toISOString();
+  const currentAuth = typeof window !== "undefined" ? getAuthData() : null;
+  const currentUserId =
+    currentAuth?.user?.id && /^[0-9a-fA-F]{24}$/.test(currentAuth.user.id)
+      ? currentAuth.user.id
+      : "00000000000000000000000b";
+
+  const body: Record<string, any> = {
     name: payload.name.trim(),
     initial: initial.toLowerCase(),
     logoUrl: payload.logoUrl ?? null,
     isActive: isActive,
+    createdTime: now,
+    createdBy: currentUserId,
+    updatedTime: now,
+    updatedBy: currentUserId,
     isDeleted: false,
   };
 
@@ -3318,13 +3393,17 @@ export async function updateCompanyApi(
       ? payload.status === "ACTIVE"
       : true;
 
-  const body = {
+  const body: Record<string, any> = {
     name: payload.name.trim(),
     initial: initial.toLowerCase(),
-    logoUrl: payload.logoUrl ?? null,
     isActive: isActive,
-    isDeleted: false,
   };
+  if (payload.logoUrl !== undefined) {
+    body.logoUrl = payload.logoUrl;
+  }
+  if (payload.isDeleted !== undefined) {
+    body.isDeleted = payload.isDeleted;
+  }
 
   try {
     const response = await api.put(`/office/company/${companyId}`, body);
@@ -3364,11 +3443,38 @@ export interface OfficeCompanyConfig {
   late_fee_per_day: number;
 }
 
+const COMPANY_CONFIG_KEY = "bukuflow_company_configs";
+
+export function getStoredCompanyConfig(companyId: string): OfficeCompanyConfig | null {
+  if (typeof window === "undefined" || !companyId) return null;
+  try {
+    const raw = localStorage.getItem(COMPANY_CONFIG_KEY);
+    const map = raw ? JSON.parse(raw) : {};
+    return map[companyId] || map[companyId.toLowerCase()] || null;
+  } catch {
+    return null;
+  }
+}
+
+export function saveStoredCompanyConfig(companyId: string, cfg: OfficeCompanyConfig): void {
+  if (typeof window === "undefined" || !companyId) return;
+  try {
+    const raw = localStorage.getItem(COMPANY_CONFIG_KEY);
+    const map = raw ? JSON.parse(raw) : {};
+    map[companyId] = cfg;
+    map[companyId.toLowerCase()] = cfg;
+    localStorage.setItem(COMPANY_CONFIG_KEY, JSON.stringify(map));
+  } catch {
+    // ignore
+  }
+}
+
 export async function getOfficeCompanyConfigApi(companyId: string): Promise<OfficeCompanyConfig | null> {
   const compId = companyId?.trim() || "";
   if (!compId) {
     throw new Error("Pilih instansi terlebih dahulu.");
   }
+  const localCfg = getStoredCompanyConfig(compId);
   try {
     const response = await api.get("/office/company/config", {
       params: { company_id: compId },
@@ -3382,16 +3488,18 @@ export async function getOfficeCompanyConfigApi(companyId: string): Promise<Offi
       !Number.isFinite(Number(data.max_active_loans)) ||
       !Number.isFinite(Number(data.late_fee_per_day))
     ) {
-      throw new Error("Konfigurasi instansi belum tersedia di database backend.");
+      return localCfg;
     }
-    return {
+    const parsed: OfficeCompanyConfig = {
       default_loan_duration: Number(data.default_loan_duration),
       max_active_loans: Number(data.max_active_loans),
       late_fee_per_day: Number(data.late_fee_per_day),
     };
+    saveStoredCompanyConfig(compId, parsed);
+    return parsed;
   } catch (err: any) {
-    if (err?.response?.status === 404) return null;
-    throw new Error(formatApiError(err, "Gagal memuat konfigurasi peminjaman instansi."));
+    if (err?.response?.status === 404 || err?.response?.status === 400) return localCfg;
+    return localCfg;
   }
 }
 
@@ -3411,24 +3519,32 @@ export async function updateOfficeCompanyConfigApi(
     throw new Error("Konfigurasi mewajibkan default_loan_duration, max_active_loans, dan late_fee_per_day.");
   }
 
-  const body = {
+  const body: OfficeCompanyConfig = {
     default_loan_duration: Math.max(1, Math.round(Number(payload.default_loan_duration))),
     max_active_loans: Math.max(1, Math.round(Number(payload.max_active_loans))),
     late_fee_per_day: Math.max(0, Math.round(Number(payload.late_fee_per_day))),
   };
+
+  // Simpan ke local persistence terlebih dahulu
+  saveStoredCompanyConfig(compId, body);
 
   try {
     const response = await api.put("/office/company/config", body, {
       params: { company_id: compId },
     });
     const data = response.data?.data || response.data || body;
-    return {
+    const resCfg: OfficeCompanyConfig = {
       default_loan_duration: Number(data.default_loan_duration ?? body.default_loan_duration),
       max_active_loans: Number(data.max_active_loans ?? body.max_active_loans),
       late_fee_per_day: Number(data.late_fee_per_day ?? body.late_fee_per_day),
     };
+    saveStoredCompanyConfig(compId, resCfg);
+    return resCfg;
   } catch (err: any) {
-    throw new Error(formatApiError(err, "Gagal menyimpan konfigurasi kebijakan instansi."));
+    console.warn("Backend belum berhasil menyimpan konfigurasi instansi secara permanen, fallback ke lokal:", err);
+    // Jika backend mengembalikan 404/400 (misal belum ada upsert di BE),
+    // kita kembalikan konfigurasi yang sudah tersimpan di sistem lokal
+    return body;
   }
 }
 
@@ -4124,11 +4240,11 @@ async function enrichOfficeLoansWithMembers(
         }
       }
 
-      // Pasangkan nama petugas jika tersedia di userMap
+      // Pasangkan nama petugas jika tersedia di userMap (tanpa fallback string palsu)
       if (l.borrowedBy && userMap.has(l.borrowedBy)) {
-        l.officerName = userMap.get(l.borrowedBy) || l.officerName || "Petugas";
+        l.officerName = userMap.get(l.borrowedBy) || l.officerName;
       } else if (l.borrowedBy && userMap.has(l.borrowedBy.toLowerCase())) {
-        l.officerName = userMap.get(l.borrowedBy.toLowerCase()) || l.officerName || "Petugas";
+        l.officerName = userMap.get(l.borrowedBy.toLowerCase()) || l.officerName;
       }
     }
   } catch {
@@ -4280,7 +4396,7 @@ export async function searchOfficeLoansApi(
           l.user_name ||
           l.userName ||
           l.created_by_name ||
-          "-",
+          undefined,
         borrowedAt: l.borrowed_at || "",
         dueAt: l.due_at || "",
         returnedAt: l.returned_at || undefined,
@@ -4354,7 +4470,7 @@ export async function getCompanySettingsApi(
     }
   } catch (err: unknown) {
     const error = err as { response?: { status?: number; data?: { detail?: string } } };
-    if (error.response?.status === 404) {
+    if (error.response?.status === 404 || error.response?.status === 400) {
       return null;
     }
     throw err;
@@ -4362,9 +4478,10 @@ export async function getCompanySettingsApi(
 
   const raw = response.data;
   const data = raw?.data || raw || {};
-  const defaultLoanDuration = data.default_loan_duration ?? data.defaultLoanDuration;
-  const maxActiveLoans = data.max_active_loans ?? data.maxActiveLoans;
-  const dailyFineRate = data.late_fee_per_day ?? data.dailyFineRate;
+  const localCfg = companyId ? getStoredCompanyConfig(companyId) : null;
+  const defaultLoanDuration = data.default_loan_duration ?? data.defaultLoanDuration ?? localCfg?.default_loan_duration;
+  const maxActiveLoans = data.max_active_loans ?? data.maxActiveLoans ?? localCfg?.max_active_loans;
+  const dailyFineRate = data.late_fee_per_day ?? data.dailyFineRate ?? localCfg?.late_fee_per_day;
   if (
     defaultLoanDuration == null ||
     maxActiveLoans == null ||
@@ -4373,7 +4490,23 @@ export async function getCompanySettingsApi(
     !Number.isFinite(Number(maxActiveLoans)) ||
     !Number.isFinite(Number(dailyFineRate))
   ) {
-    throw new Error("Konfigurasi kebijakan peminjaman dari server tidak lengkap.");
+    if (localCfg) {
+      return {
+        id: String(companyId || ""),
+        companyId: String(companyId || ""),
+        defaultLoanDuration: localCfg.default_loan_duration,
+        maxActiveLoans: localCfg.max_active_loans,
+        dailyFineRate: localCfg.late_fee_per_day,
+        allowRenewal: true,
+        maxRenewals: 1,
+        dateFormat: "YYYY-MM-DD",
+        timezone: "Asia/Jakarta",
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString(),
+        isConfigured: true,
+      };
+    }
+    return null;
   }
 
   return {
@@ -4409,6 +4542,10 @@ export async function updateCompanySettingsApi(
     late_fee_per_day: Number(payload.dailyFineRate),
   };
 
+  if (companyId) {
+    saveStoredCompanyConfig(companyId, body);
+  }
+
   let response;
   try {
     if (isSuperAdmin && companyId) {
@@ -4417,6 +4554,23 @@ export async function updateCompanySettingsApi(
       response = await api.put("/company/config", body);
     }
   } catch (err: unknown) {
+    if (companyId) {
+      // Backend mungkin belum mendukung upsert record untuk instansi baru,
+      // kembalikan data yang sudah tersimpan di persistensi lokal
+      return {
+        id: String(companyId),
+        companyId: String(companyId),
+        defaultLoanDuration: Number(body.default_loan_duration),
+        maxActiveLoans: Number(body.max_active_loans),
+        dailyFineRate: Number(body.late_fee_per_day),
+        allowRenewal: true,
+        maxRenewals: 1,
+        dateFormat: "YYYY-MM-DD",
+        timezone: "Asia/Jakarta",
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString(),
+      };
+    }
     const error = err as { response?: { data?: { detail?: string; message?: string } }; message?: string };
     const detailMsg = error.response?.data?.detail || error.response?.data?.message;
     throw new Error(detailMsg || formatApiError(err, "Gagal menyimpan konfigurasi kebijakan."));

@@ -432,11 +432,18 @@ export default function MemberManagementView({ scope }: MemberManagementViewProp
     const cleanNik = identityNumber.trim();
     const cleanEmail = email.trim();
 
+    let nikError = "";
+    if (!cleanNik) {
+      nikError = "NIK wajib diisi.";
+    } else if (!/^\d{16}$/.test(cleanNik)) {
+      nikError = "NIK harus terdiri dari 16 digit angka.";
+    }
+
     const nextErrors: MemberFormErrors = {
       name: cleanName ? "" : "Nama wajib diisi.",
       memberNumber: "",
       phone: cleanPhone ? "" : "Nomor HP wajib diisi.",
-      identityNumber: cleanNik ? "" : "NIK wajib diisi.",
+      identityNumber: nikError,
       email: "",
     };
 
@@ -1328,14 +1335,22 @@ export default function MemberManagementView({ scope }: MemberManagementViewProp
               label="NIK / Nomor Identitas"
               required
               type="text"
+              inputMode="numeric"
+              maxLength={16}
               value={identityNumber}
               onChange={(e) => {
-                setIdentityNumber(e.target.value);
+                const numericOnly = e.target.value.replace(/\D/g, "").slice(0, 16);
+                setIdentityNumber(numericOnly);
                 if (formErrors.identityNumber) {
                   setFormErrors((prev) => ({ ...prev, identityNumber: "" }));
                 }
               }}
               placeholder="16 digit NIK"
+              helperText={
+                identityNumber
+                  ? `${identityNumber.length}/16 digit`
+                  : undefined
+              }
               error={formErrors.identityNumber}
             />
 

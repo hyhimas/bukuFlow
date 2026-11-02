@@ -1857,13 +1857,15 @@ export default function OfficeBooksPage() {
               {supplementalError && (
                 <div className="mt-2.5 rounded-lg border border-amber-200 bg-amber-50 px-3.5 py-2 text-xs text-amber-800 flex items-center justify-between" role="note">
                   <span>Data tambahan gagal dimuat</span>
-                  <button
+                  <Button
                     type="button"
+                    variant="ghost"
+                    size="sm"
                     onClick={() => void refreshDetailCopies()}
-                    className="font-medium underline hover:text-amber-950"
+                    className="h-auto py-0.5 px-2 text-xs font-medium text-amber-900 underline hover:bg-amber-100/60 hover:text-amber-950"
                   >
                     Coba lagi
-                  </button>
+                  </Button>
                 </div>
               )}
 

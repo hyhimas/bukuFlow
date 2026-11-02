@@ -21,19 +21,34 @@ import {
   updateCompanySettingsApi,
   getErrorMessage,
 } from "@/lib/api";
+import CompanySwitcher, {
+  getStoredOfficeCompanyId,
+  setStoredOfficeCompanyId,
+} from "@/components/office/CompanySwitcher";
 
 export default function CompanySettingsPage() {
   const router = useRouter();
   const { toast } = useToast();
 
+  const [sessionUser, setSessionUser] = useState(() => {
+    if (typeof window === "undefined") return null;
+    return getSession()?.user || null;
+  });
+  const isSuperAdmin = sessionUser?.role === "SUPER_ADMIN";
+
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [errorMessage, setErrorMessage] = useState("");
 
-  const [companyId] = useState<string>(() => {
+  const [selectedOfficeCompanyId, setSelectedOfficeCompanyId] = useState<string>(() => {
     if (typeof window === "undefined") return "";
-    return getSession()?.user?.companyId || "";
+    return getStoredOfficeCompanyId() || getSession()?.user?.companyId || "";
   });
+
+  const activeCompanyId = isSuperAdmin
+    ? (selectedOfficeCompanyId || sessionUser?.companyId || "")
+    : (sessionUser?.companyId || "");
+
   const [isInitialConfig, setIsInitialConfig] = useState(false);
 
   // Form State - 3 Kebijakan Sirkulasi Backend (/bukuflow/company/config)
@@ -43,7 +58,7 @@ export default function CompanySettingsPage() {
 
   const [loadError, setLoadError] = useState(false);
 
-  const loadData = useCallback(async () => {
+  const loadData = useCallback(async (overrideCompId?: string) => {
     const session = getSession();
 
     if (!session) {
@@ -52,15 +67,19 @@ export default function CompanySettingsPage() {
       }
       return;
     }
+    setSessionUser(session.user);
 
     if (!canAccessCompanySettings(session.user.role)) {
       router.replace(session.user.role === "SUPER_ADMIN" ? "/office/dashboard" : "/dashboard");
       return;
     }
 
-    const currentCompId = session.user.companyId || "";
+    const isSA = session.user.role === "SUPER_ADMIN";
+    const currentCompId = isSA
+      ? (overrideCompId || selectedOfficeCompanyId || getStoredOfficeCompanyId() || session.user.companyId || "")
+      : (session.user.companyId || "");
 
-    if (!currentCompId && session?.user?.role !== "SUPER_ADMIN") {
+    if (!currentCompId && !isSA) {
       setErrorMessage("ID instansi tidak tersedia di sesi. Silakan login ulang.");
       setLoadError(true);
       setLoading(false);
@@ -79,9 +98,9 @@ export default function CompanySettingsPage() {
         setDailyFineRate(settingsData.dailyFineRate ?? "");
         setIsInitialConfig(false);
       } else {
-        setDefaultLoanDuration("");
-        setMaxActiveLoans("");
-        setDailyFineRate("");
+        setDefaultLoanDuration(7);
+        setMaxActiveLoans(3);
+        setDailyFineRate(1000);
         setIsInitialConfig(true);
       }
     } catch (err: unknown) {
@@ -92,7 +111,7 @@ export default function CompanySettingsPage() {
     } finally {
       setLoading(false);
     }
-  }, [router]);
+  }, [router, selectedOfficeCompanyId]);
 
   useEffect(() => {
     // eslint-disable-next-line react-hooks/set-state-in-effect -- Fetch konfigurasi kebijakan instansi saat mount
@@ -122,13 +141,33 @@ export default function CompanySettingsPage() {
       return;
     }
 
+    const targetCompanyId = activeCompanyId;
+    if (!targetCompanyId) {
+      setErrorMessage("Pilih instansi terlebih dahulu.");
+      return;
+    }
+
     try {
       setSaving(true);
-      await updateCompanySettingsApi(companyId, {
+      await updateCompanySettingsApi(targetCompanyId, {
         defaultLoanDuration: durationNum,
         maxActiveLoans: maxLoansNum,
         dailyFineRate: fineRateNum,
       });
+
+      // Beritahu seluruh halaman/komponen yang sedang aktif untuk memperbarui tarif denda
+      if (typeof window !== "undefined") {
+        window.dispatchEvent(
+          new CustomEvent("company-settings-updated", {
+            detail: {
+              companyId: targetCompanyId,
+              dailyFineRate: fineRateNum,
+              defaultLoanDuration: durationNum,
+              maxActiveLoans: maxLoansNum,
+            },
+          })
+        );
+      }
 
       toast.success("Konfigurasi kebijakan perpustakaan berhasil disimpan.");
       setIsInitialConfig(false);
@@ -150,13 +189,26 @@ export default function CompanySettingsPage() {
         {/* Header */}
         <div className="mb-6">
           <PageHeader
-            backLink="/dashboard"
+            backLink={isSuperAdmin ? "/office/companies" : "/dashboard"}
             title="Konfigurasi Kebijakan Perpustakaan"
             description="Atur batas durasi peminjaman standar, kuota maksimal buku aktif, dan tarif denda harian."
             actions={
-              <span className="inline-flex items-center rounded-lg bg-blue-50 px-3 py-1 text-xs font-semibold text-blue-700 border border-blue-200">
-                ID Instansi: {companyId || "-"}
-              </span>
+              <div className="flex flex-wrap items-center gap-2.5">
+                {isSuperAdmin && (
+                  <CompanySwitcher
+                    size="sm"
+                    selectedCompanyId={activeCompanyId}
+                    onSelectCompany={(newId: string) => {
+                      setSelectedOfficeCompanyId(newId);
+                      setStoredOfficeCompanyId(newId);
+                      void loadData(newId);
+                    }}
+                  />
+                )}
+                <span className="inline-flex items-center rounded-lg bg-blue-50 px-3 py-1.5 text-xs font-semibold text-blue-700 border border-blue-200">
+                  ID: {activeCompanyId || "-"}
+                </span>
+              </div>
             }
           />
         </div>

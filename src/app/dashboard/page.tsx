@@ -7,6 +7,7 @@ import { useRouter } from "next/navigation";
 import Card from "@/components/ui/Card";
 import Badge from "@/components/ui/Badge";
 import Button from "@/components/ui/Button";
+import Modal from "@/components/ui/Modal";
 import ErrorState from "@/components/ui/ErrorState";
 import Pagination from "@/components/ui/Pagination";
 import PageHeader from "@/components/ui/PageHeader";
@@ -15,7 +16,11 @@ import Skeleton, { TableSkeleton } from "@/components/ui/Skeleton";
 import { getSession, isStoredSessionExpired, hasStoredAuth } from "@/lib/auth";
 import { isSupportedRole } from "@/lib/authorization";
 import { getDashboardApi, getActiveReturnsApi, getCompanySettingsApi, getErrorMessage } from "@/lib/api";
-import type { Loan, UserRole } from "@/lib/types";
+import {
+  calculateTransactionCirculation,
+  type ExemplarFineDetail,
+} from "@/lib/circulation";
+import type { Loan, ReturnLoanData, UserRole } from "@/lib/types";
 
 interface DashboardData {
   booksAvailable?: number | null;
@@ -29,12 +34,17 @@ interface WorklistItem {
   id: string;
   loanNumber: string;
   memberName: string;
+  memberNumber: string;
   bookTitles: string;
   bookCount: number;
+  borrowedAt: string;
+  dueAt: string;
   daysOverdue: number;
   fineAmount: number | null;
-  dueAt: string;
+  status: "ACTIVE" | "OVERDUE" | "COMPLETED";
   isToday: boolean;
+  exemplarDetails: ExemplarFineDetail[];
+  rawItem: ReturnLoanData;
 }
 
 const statusLabel: Record<Loan["status"], string> = {
@@ -424,6 +434,8 @@ export default function DashboardPage() {
   });
   const [data, setData] = useState<DashboardData | null>(null);
   const [worklist, setWorklist] = useState<WorklistItem[]>([]);
+  const [dailyFineRate, setDailyFineRate] = useState<number | null>(null);
+  const [selectedDetailItem, setSelectedDetailItem] = useState<WorklistItem | null>(null);
   const [worklistFilter, setWorklistFilter] = useState<"ALL" | "TODAY" | "OVERDUE">("ALL");
   const [worklistSearch, setWorklistSearch] = useState("");
   const [worklistPage, setWorklistPage] = useState(1);
@@ -488,6 +500,7 @@ export default function DashboardPage() {
         settingsResult && typeof settingsResult.dailyFineRate === "number"
           ? settingsResult.dailyFineRate
           : null;
+      setDailyFineRate(fineRate);
 
       // Compute worklist: "Jatuh tempo hari ini" & "Terlambat"
       const today = new Date();
@@ -499,42 +512,45 @@ export default function DashboardPage() {
       const computedWorklist: WorklistItem[] = [];
 
       returnsResult.items.forEach((item) => {
-        if (item.loan.status === "COMPLETED" || item.loan.returnedAt) return;
+        // Hitung denda dan status transaksi per eksemplar
+        const circ = calculateTransactionCirculation(
+          item.loan,
+          item.items,
+          fineRate,
+          todayStr
+        );
+
+        // Abaikan transaksi yang seluruh bukunya sudah dikembalikan (COMPLETED)
+        if (circ.overallStatus === "COMPLETED") return;
+
         const borrowedItems = item.items.filter((it) => it.loanItem.status === "BORROWED");
         if (borrowedItems.length === 0) return;
+
         const borrowedTitles = borrowedItems
           .map((it) => it.book.title)
           .join(", ");
 
-        const dueStr = item.loan.dueAt.slice(0, 10);
-        const dueDate = new Date(`${dueStr}T00:00:00`);
+        const dueStr = item.loan.dueAt ? item.loan.dueAt.slice(0, 10) : "";
+        const isToday = dueStr === todayStr;
+        const isOverdue = circ.overallStatus === "OVERDUE";
 
-        if (dueStr === todayStr) {
+        // Worklist memuat peminjaman yang jatuh tempo hari ini atau yang terlambat
+        if (isToday || isOverdue) {
           computedWorklist.push({
             id: item.loan.id,
             loanNumber: item.loan.loanNumber,
             memberName: item.member.name,
+            memberNumber: item.member.memberNumber || "-",
             bookTitles: borrowedTitles || "1 buku",
             bookCount: borrowedItems.length,
-            daysOverdue: 0,
-            fineAmount: 0,
+            borrowedAt: item.loan.borrowedAt || "",
             dueAt: item.loan.dueAt,
-            isToday: true,
-          });
-        } else if (!Number.isNaN(dueDate.getTime()) && dueDate < today) {
-          const diffTime = today.getTime() - dueDate.getTime();
-          const days = Math.max(1, Math.floor(diffTime / (1000 * 60 * 60 * 24)));
-          const fineAmount = fineRate !== null ? days * fineRate * borrowedItems.length : null;
-          computedWorklist.push({
-            id: item.loan.id,
-            loanNumber: item.loan.loanNumber,
-            memberName: item.member.name,
-            bookTitles: borrowedTitles || "1 buku",
-            bookCount: borrowedItems.length,
-            daysOverdue: days,
-            fineAmount,
-            dueAt: item.loan.dueAt,
-            isToday: false,
+            daysOverdue: circ.maxDaysOverdue,
+            fineAmount: circ.totalFine,
+            status: circ.overallStatus,
+            isToday,
+            exemplarDetails: circ.items,
+            rawItem: item,
           });
         }
       });
@@ -561,6 +577,25 @@ export default function DashboardPage() {
   useEffect(() => {
     // eslint-disable-next-line react-hooks/set-state-in-effect -- Fetch data agregat dashboard saat halaman pertama kali dimuat
     void loadDashboard();
+
+    const handleSettingsUpdated = (e: Event) => {
+      const customEvent = e as CustomEvent<{ dailyFineRate?: number }>;
+      if (customEvent.detail && typeof customEvent.detail.dailyFineRate === "number") {
+        setDailyFineRate(customEvent.detail.dailyFineRate);
+        void loadDashboard();
+      }
+    };
+
+    const handleWindowFocus = () => {
+      void loadDashboard();
+    };
+
+    window.addEventListener("company-settings-updated", handleSettingsUpdated);
+    window.addEventListener("focus", handleWindowFocus);
+    return () => {
+      window.removeEventListener("company-settings-updated", handleSettingsUpdated);
+      window.removeEventListener("focus", handleWindowFocus);
+    };
   }, [loadDashboard]);
 
   if (error && !data) {
@@ -859,52 +894,37 @@ export default function DashboardPage() {
                       key={item.id}
                       className="p-4 space-y-3 transition hover:bg-surface-subtle/70"
                     >
-                      {/* Baris Atas: Info Anggota & Badge Status */}
+                      {/* Baris Atas: Transaksi / Member & Status */}
                       <div className="flex items-start justify-between gap-3">
-                        <div className="flex items-center gap-2.5 min-w-0">
-                          <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-blue-50 text-blue-700 font-semibold text-xs border border-blue-100">
-                            {(item.memberName || "?").charAt(0).toUpperCase()}
-                          </div>
-                          <div className="min-w-0">
-                            <p className="font-semibold text-text-main text-sm truncate" title={item.memberName}>
-                              {item.memberName}
-                            </p>
-                            <p className="text-xs text-text-muted font-mono" title={item.loanNumber}>
-                              {item.loanNumber}
-                            </p>
-                          </div>
+                        <div className="min-w-0">
+                          <p className="font-mono font-bold text-xs text-text-main truncate" title={item.loanNumber}>
+                            {item.loanNumber}
+                          </p>
+                          <p className="font-semibold text-text-main text-sm truncate mt-0.5" title={item.memberName}>
+                            {item.memberName}
+                          </p>
                         </div>
 
-                        <Badge variant={item.isToday ? "warning" : "danger"} className="shrink-0">
-                          {item.isToday
-                            ? "Hari ini (0 hr)"
-                            : `${item.daysOverdue} hari terlambat`}
-                        </Badge>
-                      </div>
-
-                      {/* Judul Buku */}
-                      <div className="flex items-start gap-2 text-xs text-text-secondary bg-surface-subtle/80 rounded-lg p-2.5 border border-border-subtle">
-                        <svg
-                          className="h-4 w-4 shrink-0 text-text-subtle mt-0.5"
-                          viewBox="0 0 24 24"
-                          fill="none"
-                          stroke="currentColor"
-                          strokeWidth="2"
-                          strokeLinecap="round"
-                          strokeLinejoin="round"
-                          aria-hidden="true"
+                        <Badge
+                          variant={
+                            item.status === "COMPLETED"
+                              ? "success"
+                              : item.status === "OVERDUE"
+                              ? "danger"
+                              : item.isToday
+                              ? "warning"
+                              : "neutral"
+                          }
+                          className="shrink-0"
                         >
-                          <path d="M4 19.5v-15A2.5 2.5 0 0 1 6.5 2H20v20H6.5a2.5 2.5 0 0 1-2.5-2.5Z" />
-                          <path d="M6 6h10M6 10h10" />
-                        </svg>
-                        <div className="min-w-0 flex-1">
-                          <span className="text-[11px] font-medium text-text-secondary block uppercase tracking-wider">
-                            Judul Buku
-                          </span>
-                          <span className="font-semibold text-text-main break-words">
-                            {item.bookTitles}
-                          </span>
-                        </div>
+                          {item.status === "COMPLETED"
+                            ? "Selesai"
+                            : item.status === "OVERDUE"
+                            ? `${item.daysOverdue} hr terlambat`
+                            : item.isToday
+                            ? "Hari ini"
+                            : "Aktif"}
+                        </Badge>
                       </div>
 
                       {/* Info 2 Kolom: Jatuh Tempo & Denda */}
@@ -922,7 +942,7 @@ export default function DashboardPage() {
                             ? "bg-danger-soft border-danger-border text-danger-text"
                             : "bg-surface-subtle border-border/80 text-text-secondary"
                         }`}>
-                          <span className="text-[11px] text-text-muted block">Nominal Denda</span>
+                          <span className="text-[11px] text-text-muted block">Total Denda</span>
                           <span className={`font-semibold tabular-nums ${
                             item.fineAmount === null
                               ? "text-warning-text"
@@ -939,124 +959,128 @@ export default function DashboardPage() {
                         </div>
                       </div>
 
-                      {/* Baris Bawah: Aksi */}
+                      {/* Baris Bawah: Tombol Detail */}
                       <div className="pt-2.5 border-t border-border-subtle flex items-center justify-between">
                         <span className="text-xs text-text-secondary">Pilihan Aksi</span>
-                        {isCompanyAdmin ? (
-                          <Link
-                            href={`/loans?search=${encodeURIComponent(item.loanNumber)}&loanId=${encodeURIComponent(item.id)}`}
-                            className="inline-flex items-center gap-1.5 rounded-lg border border-border bg-surface px-3.5 py-1.5 text-xs font-semibold text-text-secondary shadow-2xs hover:bg-surface-subtle hover:text-text-main transition"
-                          >
-                            <span>Lihat transaksi</span>
-                            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden="true">
-                              <path d="m9 18 6-6-6-6" />
-                            </svg>
-                          </Link>
-                        ) : (
-                          <Link
-                            href={`/returns?loanNumber=${encodeURIComponent(item.loanNumber)}&loanId=${encodeURIComponent(item.id)}`}
-                            className="inline-flex items-center gap-1.5 rounded-lg bg-blue-600 px-3.5 py-1.5 text-xs font-semibold text-white shadow-2xs hover:bg-blue-700 transition"
-                          >
-                            <span>Proses pengembalian</span>
-                            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden="true">
-                              <path d="m9 18 6-6-6-6" />
-                            </svg>
-                          </Link>
-                        )}
+                        <Button
+                          type="button"
+                          variant="secondary"
+                          size="sm"
+                          onClick={() => setSelectedDetailItem(item)}
+                          className="inline-flex items-center gap-1.5"
+                        >
+                          <svg className="h-3.5 w-3.5 text-text-secondary" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden="true">
+                            <circle cx="12" cy="12" r="10" />
+                            <line x1="12" y1="16" x2="12" y2="12" />
+                            <line x1="12" y1="8" x2="12.01" y2="8" />
+                          </svg>
+                          <span>Detail</span>
+                        </Button>
                       </div>
                     </div>
                   ))}
                 </div>
 
-                {/* Desktop & Tablet View (>= md): Full width fluid table with horizontal scroll protection */}
+                {/* Desktop & Tablet View (>= md): Ringkas 5 Kolom Sesuai Spesifikasi */}
                 <div className="hidden md:block w-full overflow-x-auto">
-                  <table className="w-full min-w-[760px] table-fixed text-left text-sm">
+                  <table className="w-full min-w-[720px] table-fixed text-left text-sm">
                     <colgroup>
-                      <col className="w-[26%]" />
-                      <col className="w-auto" />
-                      <col className="w-[24%]" />
-                      <col className="w-[195px]" />
+                      <col className="w-[28%]" />
+                      <col className="w-[18%]" />
+                      <col className="w-[18%]" />
+                      <col className="w-[20%]" />
+                      <col className="w-[16%]" />
                     </colgroup>
-                    <thead className="border-b border-border-subtle bg-surface-subtle/80 text-[11px] font-semibold uppercase tracking-wider text-text-muted">
+                    <thead className="border-b border-border bg-slate-100 dark:bg-slate-800 text-[11px] font-bold uppercase tracking-wider text-slate-700 dark:text-slate-200">
                       <tr>
-                        <th className="px-4 sm:px-5 py-3 font-semibold">Nama Anggota</th>
-                        <th className="px-4 py-3 font-semibold">Judul Buku</th>
-                        <th className="px-4 py-3 font-semibold">Hari Terlambat</th>
+                        <th className="px-4 sm:px-5 py-3 font-semibold">Transaksi / Member</th>
+                        <th className="px-4 py-3 font-semibold">Jatuh Tempo</th>
+                        <th className="px-4 py-3 font-semibold">Status</th>
+                        <th className="px-4 py-3 font-semibold">Denda</th>
                         <th className="px-4 sm:px-5 py-3 font-semibold text-right">Aksi</th>
                       </tr>
                     </thead>
-                    <tbody className="divide-y divide-border-subtle">
+                    <tbody className="divide-y divide-border-subtle bg-surface">
                       {paginatedWorklist.map((item) => (
                         <tr
                           key={item.id}
                           className="transition hover:bg-surface-subtle/70"
                         >
-                          {/* Nama Anggota & Loan Number */}
+                          {/* 1. Transaksi / Member */}
                           <td className="px-4 sm:px-5 py-3.5 min-w-0 align-middle">
-                            <p className="font-semibold text-text-main text-sm truncate" title={item.memberName}>
-                              {item.memberName}
-                            </p>
-                            <p className="text-xs text-text-muted font-mono truncate" title={item.loanNumber}>
-                              {item.loanNumber}
-                            </p>
-                          </td>
-
-                          {/* Judul Buku */}
-                          <td className="px-4 py-3.5 min-w-0 align-middle">
-                            <p
-                              className="text-xs sm:text-sm font-medium text-text-main line-clamp-2"
-                              title={item.bookTitles}
-                            >
-                              {item.bookTitles}
-                            </p>
-                          </td>
-
-                          {/* Hari Terlambat, Denda & Jatuh Tempo */}
-                          <td className="px-4 py-3.5 min-w-0 align-middle">
-                            <div className="inline-flex flex-col items-start">
-                              <Badge variant={item.isToday ? "warning" : "danger"}>
-                                {item.isToday
-                                  ? "Hari ini (0 hari)"
-                                  : `${item.daysOverdue} hari terlambat`}
-                              </Badge>
-                              {item.fineAmount === null ? (
-                                <p className="mt-1 text-xs font-semibold text-warning-text tabular-nums">
-                                  Denda: Menunggu konfigurasi
-                                </p>
-                              ) : item.fineAmount > 0 ? (
-                                <p className="mt-1 text-xs font-semibold text-danger-text tabular-nums">
-                                  Denda: Rp {item.fineAmount.toLocaleString("id-ID")}
-                                </p>
-                              ) : null}
-                              <p className="text-xs text-text-muted mt-0.5">
-                                Jatuh tempo: {formatDate(item.dueAt)}
-                              </p>
+                            <div className="flex flex-col min-w-0">
+                              <span className="font-mono font-semibold text-xs text-text-main tracking-tight truncate" title={item.loanNumber}>
+                                {item.loanNumber}
+                              </span>
+                              <span className="text-xs text-text-secondary truncate mt-0.5" title={item.memberName}>
+                                {item.memberName}
+                              </span>
                             </div>
                           </td>
 
-                          {/* Aksi */}
-                          <td className="px-4 sm:px-5 py-3.5 text-right whitespace-nowrap align-middle">
-                            {isCompanyAdmin ? (
-                              <Link
-                                href={`/loans?search=${encodeURIComponent(item.loanNumber)}&loanId=${encodeURIComponent(item.id)}`}
-                                className="inline-flex shrink-0 items-center gap-1.5 rounded-lg border border-border bg-surface px-3.5 py-1.5 text-xs font-semibold text-text-secondary shadow-2xs hover:bg-surface-subtle hover:text-text-main transition"
-                              >
-                                <span>Lihat transaksi</span>
-                                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden="true">
-                                  <path d="m9 18 6-6-6-6" />
-                                </svg>
-                              </Link>
+                          {/* 2. Jatuh Tempo */}
+                          <td className="px-4 py-3.5 whitespace-nowrap align-middle">
+                            <span className="text-xs sm:text-sm font-medium text-text-main tabular-nums">
+                              {formatDate(item.dueAt)}
+                            </span>
+                          </td>
+
+                          {/* 3. Status */}
+                          <td className="px-4 py-3.5 whitespace-nowrap align-middle">
+                            <Badge
+                              variant={
+                                item.status === "COMPLETED"
+                                  ? "success"
+                                  : item.status === "OVERDUE"
+                                  ? "danger"
+                                  : item.isToday
+                                  ? "warning"
+                                  : "neutral"
+                              }
+                            >
+                              {item.status === "COMPLETED"
+                                ? "Selesai"
+                                : item.status === "OVERDUE"
+                                ? `Terlambat (${item.daysOverdue} hr)`
+                                : item.isToday
+                                ? "Hari Ini"
+                                : "Aktif"}
+                            </Badge>
+                          </td>
+
+                          {/* 4. Denda */}
+                          <td className="px-4 py-3.5 whitespace-nowrap align-middle">
+                            {item.fineAmount === null ? (
+                              <span className="text-xs font-semibold text-warning-text">
+                                Menunggu konfigurasi
+                              </span>
+                            ) : item.fineAmount > 0 ? (
+                              <span className="text-xs sm:text-sm font-bold text-danger-text tabular-nums">
+                                Rp {item.fineAmount.toLocaleString("id-ID")}
+                              </span>
                             ) : (
-                              <Link
-                                href={`/returns?loanNumber=${encodeURIComponent(item.loanNumber)}&loanId=${encodeURIComponent(item.id)}`}
-                                className="inline-flex shrink-0 items-center gap-1.5 rounded-lg bg-blue-600 px-3.5 py-1.5 text-xs font-semibold text-white shadow-2xs hover:bg-blue-700 transition"
-                              >
-                                <span>Proses pengembalian</span>
-                                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden="true">
-                                  <path d="m9 18 6-6-6-6" />
-                                </svg>
-                              </Link>
+                              <span className="text-xs sm:text-sm font-medium text-text-secondary tabular-nums">
+                                Rp 0
+                              </span>
                             )}
+                          </td>
+
+                          {/* 5. Aksi: Tombol Detail */}
+                          <td className="px-4 sm:px-5 py-3.5 text-right whitespace-nowrap align-middle">
+                            <Button
+                              type="button"
+                              variant="secondary"
+                              size="sm"
+                              onClick={() => setSelectedDetailItem(item)}
+                              className="inline-flex items-center gap-1.5"
+                            >
+                              <svg className="h-3.5 w-3.5 text-text-secondary" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden="true">
+                                <circle cx="12" cy="12" r="10" />
+                                <line x1="12" y1="16" x2="12" y2="12" />
+                                <line x1="12" y1="8" x2="12.01" y2="8" />
+                              </svg>
+                              <span>Detail</span>
+                            </Button>
                           </td>
                         </tr>
                       ))}
@@ -1233,7 +1257,7 @@ export default function DashboardPage() {
               <div className="hidden md:block overflow-x-auto">
                 <div className="min-w-[660px]">
                   {/* Table Header: Pisahkan Tanggal Pinjam, Jatuh Tempo, dan Dikembalikan */}
-                  <div className="grid grid-cols-[minmax(115px,1.2fr)_minmax(115px,1.2fr)_minmax(92px,1fr)_minmax(92px,1fr)_minmax(92px,1fr)_85px] items-center gap-x-3 border-b border-border-subtle bg-surface-subtle/80 px-4 sm:px-5 py-2.5 text-[11px] font-semibold uppercase tracking-wider text-text-muted">
+                  <div className="grid grid-cols-[minmax(115px,1.2fr)_minmax(115px,1.2fr)_minmax(92px,1fr)_minmax(92px,1fr)_minmax(92px,1fr)_85px] items-center gap-x-3 border-b border-border bg-slate-100 dark:bg-slate-800 px-4 sm:px-5 py-2.5 text-[11px] font-bold uppercase tracking-wider text-slate-700 dark:text-slate-200">
                     <div>Nomor Peminjaman</div>
                     <div>Anggota</div>
                     <div>Tgl Pinjam</div>
@@ -1300,6 +1324,211 @@ export default function DashboardPage() {
           )}
         </Card>
       </div>
+
+      {/* Modal Detail Transaksi Peminjaman */}
+      {selectedDetailItem && (() => {
+        const detailCirc = calculateTransactionCirculation(
+          selectedDetailItem.rawItem.loan,
+          selectedDetailItem.rawItem.items,
+          dailyFineRate
+        );
+
+        return (
+          <Modal
+            open={Boolean(selectedDetailItem)}
+            onClose={() => setSelectedDetailItem(null)}
+            size="4xl"
+            title="Detail Transaksi Peminjaman"
+            description="Informasi lengkap transaksi dan rincian denda per eksemplar."
+          >
+            <div className="space-y-5">
+              {/* Ringkasan Metadata Transaksi */}
+              <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-3.5 p-4 rounded-xl bg-surface-subtle border border-border text-xs">
+                <div>
+                  <span className="text-text-muted block text-[11px] uppercase tracking-wider font-semibold">
+                    Kode Transaksi
+                  </span>
+                  <span className="font-mono font-bold text-text-main text-sm">
+                    {selectedDetailItem.loanNumber}
+                  </span>
+                </div>
+                <div>
+                  <span className="text-text-muted block text-[11px] uppercase tracking-wider font-semibold">
+                    Member
+                  </span>
+                  <span className="font-semibold text-text-main text-sm block truncate">
+                    {selectedDetailItem.memberName}
+                  </span>
+                  {selectedDetailItem.memberNumber && selectedDetailItem.memberNumber !== "-" && (
+                    <span className="text-[11px] text-text-muted font-mono">
+                      {selectedDetailItem.memberNumber}
+                    </span>
+                  )}
+                </div>
+                <div>
+                  <span className="text-text-muted block text-[11px] uppercase tracking-wider font-semibold">
+                    Petugas
+                  </span>
+                  <span className="font-medium text-text-main text-sm block truncate">
+                    {selectedDetailItem.rawItem.user?.name || "-"}
+                  </span>
+                </div>
+                <div>
+                  <span className="text-text-muted block text-[11px] uppercase tracking-wider font-semibold">
+                    Tanggal Pinjam
+                  </span>
+                  <span className="font-medium text-text-main">
+                    {formatDate(selectedDetailItem.borrowedAt)}
+                  </span>
+                </div>
+                <div>
+                  <span className="text-text-muted block text-[11px] uppercase tracking-wider font-semibold">
+                    Jatuh Tempo
+                  </span>
+                  <span className="font-medium text-text-main">
+                    {formatDate(selectedDetailItem.dueAt)}
+                  </span>
+                </div>
+                <div>
+                  <span className="text-text-muted block text-[11px] uppercase tracking-wider font-semibold">
+                    Tanggal Kembali
+                  </span>
+                  <span className="font-medium text-text-main">
+                    {selectedDetailItem.rawItem.loan.returnedAt
+                      ? formatDate(selectedDetailItem.rawItem.loan.returnedAt)
+                      : "-"}
+                  </span>
+                </div>
+                <div>
+                  <span className="text-text-muted block text-[11px] uppercase tracking-wider font-semibold">
+                    Status Transaksi
+                  </span>
+                  <div className="mt-1">
+                    <Badge
+                      variant={
+                        detailCirc.overallStatus === "COMPLETED"
+                          ? "success"
+                          : detailCirc.overallStatus === "OVERDUE"
+                          ? "danger"
+                          : selectedDetailItem.isToday
+                          ? "warning"
+                          : "neutral"
+                      }
+                    >
+                      {detailCirc.overallStatus === "COMPLETED"
+                        ? "Selesai"
+                        : detailCirc.overallStatus === "OVERDUE"
+                        ? `Terlambat (${detailCirc.maxDaysOverdue} hari)`
+                        : selectedDetailItem.isToday
+                        ? "Jatuh Tempo Hari Ini"
+                        : "Aktif"}
+                    </Badge>
+                  </div>
+                </div>
+                <div>
+                  <span className="text-text-muted block text-[11px] uppercase tracking-wider font-semibold">
+                    Total Denda
+                  </span>
+                  <span
+                    className={`text-sm font-bold block mt-0.5 tabular-nums ${
+                      detailCirc.totalFine === null
+                        ? "text-warning-text"
+                        : detailCirc.totalFine > 0
+                        ? "text-danger-text"
+                        : "text-text-main"
+                    }`}
+                  >
+                    {detailCirc.totalFine === null
+                      ? "Menunggu konfigurasi"
+                      : detailCirc.totalFine > 0
+                      ? `Rp ${detailCirc.totalFine.toLocaleString("id-ID")}`
+                      : "Rp 0"}
+                  </span>
+                </div>
+              </div>
+
+              {/* Daftar Eksemplar Buku */}
+              <div className="space-y-2">
+                <h4 className="text-xs font-bold uppercase tracking-wider text-text-secondary">
+                  Daftar Eksemplar ({detailCirc.items.length})
+                </h4>
+                <div className="rounded-lg border border-border">
+                  <table className="w-full text-left text-xs table-auto">
+                    <thead className="border-b border-border bg-slate-100 dark:bg-slate-800 text-[11px] font-bold uppercase tracking-wider text-slate-700 dark:text-slate-200">
+                      <tr>
+                        <th className="px-3.5 py-2.5 whitespace-nowrap">Kode Eksemplar</th>
+                        <th className="px-3.5 py-2.5">Judul Buku</th>
+                        <th className="px-3.5 py-2.5 whitespace-nowrap">Status Pengembalian</th>
+                        <th className="px-3.5 py-2.5 whitespace-nowrap">Tanggal Kembali</th>
+                        <th className="px-3.5 py-2.5 text-center whitespace-nowrap">Hari Terlambat</th>
+                        <th className="px-3.5 py-2.5 text-right whitespace-nowrap">Denda</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-border-subtle bg-surface">
+                      {detailCirc.items.map((ex) => (
+                        <tr key={ex.id} className="hover:bg-surface-subtle/70">
+                          <td className="px-3.5 py-2.5 font-mono font-medium text-text-main whitespace-nowrap">
+                            {ex.copyCode}
+                          </td>
+                          <td className="px-3.5 py-2.5 text-text-main font-medium min-w-[140px]" title={ex.bookTitle}>
+                            {ex.bookTitle}
+                          </td>
+                          <td className="px-3.5 py-2.5 whitespace-nowrap">
+                            <Badge variant={ex.status === "RETURNED" ? "success" : "neutral"}>
+                              {ex.status === "RETURNED" ? "Dikembalikan" : "Dipinjam"}
+                            </Badge>
+                          </td>
+                          <td className="px-3.5 py-2.5 whitespace-nowrap text-text-secondary tabular-nums">
+                            {ex.returnedAt ? formatDate(ex.returnedAt) : "-"}
+                          </td>
+                          <td className="px-3.5 py-2.5 whitespace-nowrap text-center tabular-nums">
+                            {ex.daysOverdue > 0 ? (
+                              <span className="font-semibold text-danger-text">{ex.daysOverdue} hari</span>
+                            ) : (
+                              <span className="text-text-muted">0 hari</span>
+                            )}
+                          </td>
+                          <td className="px-3.5 py-2.5 whitespace-nowrap text-right tabular-nums">
+                            {ex.fineAmount === null ? (
+                              <span className="text-warning-text font-medium">Menunggu konfigurasi</span>
+                            ) : ex.fineAmount > 0 ? (
+                              <span className="font-bold text-danger-text">
+                                Rp {ex.fineAmount.toLocaleString("id-ID")}
+                              </span>
+                            ) : (
+                              <span className="text-text-muted">Rp 0</span>
+                            )}
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+
+              {/* Modal Actions */}
+              <div className="pt-4 border-t border-border flex items-center justify-end gap-2">
+                {detailCirc.overallStatus !== "COMPLETED" && !isCompanyAdmin && (
+                  <Link
+                    href={`/returns?loanNumber=${encodeURIComponent(selectedDetailItem.loanNumber)}&loanId=${encodeURIComponent(selectedDetailItem.id)}`}
+                    className="inline-flex items-center gap-1.5 rounded-lg bg-blue-600 px-3.5 py-2 text-xs font-semibold text-white shadow-2xs hover:bg-blue-700 transition"
+                  >
+                    Proses Pengembalian
+                  </Link>
+                )}
+                <Button
+                  type="button"
+                  variant="secondary"
+                  size="sm"
+                  onClick={() => setSelectedDetailItem(null)}
+                >
+                  Tutup
+                </Button>
+              </div>
+            </div>
+          </Modal>
+        );
+      })()}
     </div>
   );
 }

@@ -90,10 +90,16 @@ export default function DataTable<T>({
   const mobileDisplayClass =
     mobileBreakpoint === "xl" ? "xl:hidden" : "lg:hidden";
 
+  const isBorderSuppressed =
+    className.includes("border-0") || className.includes("shadow-none");
+  const desktopContainerClass = isBorderSuppressed
+    ? `relative overflow-x-auto ${desktopDisplayClass}`
+    : `relative overflow-x-auto rounded-xl border border-border bg-slate-100 dark:bg-slate-800 shadow-xs ${desktopDisplayClass}`;
+
   return (
     <div className={`relative ${className}`}>
       {/* DESKTOP TABLE */}
-      <div className={`relative overflow-x-auto rounded-t-xl ${desktopDisplayClass}`}>
+      <div className={desktopContainerClass}>
         <table
           className={`w-full table-fixed text-left text-sm text-text-secondary ${tableClassName}`}
         >
@@ -110,7 +116,7 @@ export default function DataTable<T>({
           </colgroup>
 
           {/* THEAD */}
-          <thead className="border-b border-border bg-surface-subtle text-[11px] font-bold uppercase tracking-wider text-text-muted">
+          <thead className="border-b border-border bg-slate-100 dark:bg-slate-800 text-[11px] font-bold uppercase tracking-wider text-slate-700 dark:text-slate-200">
             <tr>
               {columns.map((col) => {
                 const alignClass =
@@ -123,10 +129,10 @@ export default function DataTable<T>({
                 const numericClass = col.isNumeric ? "tabular-nums" : "";
                 const headerPadding =
                   col.align === "center"
-                    ? "px-2 py-3"
+                    ? "px-2 py-3.5"
                     : col.align === "right"
-                    ? "px-3 py-3"
-                    : "px-3.5 py-3";
+                    ? "px-3 py-3.5"
+                    : "px-3.5 py-3.5";
 
                 return (
                   <th
@@ -140,7 +146,7 @@ export default function DataTable<T>({
                         variant="ghost"
                         size="sm"
                         onClick={() => handleSort(col.sortKey || col.key)}
-                        className={`group -ml-2 h-auto px-2 py-1 inline-flex items-center gap-1 text-left text-[11px] font-bold uppercase tracking-wider text-text-muted hover:text-text-main transition-colors focus:outline-none ${
+                        className={`group -ml-2 h-auto px-2 py-1 inline-flex items-center gap-1.5 text-left text-[11px] font-bold uppercase tracking-wider text-slate-700 dark:text-slate-200 hover:text-text-main transition-colors focus:outline-none ${
                           col.align === "right"
                             ? "justify-end ml-auto"
                             : col.align === "center"
@@ -152,7 +158,7 @@ export default function DataTable<T>({
                         <span
                           className={`inline-flex shrink-0 items-center justify-center text-xs ${
                             activeSortBy === (col.sortKey || col.key)
-                              ? "text-blue-600 font-bold"
+                              ? "text-blue-600 dark:text-blue-400 font-bold"
                               : "text-text-subtle opacity-0 group-hover:opacity-100 transition-opacity"
                           }`}
                           aria-hidden="true"
@@ -173,7 +179,7 @@ export default function DataTable<T>({
               {rowActions && (
                 <th
                   scope="col"
-                  className="px-3 py-3 text-right text-[11px] font-bold uppercase tracking-wider text-text-muted"
+                  className="px-3.5 py-3.5 text-right text-[11px] font-bold uppercase tracking-wider text-slate-700 dark:text-slate-200"
                 >
                   Aksi
                 </th>

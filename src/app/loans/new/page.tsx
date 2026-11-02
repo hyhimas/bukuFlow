@@ -2888,7 +2888,7 @@ export default function NewLoanPage() {
                   Buku yang Dipilih
                 </h3>
                 <span className="shrink-0 rounded-full bg-surface-muted px-2.5 py-0.5 text-xs font-semibold text-text-secondary">
-                  {selectedBooks.length} Buku
+                  {selectedBooks.length} Buku ({selectedBooks.reduce((acc, it) => acc + it.selectedCopyIds.length, 0)} Eksemplar)
                 </span>
               </div>
 
@@ -3070,8 +3070,10 @@ export default function NewLoanPage() {
                     <span className="font-semibold text-text-main">{selectedMember.name}</span>
                   </div>
                   <div className="flex justify-between">
-                    <span className="text-text-muted">Jumlah Buku:</span>
-                    <span className="font-semibold text-text-main">{selectedBooks.length} buku</span>
+                    <span className="text-text-muted">Total Buku:</span>
+                    <span className="font-semibold text-text-main">
+                      {selectedBooks.length} judul ({selectedBooks.reduce((acc, it) => acc + it.selectedCopyIds.length, 0)} eksemplar)
+                    </span>
                   </div>
                   <div className="flex justify-between">
                     <span className="text-text-muted">Jatuh Tempo:</span>
@@ -3171,9 +3173,9 @@ export default function NewLoanPage() {
               </div>
 
               <div className="space-y-4 p-5">
-                <div className="rounded-lg border border-emerald-200 bg-emerald-50 px-4 py-3">
-                  <p className="text-xs text-text-muted">Nomor peminjaman</p>
-                  <p className="mt-1 text-xl font-bold text-text-main">
+                <div className="rounded-lg border border-emerald-200 bg-emerald-50 dark:bg-emerald-950/40 dark:border-emerald-800/60 px-4 py-3">
+                  <p className="text-xs font-medium text-emerald-800 dark:text-emerald-300">Nomor peminjaman</p>
+                  <p className="mt-1 text-xl font-bold font-mono text-emerald-950 dark:text-emerald-100">
                     {successLoan.loanNumber}
                   </p>
                 </div>
