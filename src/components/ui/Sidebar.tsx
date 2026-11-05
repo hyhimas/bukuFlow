@@ -109,6 +109,22 @@ export default function Sidebar({
     };
   }, [open, mobile, onClose]);
 
+  // Lock body scroll saat mobile drawer terbuka
+  useEffect(() => {
+    if (!mobile || !open) return;
+
+    const originalBodyOverflow = document.body.style.overflow;
+    const originalHtmlOverflow = document.documentElement.style.overflow;
+
+    document.body.style.overflow = "hidden";
+    document.documentElement.style.overflow = "hidden";
+
+    return () => {
+      document.body.style.overflow = originalBodyOverflow;
+      document.documentElement.style.overflow = originalHtmlOverflow;
+    };
+  }, [open, mobile]);
+
   const role = session?.user.role;
 
   const handleConfirmLogout = async () => {
@@ -132,7 +148,8 @@ export default function Sidebar({
           type="button"
           aria-label="Tutup menu navigasi"
           onClick={onClose}
-          className="print:hidden fixed inset-0 z-40 bg-overlay"
+          onTouchMove={(e) => e.preventDefault()}
+          className="print:hidden fixed inset-0 z-40 bg-overlay touch-none"
         />
       )}
 
