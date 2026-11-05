@@ -82,7 +82,7 @@ export function calculateOverdueDays(dueAtStr?: string, compareDateStr?: string)
 export function calculateTransactionCirculation(
   loan: Pick<Loan, "dueAt"> & Partial<Pick<Loan, "status" | "returnedAt">>,
   items: Array<{
-    loanItem: { id: string; status: "BORROWED" | "RETURNED"; returnedAt?: string };
+    loanItem: { id: string; status: "BORROWED" | "RETURNED"; returnedAt?: string; fineAmount?: number };
     book: { title: string };
     bookCopy: { code: string };
   }>,
@@ -112,7 +112,20 @@ export function calculateTransactionCirculation(
       : todayStr;
 
     const days = calculateOverdueDays(dueStr, itemReferenceDateStr);
-    const fine = dailyRate !== null ? days * dailyRate : null;
+    const hasSettledServerFine =
+      isReturned && typeof it.loanItem.fineAmount === "number";
+    const serverFine =
+      hasSettledServerFine
+        ? it.loanItem.fineAmount!
+        : typeof it.loanItem.fineAmount === "number" && it.loanItem.fineAmount > 0
+        ? it.loanItem.fineAmount
+        : null;
+    const fine =
+      serverFine !== null
+        ? serverFine
+        : dailyRate !== null
+        ? days * dailyRate
+        : null;
 
     return {
       id: it.loanItem.id,
@@ -141,10 +154,12 @@ export function calculateTransactionCirculation(
   }
 
   const maxDays = itemDetails.reduce((max, it) => Math.max(max, it.daysOverdue), 0);
-  const totalFine =
-    dailyRate !== null
-      ? itemDetails.reduce((sum, it) => sum + (it.fineAmount || 0), 0)
-      : null;
+  const canCalculateTotal =
+    dailyRate !== null ||
+    itemDetails.some((it) => typeof it.fineAmount === "number");
+  const totalFine = canCalculateTotal
+    ? itemDetails.reduce((sum, it) => sum + (it.fineAmount || 0), 0)
+    : null;
 
   return {
     totalFine,

@@ -57,3 +57,5 @@ tests/
 # Audit & temporary tracking (jika tidak ingin di-commit)
 AUDIT-*.md
 PROGRESS.md
+CLAUDE.md
+DARK-PROGRESS.md

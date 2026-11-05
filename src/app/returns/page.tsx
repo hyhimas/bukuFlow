@@ -1,7 +1,7 @@
 "use client";
 
-import { useCallback, useEffect, useRef, useState } from "react";
-import { useRouter } from "next/navigation";
+import { Suspense, useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useRouter, useSearchParams } from "next/navigation";
 import { getSession, isStoredSessionExpired, hasStoredAuth } from "@/lib/auth";
 import { canAccessReturns, canManageReturns } from "@/lib/authorization";
 
@@ -38,6 +38,13 @@ function getTodayLocal(): string {
   return `${year}-${month}-${day}`;
 }
 
+function isLoanOverdue(loanData: ReturnLoanData, today: Date): boolean {
+  if (loanData.loan.status === "OVERDUE") return true;
+  if (!loanData.loan.dueAt) return false;
+  const dueDate = new Date(`${loanData.loan.dueAt.slice(0, 10)}T00:00:00`);
+  return !Number.isNaN(dueDate.getTime()) && dueDate.getTime() < today.getTime();
+}
+
 function calculateLateInfo(
   dueAt?: string,
   returnDateStr?: string,
@@ -60,14 +67,25 @@ function calculateLateInfo(
   };
 }
 
-export default function ReturnsPage() {
+function ReturnsContent() {
   const router = useRouter();
+  const searchParams = useSearchParams();
   const { toast } = useToast();
 
   const detailRef = useRef<HTMLDivElement>(null);
   const successModalCloseRef = useRef<HTMLButtonElement>(null);
 
   const [loans, setLoans] = useState<ReturnLoanData[]>([]);
+
+  const hasDueToParam = Boolean(searchParams?.get("due_to") || searchParams?.get("dueTo"));
+  const initialStatus = (searchParams?.get("status") === "OVERDUE" || hasDueToParam) ? "OVERDUE" : "ALL";
+  const [statusFilter, setStatusFilter] = useState<"ALL" | "OVERDUE">(initialStatus);
+  const [prevUrlStatus, setPrevUrlStatus] = useState(initialStatus);
+
+  if (initialStatus !== prevUrlStatus) {
+    setPrevUrlStatus(initialStatus);
+    setStatusFilter(initialStatus);
+  }
 
   const [query, setQuery] = useState("");
   const [debouncedQuery, setDebouncedQuery] = useState("");
@@ -248,7 +266,79 @@ export default function ReturnsPage() {
         return;
       }
 
-      // C. Match Member Number / Name / Identity Number (Support multiple active loans from server)
+      // C. Cari ke server via getActiveReturnsApi (pencarian langsung transaksi aktif ke server)
+      try {
+        const serverLoansRes = await getActiveReturnsApi({
+          search: rawCode,
+          page: 1,
+          size: 5,
+        });
+
+        if (serverLoansRes.items.length > 0) {
+          // Cari item yang persis cocok dengan barcode eksemplar
+          let sFoundLoan: ReturnLoanData | null = null;
+          let sFoundItem: ReturnLoanData["items"][0] | null = null;
+
+          for (const sLoan of serverLoansRes.items) {
+            const item = sLoan.items.find((it) => {
+              const cCode = it.bookCopy.code.toUpperCase();
+              const cId = it.bookCopy.id.toUpperCase();
+              const bCode = it.book.code.toUpperCase();
+              const bIsbn = (it.book.isbn || "").toUpperCase();
+              const lItemId = it.loanItem.id.toUpperCase();
+
+              return (
+                cCode === code ||
+                cId === code ||
+                cCode.replace(/[^A-Z0-9]/g, "") === cleanCode ||
+                lItemId === code ||
+                bCode === code ||
+                (bIsbn && bIsbn === code)
+              );
+            });
+
+            if (item) {
+              sFoundLoan = sLoan;
+              sFoundItem = item;
+              break;
+            }
+          }
+
+          if (sFoundLoan && sFoundItem) {
+            selectLoan(sFoundLoan);
+            if (sFoundItem.loanItem.status === "BORROWED") {
+              setSelectedItemIds([sFoundItem.loanItem.id]);
+              toast.success(
+                `Ditemukan peminjaman ${sFoundLoan.loan.loanNumber}. Eksemplar ${sFoundItem.bookCopy.code} dipilih.`
+              );
+            } else {
+              setSelectedItemIds([]);
+              toast.warning(
+                `Peminjaman ${sFoundLoan.loan.loanNumber} ditemukan, namun eksemplar ${sFoundItem.bookCopy.code} sudah dikembalikan.`
+              );
+            }
+            setLoans((prev) => [sFoundLoan!, ...prev.filter((p) => p.loan.id !== sFoundLoan!.loan.id)]);
+            return;
+          }
+
+          // Jika cocok nomor transaksi atau loan umum
+          const matchedByTrx = serverLoansRes.items[0];
+          selectLoan(matchedByTrx);
+          const borrowedIds = matchedByTrx.items
+            .filter((it) => it.loanItem.status === "BORROWED")
+            .map((it) => it.loanItem.id);
+          setSelectedItemIds(borrowedIds);
+          setLoans((prev) => [matchedByTrx, ...prev.filter((p) => p.loan.id !== matchedByTrx.loan.id)]);
+          toast.success(
+            `Peminjaman ${matchedByTrx.loan.loanNumber} (${matchedByTrx.member.name}) ditemukan.`
+          );
+          return;
+        }
+      } catch {
+        // Lanjut ke pengecekan kartu anggota
+      }
+
+      // D. Match Member Number / Name / Identity Number (Support multiple active loans from server)
       let foundMemberObj: Member | null = null;
       try {
         const memberCandidates = await searchMembersApi(rawCode);
@@ -666,10 +756,14 @@ export default function ReturnsPage() {
       };
 
       setReturnedCopies(returnedItemsList);
+      const serverFine =
+        typeof loan.fineAmount === "number" && loan.fineAmount >= 0
+          ? loan.fineAmount
+          : null;
       setLastReturnDetails({
         daysOverdue: lateInfo.daysOverdue,
         finePerBook: lateInfo.finePerBook,
-        totalFine,
+        totalFine: serverFine !== null ? serverFine : totalFine,
         returnDate,
         isPartial: hasRemainingBorrowed,
         remainingCount: remainingBorrowedCount,
@@ -805,9 +899,39 @@ export default function ReturnsPage() {
 
 
 
+  const overdueCount = useMemo(() => {
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    return loans.filter((item) => isLoanOverdue(item, today)).length;
+  }, [loans]);
+
+  const sortedLoans = useMemo(() => {
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+
+    let list = loans;
+    if (statusFilter === "OVERDUE") {
+      list = list.filter((item) => isLoanOverdue(item, today));
+    }
+
+    return [...list].sort((a, b) => {
+      const overdueA = isLoanOverdue(a, today);
+      const overdueB = isLoanOverdue(b, today);
+
+      // 1. Yang terlambat paling atas
+      if (overdueA && !overdueB) return -1;
+      if (!overdueA && overdueB) return 1;
+
+      // 2. Di antara yang sama-sama terlambat / sama-sama belum: tanggal jatuh tempo paling lama/lampau di atas
+      const timeA = a.loan.dueAt ? new Date(`${a.loan.dueAt.slice(0, 10)}T00:00:00`).getTime() : 0;
+      const timeB = b.loan.dueAt ? new Date(`${b.loan.dueAt.slice(0, 10)}T00:00:00`).getTime() : 0;
+      return timeA - timeB;
+    });
+  }, [loans, statusFilter]);
+
   // Active loans for currently selected member (for multi-loan switcher)
   const memberActiveLoans = selectedLoan
-    ? loans.filter(
+    ? sortedLoans.filter(
         (l) =>
           l.member.id === selectedLoan.member.id ||
           l.member.memberNumber === selectedLoan.member.memberNumber
@@ -839,12 +963,12 @@ export default function ReturnsPage() {
 
         {/* Banner Durasi/Tarif Denda Belum Dikonfigurasi */}
         {settingsPending && (
-          <div className="mb-5 rounded-xl border border-amber-300 bg-amber-50 p-4 text-xs text-amber-900">
+          <div className="mb-5 rounded-xl border border-warning-border bg-warning-soft p-4 text-xs text-warning-text">
             <div className="flex items-center gap-2 font-bold text-sm">
-              <svg className="h-4 w-4 text-amber-600 shrink-0 inline" fill="none" viewBox="0 0 24 24" stroke="currentColor" aria-hidden="true"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" /></svg>
+              <svg className="h-4 w-4 text-warning-text shrink-0 inline" fill="none" viewBox="0 0 24 24" stroke="currentColor" aria-hidden="true"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" /></svg>
               <p>Belum dikonfigurasi di server</p>
             </div>
-            <p className="mt-1 text-xs text-amber-800">
+            <p className="mt-1 text-xs text-warning-text/90">
               Pengaturan kebijakan sirkulasi instansi belum disetel di Pengaturan. Denda keterlambatan belum bisa dihitung secara otomatis.
             </p>
           </div>
@@ -891,8 +1015,9 @@ export default function ReturnsPage() {
             </Card>
 
             {!error && (
-              <Card className="mt-5 p-4 sm:p-5">
-              <div className="flex items-center justify-between gap-3">
+              <>
+                <Card className="mt-5 p-4 sm:p-5">
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
                 <div>
                   <h3 className="text-lg font-semibold text-text-main">
                     2. Daftar Peminjaman
@@ -902,11 +1027,58 @@ export default function ReturnsPage() {
                   </p>
                 </div>
 
-                {loans.length > 0 && (
-                  <p className="shrink-0 text-xs text-text-muted">
-                    {totalItems > 0 ? `${totalItems} peminjaman` : `${loans.length} peminjaman`}
-                  </p>
-                )}
+                <div className="w-full sm:w-auto">
+                  <div
+                    role="group"
+                    aria-label="Filter status peminjaman"
+                    className="grid grid-cols-2 sm:flex sm:items-center gap-1 rounded-xl sm:rounded-lg bg-surface-muted p-1 text-xs font-medium w-full sm:w-auto"
+                  >
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setStatusFilter("ALL");
+                        setPage(1);
+                        router.replace("/returns", { scroll: false });
+                      }}
+                      className={`flex items-center justify-center gap-1.5 rounded-lg sm:rounded-md px-3 py-2 sm:py-1 min-h-[38px] sm:min-h-0 text-center transition ${
+                        statusFilter === "ALL"
+                          ? "bg-surface text-text-main shadow-2xs font-semibold"
+                          : "text-text-muted hover:text-text-main"
+                      }`}
+                    >
+                      <span>Semua</span>
+                      <span
+                        className={`rounded-full px-1.5 py-0.2 text-[10px] font-bold ${
+                          statusFilter === "ALL"
+                            ? "bg-surface-subtle text-text-main"
+                            : "bg-surface/60 text-text-muted"
+                        }`}
+                      >
+                        {totalItems > 0 ? totalItems : loans.length}
+                      </span>
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setStatusFilter("OVERDUE");
+                        setPage(1);
+                        router.replace("/returns?status=OVERDUE", { scroll: false });
+                      }}
+                      className={`flex items-center justify-center gap-1.5 rounded-lg sm:rounded-md px-3 py-2 sm:py-1 min-h-[38px] sm:min-h-0 text-center transition ${
+                        statusFilter === "OVERDUE"
+                          ? "bg-red-500/15 text-red-600 dark:text-red-400 border border-red-500/30 font-semibold shadow-2xs"
+                          : "text-text-muted hover:text-red-500"
+                      }`}
+                    >
+                      <span>Terlambat</span>
+                      {overdueCount > 0 && (
+                        <span className="rounded-full bg-red-100 text-red-700 dark:bg-red-950 dark:text-red-300 px-1.5 py-0.2 text-[10px] font-bold">
+                          {overdueCount}
+                        </span>
+                      )}
+                    </button>
+                  </div>
+                </div>
               </div>
 
               {loading && loans.length === 0 && (
@@ -920,16 +1092,20 @@ export default function ReturnsPage() {
                 </div>
               )}
 
-              {!loading && !error && loans.length === 0 && (
+              {!loading && !error && sortedLoans.length === 0 && (
                 <div className="mt-4">
                   <EmptyState
                     title={
-                      query.trim()
+                      statusFilter === "OVERDUE"
+                        ? "Tidak ada peminjaman terlambat"
+                        : query.trim()
                         ? "Peminjaman tidak ditemukan"
                         : "Belum ada peminjaman aktif"
                     }
                     description={
-                      query.trim()
+                      statusFilter === "OVERDUE"
+                        ? "Seluruh peminjaman aktif saat ini masih berada dalam batas waktu peminjaman yang ditentukan."
+                        : query.trim()
                         ? `Tidak ada peminjaman yang sesuai dengan "${query.trim()}". Coba gunakan nomor peminjaman, nama anggota, judul buku, atau kode eksemplar lain.`
                         : "Belum ada peminjaman aktif yang dapat diproses. Peminjaman akan muncul di sini selama masih ada buku yang belum dikembalikan."
                     }
@@ -937,9 +1113,9 @@ export default function ReturnsPage() {
                 </div>
               )}
 
-              {loans.length > 0 && (
+              {sortedLoans.length > 0 && (
                 <div className="mt-4 space-y-2">
-                  {loans.map((item) => {
+                  {sortedLoans.map((item) => {
                     const overallStatus = getOverallStatus(item);
 
                     return (
@@ -951,8 +1127,8 @@ export default function ReturnsPage() {
                         aria-pressed={selectedLoan?.loan.id === item.loan.id}
                         className={`w-full h-auto rounded-xl border p-3 text-left justify-start font-normal transition ${
                           selectedLoan?.loan.id === item.loan.id
-                            ? "border-blue-500 bg-blue-50 ring-1 ring-blue-200"
-                            : "border-border bg-surface hover:border-blue-300 hover:bg-blue-50"
+                            ? "border-brand bg-brand-soft ring-1 ring-brand-border"
+                            : "border-border bg-surface hover:border-brand-border hover:bg-surface-muted/50"
                         }`}
                       >
                         <div className="grid w-full grid-cols-[minmax(0,1fr)_auto] items-start gap-3">
@@ -981,25 +1157,40 @@ export default function ReturnsPage() {
                   })}
                 </div>
               )}
-
-              {/* PAGINATION */}
-              {loans.length > 0 && (
-                <Pagination
-                  currentPage={page}
-                  totalPages={totalPages}
-                  onPageChange={(nextPage) => setPage(nextPage)}
-                  totalItems={totalItems}
-                  pageSize={pageSize}
-                  onPageSizeChange={(newSize) => {
-                    setPageSize(newSize);
-                    setPage(1);
-                  }}
-                  className="mt-4 -mx-4 -mb-4 sm:-mx-5 sm:-mb-5 rounded-b-xl border-t"
-                />
-              )}
             </Card>
+
+            {/* PAGINATION (SEPARATE CARD) */}
+            {sortedLoans.length > 0 && (
+              <div className="mt-4">
+                <div className="rounded-xl border border-border bg-surface shadow-2xs">
+                  <Pagination
+                    currentPage={page}
+                    totalPages={
+                      statusFilter === "OVERDUE"
+                        ? Math.max(1, Math.ceil(sortedLoans.length / pageSize))
+                        : totalPages
+                    }
+                    onPageChange={(nextPage) => setPage(nextPage)}
+                    totalItems={
+                      statusFilter === "OVERDUE"
+                        ? sortedLoans.length
+                        : totalItems > 0
+                        ? totalItems
+                        : loans.length
+                    }
+                    pageSize={pageSize}
+                    onPageSizeChange={(newSize) => {
+                      setPageSize(newSize);
+                      setPage(1);
+                    }}
+                    className="border-t-0 rounded-xl"
+                  />
+                </div>
+              </div>
             )}
-          </div>
+          </>
+        )}
+      </div>
 
           {/* KOLOM KANAN: DETAIL PENGEMBALIAN */}
           <div
@@ -1007,7 +1198,7 @@ export default function ReturnsPage() {
             className="min-w-0 scroll-mt-20 md:sticky md:top-20 md:self-start"
           >
             {selectedLoan ? (
-              <Card className="border-blue-200 p-4 sm:p-5">
+              <Card className="border-border p-4 sm:p-5">
                 {(() => {
                   const overallStatus = getOverallStatus(selectedLoan);
 
@@ -1058,7 +1249,7 @@ export default function ReturnsPage() {
                     <>
                       {/* Non-staff Mode Notice */}
                       {!isStaff && (
-                        <div className="mb-4 rounded-xl border border-amber-200 bg-amber-50 p-3 text-xs text-amber-800">
+                        <div className="mb-4 rounded-xl border border-warning-border bg-warning-soft p-3 text-xs text-warning-text">
                           <span className="font-semibold">Mode Baca Saja:</span>{" "}
                           Akun Anda tidak memiliki hak akses staf untuk memproses pengembalian buku. Hubungi administrator jika Anda memerlukan akses.
                         </div>
@@ -1066,71 +1257,86 @@ export default function ReturnsPage() {
 
                       {/* Multiple Active Loans Switcher for Member */}
                       {memberActiveLoans.length > 1 && (
-                        <div className="mb-4 rounded-xl border border-blue-200 bg-blue-50/70 p-3">
-                          <div className="flex items-center justify-between gap-2">
-                            <p className="text-xs font-semibold text-blue-900">
-                              Anggota ini memiliki {memberActiveLoans.length} transaksi aktif:
+                        <div className="mb-4 rounded-xl border border-brand-border/50 bg-brand-soft/30 p-3 sm:p-3.5">
+                          <div className="flex items-center justify-between gap-2 pb-2 border-b border-brand-border/30">
+                            <p className="text-xs font-semibold text-text-main flex items-center gap-1.5">
+                              <span className="flex h-2 w-2 rounded-full bg-brand shrink-0" />
+                              <span>Anggota ini memiliki {memberActiveLoans.length} transaksi aktif:</span>
                             </p>
-                            <span className="text-xs text-blue-700 font-medium">
-                              Pilih transaksi untuk diproses
+                            <span className="text-[11px] text-text-muted font-medium shrink-0">
+                              Pilih untuk diproses
                             </span>
                           </div>
 
-                          {memberActiveLoans.length <= 3 ? (
-                            <div className="mt-2 flex flex-wrap gap-1.5">
-                              {memberActiveLoans.map((l) => {
-                                const isCurrent =
-                                  l.loan.id === selectedLoan.loan.id;
-                                const unreturnedCount = l.items.filter(
-                                  (it) => it.loanItem.status === "BORROWED"
-                                ).length;
+                          <div className="mt-2.5 space-y-1.5">
+                            {memberActiveLoans.map((l) => {
+                              const isCurrent =
+                                l.loan.id === selectedLoan.loan.id;
+                              const unreturnedCount = l.items.filter(
+                                (it) => it.loanItem.status === "BORROWED"
+                              ).length;
+                              const today = new Date();
+                              today.setHours(0, 0, 0, 0);
+                              const isOverdue = isLoanOverdue(l, today);
 
-                                return (
-                                  <Button
-                                    key={l.loan.id}
-                                    type="button"
-                                    variant={isCurrent ? "primary" : "secondary"}
-                                    size="sm"
-                                    onClick={() => selectLoan(l)}
-                                    className="h-auto min-h-0 py-1 px-2.5 text-xs whitespace-nowrap"
-                                  >
-                                    {l.loan.loanNumber} ({unreturnedCount} buku)
-                                  </Button>
-                                );
-                              })}
-                            </div>
-                          ) : (
-                            <div className="mt-2">
-                              <div className="relative">
-                                <select
-                                  id="member-active-loan-switcher"
-                                  aria-label="Pilih transaksi aktif anggota"
-                                  value={selectedLoan.loan.id}
-                                  onChange={(e) => {
-                                    const target = memberActiveLoans.find((l) => l.loan.id === e.target.value);
-                                    if (target) selectLoan(target);
-                                  }}
-                                  className="w-full h-9 rounded-lg border border-blue-300 bg-surface pl-3 pr-8 text-xs font-semibold text-text-main shadow-2xs focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 cursor-pointer"
+                              return (
+                                <button
+                                  key={l.loan.id}
+                                  type="button"
+                                  onClick={() => selectLoan(l)}
+                                  className={`w-full flex items-center justify-between gap-2.5 rounded-lg border px-3 py-2 text-left transition ${
+                                    isCurrent
+                                      ? "border-brand bg-brand-soft ring-1 ring-brand-border font-medium shadow-2xs"
+                                      : "border-border bg-surface hover:border-brand-border/60 hover:bg-surface-muted/60"
+                                  }`}
                                 >
-                                  {memberActiveLoans.map((l) => {
-                                    const unreturnedCount = l.items.filter(
-                                      (it) => it.loanItem.status === "BORROWED"
-                                    ).length;
-                                    return (
-                                      <option key={l.loan.id} value={l.loan.id}>
-                                        {l.loan.loanNumber} ({unreturnedCount} buku) &bull; Pinjam: {formatDate(l.loan.borrowedAt)} &rarr; Jatuh tempo: {formatDate(l.loan.dueAt)}
-                                      </option>
-                                    );
-                                  })}
-                                </select>
-                                <div className="pointer-events-none absolute inset-y-0 right-0 flex items-center px-2.5 text-text-muted">
-                                  <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" aria-hidden="true">
-                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
-                                  </svg>
-                                </div>
-                              </div>
-                            </div>
-                          )}
+                                  <div className="flex min-w-0 items-center gap-2.5">
+                                    {/* Radio Indicator */}
+                                    <span
+                                      className={`flex h-4 w-4 shrink-0 items-center justify-center rounded-full border transition ${
+                                        isCurrent
+                                          ? "border-brand bg-brand text-white"
+                                          : "border-border bg-surface-muted"
+                                      }`}
+                                    >
+                                      {isCurrent && (
+                                        <span className="h-1.5 w-1.5 rounded-full bg-white" />
+                                      )}
+                                    </span>
+
+                                    <span
+                                      className={`font-mono text-xs font-bold truncate ${
+                                        isCurrent ? "text-brand dark:text-blue-300" : "text-text-main"
+                                      }`}
+                                    >
+                                      {l.loan.loanNumber}
+                                    </span>
+
+                                    <span className="text-xs text-text-muted truncate">
+                                      &bull; {unreturnedCount} buku dipinjam
+                                    </span>
+                                  </div>
+
+                                  <div className="flex items-center gap-2 shrink-0">
+                                    {isOverdue && (
+                                      <span className="rounded-full bg-red-100 text-red-700 dark:bg-red-950 dark:text-red-300 px-2 py-0.5 text-[10px] font-bold border border-red-200 dark:border-red-900/50">
+                                        Terlambat
+                                      </span>
+                                    )}
+                                    <span
+                                      className={`text-xs font-semibold ${
+                                        isCurrent
+                                          ? "text-brand dark:text-blue-300"
+                                          : "text-text-muted"
+                                      }`}
+                                    >
+                                      {isCurrent ? "Sedang Diproses" : "Pilih"}
+                                    </span>
+                                  </div>
+                                </button>
+                              );
+                            })}
+                          </div>
                         </div>
                       )}
 
@@ -1182,14 +1388,14 @@ export default function ReturnsPage() {
 
                         <div className="rounded-lg bg-surface-subtle p-3">
                           <p className="text-xs text-text-muted">Dipinjam</p>
-                          <p className="mt-1 font-semibold text-amber-700">
+                          <p className="mt-1 font-semibold text-warning-text">
                             {borrowedCount} buku
                           </p>
                         </div>
 
                         <div className="rounded-lg bg-surface-subtle p-3">
                           <p className="text-xs text-text-muted">Dikembalikan</p>
-                          <p className="mt-1 font-semibold text-emerald-700">
+                          <p className="mt-1 font-semibold text-success-text">
                             {returnedCount} buku
                           </p>
                         </div>
@@ -1197,61 +1403,70 @@ export default function ReturnsPage() {
 
                       {/* Pemilihan Tanggal Pengembalian (Mendukung Pengembalian Lampau / Book Drop) */}
                       {isStaff && (
-                        <div className="mt-4 rounded-xl border border-border bg-surface-subtle p-3.5">
-                          <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
-                            <div className="space-y-0.5">
-                              <label htmlFor="return-date-picker" className="text-xs font-semibold text-text-main flex items-center gap-1.5">
-                                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="text-primary-600" aria-hidden="true">
-                                  <rect x="3" y="4" width="18" height="18" rx="2" ry="2" />
-                                  <line x1="16" y1="2" x2="16" y2="6" />
-                                  <line x1="8" y1="2" x2="8" y2="6" />
-                                  <line x1="3" y1="10" x2="21" y2="10" />
-                                </svg>
-                                Tanggal Pengembalian Fisik
-                              </label>
-                              <p className="text-[11px] text-text-muted">
-                                Default hari ini ({formatDate(getTodayLocal())}). Ubah ke tanggal lampau jika buku dikembalikan melalui kotak pengembalian (book drop).
-                              </p>
-                            </div>
-
-                            <div className="w-full sm:w-56 shrink-0">
-                              <DatePicker
-                                id="return-date-picker"
-                                value={returnDate}
-                                onChange={(val) => setReturnDate(val || getTodayLocal())}
-                                max={getTodayLocal()}
-                                min={selectedLoan.loan.borrowedAt ? selectedLoan.loan.borrowedAt.slice(0, 10) : undefined}
-                              />
-                            </div>
+                        <div className="mt-4 rounded-xl border border-border bg-surface-subtle p-3.5 space-y-2.5">
+                          <div>
+                            <label
+                              htmlFor="return-date-picker"
+                              className="text-xs font-semibold text-text-main flex items-center gap-1.5"
+                            >
+                              <svg
+                                width="14"
+                                height="14"
+                                viewBox="0 0 24 24"
+                                fill="none"
+                                stroke="currentColor"
+                                strokeWidth="2"
+                                className="text-brand shrink-0"
+                                aria-hidden="true"
+                              >
+                                <rect x="3" y="4" width="18" height="18" rx="2" ry="2" />
+                                <line x1="16" y1="2" x2="16" y2="6" />
+                                <line x1="8" y1="2" x2="8" y2="6" />
+                                <line x1="3" y1="10" x2="21" y2="10" />
+                              </svg>
+                              <span>Tanggal Pengembalian Fisik</span>
+                            </label>
+                            <p className="mt-1 text-[11px] text-text-muted leading-relaxed">
+                              Default hari ini ({formatDate(getTodayLocal())}). Ubah ke tanggal lampau jika buku dikembalikan melalui kotak pengembalian (book drop).
+                            </p>
                           </div>
+
+                          <div className="w-full">
+                            <DatePicker
+                              id="return-date-picker"
+                              value={returnDate}
+                              onChange={(val) => setReturnDate(val || getTodayLocal())}
+                              max={getTodayLocal()}
+                              min={selectedLoan.loan.borrowedAt ? selectedLoan.loan.borrowedAt.slice(0, 10) : undefined}
+                            />
+                          </div>
+
                           {returnDate < getTodayLocal() && (
-                            <div className="mt-2.5 flex items-center gap-1.5 text-xs text-amber-800 bg-amber-50 rounded-lg px-2.5 py-1.5 border border-amber-200">
-                              <span className="font-semibold text-amber-900">Mode Pengembalian Lampau:</span>
+                            <div className="mt-2.5 flex items-center gap-1.5 text-xs text-warning-text bg-warning-soft rounded-lg px-2.5 py-1.5 border border-warning-border">
+                              <span className="font-semibold text-warning-text">Mode Pengembalian Lampau:</span>
                               Denda dan keterlambatan dihitung berdasarkan tanggal fisik pengembalian ({formatDate(returnDate)}).
                             </div>
                           )}
                         </div>
                       )}
 
-
-
                       {/* Perhitungan Hari Terlambat & Denda */}
                       {lateInfo.daysOverdue > 0 ? (
-                        <div className="mt-4 rounded-xl border border-red-200 bg-red-50 p-3.5 text-xs text-red-900">
+                        <div className="mt-4 rounded-xl border border-danger-border bg-danger-soft p-3.5 text-xs text-danger-text">
                           <div className="flex items-center justify-between font-semibold">
                             <span className="flex items-center gap-1.5">
-                              <svg className="h-4 w-4 text-red-600 shrink-0 inline" fill="none" viewBox="0 0 24 24" stroke="currentColor" aria-hidden="true"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" /></svg>{" "}
+                              <svg className="h-4 w-4 text-danger-text shrink-0 inline" fill="none" viewBox="0 0 24 24" stroke="currentColor" aria-hidden="true"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" /></svg>{" "}
                               Terlambat {lateInfo.daysOverdue} Hari
                             </span>
-                            <span className="rounded bg-red-100 px-2 py-0.5 text-xs font-bold text-red-700">
+                            <span className="rounded bg-danger-border/40 px-2 py-0.5 text-xs font-bold text-danger-text">
                               {dailyFineRate !== null
                                 ? `Rp ${dailyFineRate.toLocaleString("id-ID")} / hari / buku`
                                 : "belum dikonfigurasi"}
                             </span>
                           </div>
-                          <p className="mt-1.5 text-red-700">
+                          <p className="mt-1.5 text-danger-text/90">
                             Estimasi denda ({selectedItemIds.length > 0 ? `${selectedItemIds.length} buku dipilih` : `${borrowedCount} buku dipinjam`}):{" "}
-                            <span className="font-bold text-red-900">
+                            <span className="font-bold text-danger-text">
                               {estimatedFine !== null
                                 ? `Rp ${estimatedFine.toLocaleString("id-ID")}`
                                 : "belum bisa dihitung"}
@@ -1259,16 +1474,19 @@ export default function ReturnsPage() {
                           </p>
                         </div>
                       ) : (
-                        <div className="mt-4 flex items-center gap-2 rounded-xl border border-emerald-200 bg-emerald-50/60 p-3 text-xs text-emerald-800">
-                          <svg className="h-4 w-4 text-emerald-600 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" aria-hidden="true"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M5 13l4 4L19 7" /></svg>
+                        <div className="mt-4 flex items-center gap-2 rounded-xl border border-success-border bg-success-soft p-3 text-xs text-success-text">
+                          <svg className="h-4 w-4 text-success-text shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" aria-hidden="true"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M5 13l4 4L19 7" /></svg>
                           <span>Pengembalian tepat waktu (tidak ada denda keterlambatan).</span>
                         </div>
                       )}
 
                       <div className="mt-5">
-                        <div className="flex items-center justify-between">
-                          <h4 className="font-semibold text-text-main">
-                            Detail buku
+                        <div className="flex items-center justify-between gap-2">
+                          <h4 className="font-semibold text-text-main flex items-center gap-2">
+                            <span>Detail buku</span>
+                            <span className="text-xs font-normal text-text-muted">
+                              ({selectedLoan.items.length} total &bull; {borrowedCount} dipinjam)
+                            </span>
                           </h4>
                           {isStaff && borrowedCount > 1 && (
                             <Button
@@ -1276,7 +1494,7 @@ export default function ReturnsPage() {
                               variant="ghost"
                               size="sm"
                               onClick={handleSelectAllToggle}
-                              className="h-auto min-h-0 p-0 text-xs font-semibold text-blue-600 hover:text-blue-800"
+                              className="h-auto min-h-0 p-0 text-xs font-semibold text-brand hover:text-brand-hover shrink-0"
                             >
                               {allBorrowedSelected
                                 ? "Batal pilih semua"
@@ -1302,7 +1520,7 @@ export default function ReturnsPage() {
                                   if (el) el.indeterminate = isPartiallySelected;
                                 }}
                                 onChange={handleSelectAllToggle}
-                                className="h-4 w-4 rounded border-border text-blue-600 focus:ring-2 focus:ring-blue-500"
+                                className="h-4 w-4 rounded border-border text-brand focus:ring-2 focus:ring-brand"
                               />
                               Pilih Semua Buku Dipinjam
                             </label>
@@ -1312,7 +1530,13 @@ export default function ReturnsPage() {
                           </div>
                         )}
 
-                        <div className="mt-3 space-y-2.5">
+                        <div
+                          className={`mt-3 space-y-2.5 ${
+                            selectedLoan.items.length > 3
+                              ? "max-h-[380px] sm:max-h-[440px] overflow-y-auto pr-1.5 scrollbar-thin"
+                              : ""
+                          }`}
+                        >
                           {selectedLoan.items.map(
                             ({ loanItem, book, bookCopy }) => {
                               const isBorrowed = loanItem.status === "BORROWED";
@@ -1328,7 +1552,7 @@ export default function ReturnsPage() {
                                       checked={selected}
                                       disabled={!isBorrowed || returnLoading}
                                       onChange={() => toggleItem(loanItem.id)}
-                                      className="mt-1 h-4 w-4 shrink-0 rounded border-border text-blue-600 focus:ring-2 focus:ring-blue-500 disabled:cursor-not-allowed"
+                                      className="mt-1 h-4 w-4 shrink-0 rounded border-border text-brand focus:ring-2 focus:ring-brand disabled:cursor-not-allowed"
                                     />
                                   )}
 
@@ -1370,7 +1594,7 @@ export default function ReturnsPage() {
 
                                     {loanItem.status === "RETURNED" &&
                                       loanItem.returnedAt && (
-                                        <p className="mt-2 text-xs font-medium text-emerald-700">
+                                        <p className="mt-2 text-xs font-medium text-success-text">
                                           Dikembalikan: {formatDate(loanItem.returnedAt)}
                                         </p>
                                       )}
@@ -1386,7 +1610,7 @@ export default function ReturnsPage() {
                                     className={`flex items-start gap-3 rounded-xl border p-3.5 ${
                                       isBorrowed
                                         ? "border-border bg-surface"
-                                        : "border-emerald-200 bg-emerald-50/40"
+                                        : "border-success-border bg-success-soft"
                                     }`}
                                   >
                                     {cardBody}
@@ -1401,9 +1625,9 @@ export default function ReturnsPage() {
                                   className={`flex items-start gap-3 rounded-xl border p-3.5 transition ${
                                     isBorrowed
                                       ? selected
-                                        ? "border-blue-500 bg-blue-50/70 shadow-2xs cursor-pointer"
-                                        : "border-border bg-surface hover:border-blue-300 cursor-pointer"
-                                      : "border-emerald-200 bg-emerald-50/40 cursor-default"
+                                        ? "border-brand bg-brand-soft ring-1 ring-brand-border shadow-2xs cursor-pointer"
+                                        : "border-border bg-surface hover:border-brand-border hover:bg-surface-muted/60 cursor-pointer"
+                                      : "border-success-border bg-success-soft cursor-default"
                                   }`}
                                 >
                                   {cardBody}
@@ -1474,7 +1698,7 @@ export default function ReturnsPage() {
           <>
             <div className="flex items-start justify-between gap-4 border-b border-border px-5 py-4">
               <div className="flex items-start gap-3">
-                <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-emerald-100 text-emerald-700" aria-hidden="true"><svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5} aria-hidden="true"><path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" /></svg></div>
+                <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-success-soft text-success-text border border-success-border" aria-hidden="true"><svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5} aria-hidden="true"><path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" /></svg></div>
 
                 <div>
                   <h2
@@ -1506,7 +1730,7 @@ export default function ReturnsPage() {
             </div>
 
             <div className="space-y-4 p-5">
-              <div className="flex items-center justify-between gap-3 rounded-lg border border-emerald-200 bg-emerald-50 px-4 py-3">
+              <div className="flex items-center justify-between gap-3 rounded-lg border border-success-border bg-success-soft px-4 py-3">
                 <div>
                   <p className="text-xs text-text-muted">Nomor peminjaman</p>
                   <p className="mt-1 font-semibold text-text-main">
@@ -1529,28 +1753,33 @@ export default function ReturnsPage() {
 
               {/* Rincian Keterlambatan & Denda di Modal Sukses */}
               {lastReturnDetails && lastReturnDetails.daysOverdue > 0 && (
-                <div className="rounded-xl border border-red-200 bg-red-50/80 p-3.5 text-sm">
-                  <div className="flex items-center justify-between font-semibold text-red-800">
-                    <span className="flex items-center gap-1.5"><svg className="h-4 w-4 text-red-600 shrink-0 inline" fill="none" viewBox="0 0 24 24" stroke="currentColor" aria-hidden="true"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" /></svg> Keterlambatan Pengembalian</span>
-                    <span className="rounded bg-red-100 px-2 py-0.5 text-xs text-red-700">
-                      {lastReturnDetails.daysOverdue} Hari Terlambat
+                <div className="rounded-xl border border-danger-border bg-danger-soft p-4 text-xs space-y-3">
+                  <div className="flex items-center justify-between gap-2">
+                    <span className="flex items-center gap-1.5 font-bold text-danger-text text-sm">
+                      <svg className="h-4 w-4 shrink-0 inline" fill="none" viewBox="0 0 24 24" stroke="currentColor" aria-hidden="true"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" /></svg>
+                      Keterlambatan Pengembalian
                     </span>
+                    <Badge variant="danger">
+                      {lastReturnDetails.daysOverdue} Hari Terlambat
+                    </Badge>
                   </div>
-                  <div className="mt-2.5 grid grid-cols-2 gap-2 text-xs">
-                    <div>
-                      <span className="text-text-muted">Tarif Denda:</span>
-                      <p className="font-semibold text-text-main">
+
+                  <div className="pt-2.5 border-t border-danger-border/40 grid grid-cols-2 gap-3">
+                    <div className="rounded-lg bg-surface/50 p-2.5 border border-danger-border/30">
+                      <span className="text-[11px] text-text-muted block">Tarif Denda</span>
+                      <p className="mt-0.5 font-semibold text-text-main text-xs tabular-nums">
                         {dailyFineRate !== null
-                          ? `Rp ${dailyFineRate.toLocaleString("id-ID")} / hari / buku`
+                          ? `Rp ${dailyFineRate.toLocaleString("id-ID")} / hari`
                           : "Belum dikonfigurasi"}
                       </p>
                     </div>
-                    <div>
-                      <span className="text-text-muted">Total Denda:</span>
-                      <p className="font-bold text-red-600 text-sm">
+
+                    <div className="rounded-lg bg-surface/50 p-2.5 border border-danger-border/30">
+                      <span className="text-[11px] text-text-muted block">Total Denda</span>
+                      <p className="mt-0.5 font-bold text-danger-text text-sm tabular-nums">
                         {dailyFineRate !== null
                           ? `Rp ${lastReturnDetails.totalFine.toLocaleString("id-ID")}`
-                          : "belum bisa dihitung"}
+                          : "Belum bisa dihitung"}
                       </p>
                     </div>
                   </div>
@@ -1587,5 +1816,19 @@ export default function ReturnsPage() {
         ) : null}
       </Modal>
     </div>
+  );
+}
+
+export default function ReturnsPage() {
+  return (
+    <Suspense
+      fallback={
+        <div className="min-h-screen bg-surface-subtle">
+          <LoadingState label="Memuat pengembalian..." />
+        </div>
+      }
+    >
+      <ReturnsContent />
+    </Suspense>
   );
 }

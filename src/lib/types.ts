@@ -121,6 +121,7 @@ export interface Loan {
   returnedAt?: string;
   status: LoanStatus;
   notes?: string;
+  fineAmount?: number;
   createdAt: string;
   updatedAt: string;
 }
@@ -133,6 +134,7 @@ export interface LoanItem {
   bookCopyId: string;
   returnedAt?: string;
   status: LoanItemStatus;
+  fineAmount?: number;
   createdAt: string;
   updatedAt: string;
 }

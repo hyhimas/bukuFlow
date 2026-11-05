@@ -78,12 +78,21 @@ export default function CompanySwitcher({
   const [fetchedCompanies, setFetchedCompanies] = useState<Company[]>([]);
   const [serverTotalPages, setServerTotalPages] = useState(1);
   const [serverTotalItems, setServerTotalItems] = useState(0);
-  const [companyLoading, setCompanyLoading] = useState(false);
+  const [companyLoading, setCompanyLoading] = useState(
+    () => !initialCompanies || initialCompanies.length === 0
+  );
   const [cachedMap, setCachedMap] = useState<Record<string, Company>>({});
   const savedTotalRef = useRef(0);
   const [isOpen, setIsOpen] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
   const [page, setPage] = useState(1);
+  const [prevPage, setPrevPage] = useState(1);
+
+  if (page !== prevPage) {
+    setPrevPage(page);
+    setCompanyLoading(true);
+  }
+
   const PAGE_SIZE = 10;
   const dropdownRef = useRef<HTMLDivElement>(null);
   const activeReqIdRef = useRef(0);
@@ -95,12 +104,10 @@ export default function CompanySwitcher({
 
   useEffect(() => {
     if (initialCompanies && initialCompanies.length > 0) {
-      setCompanyLoading(false);
       return;
     }
 
     const reqId = ++activeReqIdRef.current;
-    setCompanyLoading(true);
 
     getCompaniesPaginatedApi({ page, size: PAGE_SIZE, sortby: "name", order: "asc" })
       .then((res) => {
@@ -201,6 +208,7 @@ export default function CompanySwitcher({
       <Button
         type="button"
         variant="secondary"
+        size={isSmall ? "sm" : "md"}
         onClick={() => {
           if (isOpen) {
             closeDropdown();
@@ -211,7 +219,7 @@ export default function CompanySwitcher({
         aria-expanded={isOpen}
         className={`flex w-full items-center justify-between gap-3 text-left ${
           isSmall
-            ? "h-9 sm:w-64 px-3 py-1.5 text-xs font-semibold text-text-main"
+            ? "h-9 min-h-[36px] max-h-9 sm:w-64 px-3 py-0 text-xs font-semibold text-text-main"
             : "h-auto sm:w-72 px-4 py-2.5"
         }`}
       >

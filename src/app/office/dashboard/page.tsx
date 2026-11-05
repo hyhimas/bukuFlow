@@ -153,16 +153,16 @@ function QuickAccessCard({
   return (
     <Link
       href={href}
-      className={`group rounded-xl border border-border bg-surface p-5 shadow-xs transition hover:-translate-y-0.5 hover:border-blue-300 hover:shadow-md focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 ${className}`}
+      className={`group rounded-xl border border-border bg-surface p-4 sm:p-5 shadow-xs transition hover:-translate-y-0.5 hover:border-blue-400 dark:hover:border-blue-500 hover:shadow-md focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 flex flex-col justify-center h-full ${className}`}
     >
-      <div className="flex gap-4">
-        <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-blue-50 text-blue-600 transition group-hover:bg-blue-100">
+      <div className="flex items-start gap-3.5 sm:gap-4">
+        <div className="flex h-10 w-10 sm:h-11 sm:w-11 shrink-0 items-center justify-center rounded-xl bg-blue-50 text-blue-600 dark:bg-blue-950/40 dark:text-blue-400 transition group-hover:bg-blue-100 dark:group-hover:bg-blue-900/50">
           {icon}
         </div>
 
-        <div className="min-w-0">
-          <h3 className="font-semibold text-text-main group-hover:text-blue-600 transition">{title}</h3>
-          <p className="mt-1 text-sm text-text-muted">{description}</p>
+        <div className="min-w-0 flex-1">
+          <h3 className="font-semibold text-text-main text-sm sm:text-base group-hover:text-blue-500 transition leading-snug">{title}</h3>
+          <p className="mt-1 text-xs sm:text-sm text-text-muted leading-relaxed line-clamp-2">{description}</p>
         </div>
       </div>
     </Link>
@@ -298,7 +298,7 @@ export default function OfficeDashboardPage() {
           </div>
 
           {/* Stats Skeleton */}
-          <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+          <div className="grid gap-3 sm:gap-4 grid-cols-1 sm:grid-cols-3">
             {Array.from({ length: 3 }).map((_, i) => (
               <Card key={i} className="p-5">
                 <div className="flex items-center justify-between gap-4">
@@ -408,7 +408,7 @@ export default function OfficeDashboardPage() {
             ==================================================== */}
             <section
               aria-label="Ringkasan instansi"
-              className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3"
+              className="grid gap-3 sm:gap-4 grid-cols-1 sm:grid-cols-3"
             >
               <DashboardStatCard
                 label="Buku Tersedia"
@@ -433,7 +433,6 @@ export default function OfficeDashboardPage() {
                 loading={loading}
                 icon={<ClockIcon />}
                 href={selectedCompanyId ? "/office/loans?status=OVERDUE" : undefined}
-                className="sm:col-span-2 lg:col-span-1"
               />
             </section>
 
@@ -448,7 +447,7 @@ export default function OfficeDashboardPage() {
                 Akses cepat manajemen platform dan audit teknis per instansi.
               </p>
 
-              <div className="mt-3 grid gap-4 sm:grid-cols-2">
+              <div className="mt-3 grid gap-3.5 sm:gap-4 grid-cols-1 sm:grid-cols-2 xl:grid-cols-4">
                 <QuickAccessCard
                   href="/office/companies"
                   title="Manajemen Instansi"
@@ -461,6 +460,20 @@ export default function OfficeDashboardPage() {
                   title="Pengguna & Admin"
                   description="Kelola akun Administrator Company dan staf operasional perpustakaan."
                   icon={<UsersIcon />}
+                />
+
+                <QuickAccessCard
+                  href="/office/books"
+                  title="Koleksi Buku"
+                  description="Akses katalog buku dan eksemplar per instansi terpilih."
+                  icon={<BookIcon />}
+                />
+
+                <QuickAccessCard
+                  href="/office/loans"
+                  title="Transaksi Peminjaman"
+                  description="Audit dan monitoring sirkulasi peminjaman antar instansi."
+                  icon={<TransactionIcon />}
                 />
               </div>
             </section>

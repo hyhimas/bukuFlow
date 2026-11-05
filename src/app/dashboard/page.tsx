@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 
@@ -14,7 +14,7 @@ import PageHeader from "@/components/ui/PageHeader";
 import Skeleton, { TableSkeleton } from "@/components/ui/Skeleton";
 
 import { getSession, isStoredSessionExpired, hasStoredAuth } from "@/lib/auth";
-import { isSupportedRole } from "@/lib/authorization";
+import { isSupportedRole, canViewOfficer } from "@/lib/authorization";
 import { getDashboardApi, getActiveReturnsApi, getCompanySettingsApi, getErrorMessage } from "@/lib/api";
 import {
   calculateTransactionCirculation,
@@ -325,7 +325,7 @@ function DashboardStatCard({
 
   const cardElement = (
     <Card
-      className={`p-5 transition-all duration-200 ${
+      className={`h-full p-4 sm:p-5 transition-all duration-200 ${
         isInteractive
           ? isDanger
             ? "cursor-pointer hover:border-red-400 hover:shadow-md active:scale-[0.99]"
@@ -335,18 +335,20 @@ function DashboardStatCard({
         isDanger
           ? "border-red-200 bg-red-50/25"
           : ""
-      } ${className}`}
+      } ${!isInteractive || !href ? className : ""}`}
     >
-      <div className="flex items-center justify-between gap-4">
-        <div>
-          <p className="text-sm text-text-muted">{label}</p>
+      <div className="flex items-center justify-between gap-2.5 sm:gap-4">
+        <div className="min-w-0 flex-1">
+          <p className="text-xs sm:text-sm font-medium text-text-muted leading-tight truncate sm:whitespace-normal" title={label}>
+            {label}
+          </p>
           {isMissing ? (
-            <p className="mt-2 text-2xl font-normal text-text-muted">
+            <p className="mt-1.5 sm:mt-2 text-xl sm:text-2xl font-normal text-text-muted">
               Gagal memuat
             </p>
           ) : (
             <p
-              className={`mt-2 text-3xl font-bold ${
+              className={`mt-1.5 sm:mt-2 text-2xl sm:text-3xl font-bold truncate ${
                 isDanger ? "text-red-600" : "text-text-main"
               }`}
             >
@@ -356,7 +358,7 @@ function DashboardStatCard({
         </div>
 
         <div
-          className={`flex h-11 w-11 shrink-0 items-center justify-center rounded-xl transition-colors duration-200 ${
+          className={`flex h-10 w-10 sm:h-11 sm:w-11 shrink-0 items-center justify-center rounded-xl transition-colors duration-200 ${
             isDanger
               ? isInteractive
                 ? "bg-red-100 text-red-600 group-hover:bg-red-200/80"
@@ -378,7 +380,7 @@ function DashboardStatCard({
     return (
       <Link
         href={href}
-        className="group block rounded-xl focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand"
+        className={`group block h-full rounded-xl focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand ${className}`}
         aria-label={`${label}: ${value ?? ""}. Buka daftar terfilter.`}
       >
         {cardElement}
@@ -405,16 +407,20 @@ function QuickAccessCard({
   return (
     <Link
       href={href}
-      className={`group rounded-xl border border-border bg-surface p-5 shadow-xs transition hover:border-blue-300 hover:shadow-sm focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 ${className}`}
+      className={`group rounded-xl border border-border bg-surface p-4 sm:p-5 shadow-xs transition hover:-translate-y-0.5 hover:border-blue-400 dark:hover:border-blue-500 hover:shadow-md focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 flex flex-col justify-center h-full ${className}`}
     >
-      <div className="flex gap-4">
-        <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-brand-soft text-brand-text">
+      <div className="flex items-start gap-3.5 sm:gap-4">
+        <div className="flex h-10 w-10 sm:h-11 sm:w-11 shrink-0 items-center justify-center rounded-xl bg-brand-soft text-brand-text transition group-hover:bg-brand-soft/80">
           {icon}
         </div>
 
-        <div className="min-w-0">
-          <h3 className="font-semibold text-text-main">{title}</h3>
-          <p className="mt-1 text-sm text-text-muted">{description}</p>
+        <div className="min-w-0 flex-1">
+          <h3 className="font-semibold text-text-main text-sm sm:text-base group-hover:text-blue-500 transition leading-snug">
+            {title}
+          </h3>
+          <p className="mt-1 text-xs sm:text-sm text-text-muted leading-relaxed line-clamp-2">
+            {description}
+          </p>
         </div>
       </div>
     </Link>
@@ -444,8 +450,10 @@ export default function DashboardPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
   const [configError, setConfigError] = useState("");
+  const hasLoadedRef = useRef<boolean>(false);
+  const lastLoadTimeRef = useRef<number>(0);
 
-  const loadDashboard = useCallback(async () => {
+  const loadDashboard = useCallback(async (isBackground = false) => {
     const session = getSession();
 
     if (!session) {
@@ -467,16 +475,24 @@ export default function DashboardPage() {
 
     setRole(session.user.role);
     setName(session.user.name);
-    setLoading(true);
-    setError("");
-    setConfigError("");
+
+    // Jangan tampilkan skeleton jika data sudah pernah dimuat (background refresh)
+    if (!isBackground && !hasLoadedRef.current) {
+      setLoading(true);
+    }
+    if (!isBackground) {
+      setError("");
+      setConfigError("");
+    }
 
     try {
       const companyId = session?.user?.companyId;
       const [settingsResult, dashResult, returnsResult] = await Promise.all([
         companyId
           ? getCompanySettingsApi(companyId).catch((cfgErr: unknown) => {
-              setConfigError(getErrorMessage(cfgErr, "Gagal memuat konfigurasi kebijakan denda."));
+              if (!isBackground) {
+                setConfigError(getErrorMessage(cfgErr, "Gagal memuat konfigurasi kebijakan denda."));
+              }
               return null;
             })
           : Promise.resolve(null),
@@ -565,10 +581,14 @@ export default function DashboardPage() {
         return timeB - timeA;
       });
       setWorklist(computedWorklist);
+      hasLoadedRef.current = true;
+      lastLoadTimeRef.current = Date.now();
     } catch (err: unknown) {
-      setError(
-        getErrorMessage(err, "Data dashboard gagal dimuat.")
-      );
+      if (!hasLoadedRef.current) {
+        setError(
+          getErrorMessage(err, "Data dashboard gagal dimuat.")
+        );
+      }
     } finally {
       setLoading(false);
     }
@@ -582,12 +602,17 @@ export default function DashboardPage() {
       const customEvent = e as CustomEvent<{ dailyFineRate?: number }>;
       if (customEvent.detail && typeof customEvent.detail.dailyFineRate === "number") {
         setDailyFineRate(customEvent.detail.dailyFineRate);
-        void loadDashboard();
+        void loadDashboard(true);
       }
     };
 
     const handleWindowFocus = () => {
-      void loadDashboard();
+      if (document.visibilityState !== "visible") return;
+      const now = Date.now();
+      // Hanya revalidate di latar belakang jika data sudah lebih dari 60 detik
+      if (now - lastLoadTimeRef.current > 60_000) {
+        void loadDashboard(true);
+      }
     };
 
     window.addEventListener("company-settings-updated", handleSettingsUpdated);
@@ -614,6 +639,11 @@ export default function DashboardPage() {
   }
 
   const isCompanyAdmin = role === "COMPANY_ADMIN";
+  const isStaff = role === "STAFF";
+
+  const today = new Date();
+  const todayStr = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, "0")}-${String(today.getDate()).padStart(2, "0")}`;
+  const beforeTodayIso = `${todayStr}T00:00:00.000Z`;
 
   const countToday = worklist.filter((w) => w.isToday).length;
   const countOverdue = worklist.filter((w) => !w.isToday).length;
@@ -661,16 +691,16 @@ export default function DashboardPage() {
         {loading || !data ? (
           <section
             aria-label="Memuat ringkasan perpustakaan"
-            className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3"
+            className="grid gap-3 sm:gap-4 grid-cols-1 sm:grid-cols-3"
           >
             {Array.from({ length: 3 }).map((_, i) => (
-              <Card key={i} className="p-5">
+              <Card key={i} className="p-4 sm:p-5">
                 <div className="flex items-center justify-between gap-4">
                   <div className="space-y-2 flex-1">
                     <Skeleton className="h-4 w-28" />
                     <Skeleton className="h-8 w-20" />
                   </div>
-                  <Skeleton className="h-11 w-11 rounded-xl" />
+                  <Skeleton className="h-10 w-10 sm:h-11 sm:w-11 rounded-xl shrink-0" />
                 </div>
               </Card>
             ))}
@@ -678,7 +708,7 @@ export default function DashboardPage() {
         ) : (
           <section
             aria-label="Ringkasan perpustakaan"
-            className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3"
+            className="grid gap-3 sm:gap-4 grid-cols-1 sm:grid-cols-3"
           >
             <DashboardStatCard
               label="Buku Tersedia"
@@ -691,7 +721,7 @@ export default function DashboardPage() {
               label="Peminjaman Aktif"
               value={data.activeLoans}
               icon={<TransactionIcon />}
-              href="/transactions?status=ACTIVE"
+              href={isStaff ? "/returns" : "/transactions?status=ACTIVE"}
             />
 
             <DashboardStatCard
@@ -699,8 +729,7 @@ export default function DashboardPage() {
               value={data.overdueLoans}
               icon={<WarningIcon />}
               variant={typeof data.overdueLoans === "number" && data.overdueLoans > 0 ? "danger" : "default"}
-              href="/transactions?status=OVERDUE"
-              className="sm:col-span-2 lg:col-span-1"
+              href={isStaff ? "/returns?status=OVERDUE" : "/transactions?status=OVERDUE"}
             />
           </section>
         )}
@@ -954,7 +983,7 @@ export default function DashboardPage() {
                               ? "Menunggu konfigurasi"
                               : item.fineAmount > 0
                               ? `Rp ${item.fineAmount.toLocaleString("id-ID")}`
-                              : "Rp 0"}
+                              : "-"}
                           </span>
                         </div>
                       </div>
@@ -981,23 +1010,23 @@ export default function DashboardPage() {
                   ))}
                 </div>
 
-                {/* Desktop & Tablet View (>= md): Ringkas 5 Kolom Sesuai Spesifikasi */}
+                {/* Desktop & Tablet View (>= md): Ringkas 5 Kolom Bebas Horizontal Scroll */}
                 <div className="hidden md:block w-full overflow-x-auto">
-                  <table className="w-full min-w-[720px] table-fixed text-left text-sm">
+                  <table className="w-full table-fixed text-left text-sm">
                     <colgroup>
-                      <col className="w-[28%]" />
+                      <col className="w-[30%]" />
                       <col className="w-[18%]" />
                       <col className="w-[18%]" />
-                      <col className="w-[20%]" />
+                      <col className="w-[18%]" />
                       <col className="w-[16%]" />
                     </colgroup>
                     <thead className="border-b border-border bg-slate-100 dark:bg-slate-800 text-[11px] font-bold uppercase tracking-wider text-slate-700 dark:text-slate-200">
                       <tr>
-                        <th className="px-4 sm:px-5 py-3 font-semibold">Transaksi / Member</th>
-                        <th className="px-4 py-3 font-semibold">Jatuh Tempo</th>
-                        <th className="px-4 py-3 font-semibold">Status</th>
-                        <th className="px-4 py-3 font-semibold">Denda</th>
-                        <th className="px-4 sm:px-5 py-3 font-semibold text-right">Aksi</th>
+                        <th className="px-3.5 sm:px-4 py-3 font-semibold">Transaksi / Member</th>
+                        <th className="px-3 sm:px-3.5 py-3 font-semibold">Jatuh Tempo</th>
+                        <th className="px-3 sm:px-3.5 py-3 font-semibold">Status</th>
+                        <th className="px-3 sm:px-3.5 py-3 font-semibold">Denda</th>
+                        <th className="px-3.5 sm:px-4 py-3 font-semibold text-right">Aksi</th>
                       </tr>
                     </thead>
                     <tbody className="divide-y divide-border-subtle bg-surface">
@@ -1007,7 +1036,7 @@ export default function DashboardPage() {
                           className="transition hover:bg-surface-subtle/70"
                         >
                           {/* 1. Transaksi / Member */}
-                          <td className="px-4 sm:px-5 py-3.5 min-w-0 align-middle">
+                          <td className="px-3.5 sm:px-4 py-3 min-w-0 align-middle">
                             <div className="flex flex-col min-w-0">
                               <span className="font-mono font-semibold text-xs text-text-main tracking-tight truncate" title={item.loanNumber}>
                                 {item.loanNumber}
@@ -1019,14 +1048,14 @@ export default function DashboardPage() {
                           </td>
 
                           {/* 2. Jatuh Tempo */}
-                          <td className="px-4 py-3.5 whitespace-nowrap align-middle">
+                          <td className="px-3 sm:px-3.5 py-3 whitespace-nowrap align-middle">
                             <span className="text-xs sm:text-sm font-medium text-text-main tabular-nums">
                               {formatDate(item.dueAt)}
                             </span>
                           </td>
 
                           {/* 3. Status */}
-                          <td className="px-4 py-3.5 whitespace-nowrap align-middle">
+                          <td className="px-3 sm:px-3.5 py-3 whitespace-nowrap align-middle">
                             <Badge
                               variant={
                                 item.status === "COMPLETED"
@@ -1049,9 +1078,9 @@ export default function DashboardPage() {
                           </td>
 
                           {/* 4. Denda */}
-                          <td className="px-4 py-3.5 whitespace-nowrap align-middle">
+                          <td className="px-3 sm:px-3.5 py-3 whitespace-nowrap align-middle">
                             {item.fineAmount === null ? (
-                              <span className="text-xs font-semibold text-warning-text">
+                              <span className="text-xs font-semibold text-warning-text truncate block" title="Menunggu konfigurasi">
                                 Menunggu konfigurasi
                               </span>
                             ) : item.fineAmount > 0 ? (
@@ -1059,14 +1088,14 @@ export default function DashboardPage() {
                                 Rp {item.fineAmount.toLocaleString("id-ID")}
                               </span>
                             ) : (
-                              <span className="text-xs sm:text-sm font-medium text-text-secondary tabular-nums">
-                                Rp 0
+                              <span className="text-xs sm:text-sm font-medium text-text-secondary select-none">
+                                -
                               </span>
                             )}
                           </td>
 
                           {/* 5. Aksi: Tombol Detail */}
-                          <td className="px-4 sm:px-5 py-3.5 text-right whitespace-nowrap align-middle">
+                          <td className="px-3.5 sm:px-4 py-3 text-right whitespace-nowrap align-middle">
                             <Button
                               type="button"
                               variant="secondary"
@@ -1087,26 +1116,29 @@ export default function DashboardPage() {
                     </tbody>
                   </table>
                 </div>
-
-                {filteredWorklist.length > worklistPageSize && (
-                  <div className="border-t border-border-subtle bg-surface">
-                    <Pagination
-                      currentPage={safeWorklistPage}
-                      totalPages={totalWorklistPages}
-                      onPageChange={(nextPage) => setWorklistPage(nextPage)}
-                      totalItems={filteredWorklist.length}
-                      pageSize={worklistPageSize}
-                      onPageSizeChange={(newSize) => {
-                        setWorklistPageSize(newSize);
-                        setWorklistPage(1);
-                      }}
-                      className="border-t-0 rounded-b-xl"
-                    />
-                  </div>
-                )}
               </div>
             )}
           </Card>
+
+          {/* PAGINATION (SEPARATE CARD) */}
+          {filteredWorklist.length > worklistPageSize && (
+            <div className="mt-4">
+              <div className="rounded-xl border border-border bg-surface shadow-2xs">
+                <Pagination
+                  currentPage={safeWorklistPage}
+                  totalPages={totalWorklistPages}
+                  onPageChange={(nextPage) => setWorklistPage(nextPage)}
+                  totalItems={filteredWorklist.length}
+                  pageSize={worklistPageSize}
+                  onPageSizeChange={(newSize) => {
+                    setWorklistPageSize(newSize);
+                    setWorklistPage(1);
+                  }}
+                  className="border-t-0 rounded-xl"
+                />
+              </div>
+            </div>
+          )}
         </section>
 
         {/* Akses Cepat */}
@@ -1116,7 +1148,7 @@ export default function DashboardPage() {
           </h2>
 
           {isCompanyAdmin ? (
-            <div className="mt-3 grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+            <div className="mt-3 grid gap-3.5 sm:gap-4 grid-cols-1 sm:grid-cols-2 xl:grid-cols-4">
               <QuickAccessCard
                 href="/master/books"
                 title="Master Buku"
@@ -1146,13 +1178,12 @@ export default function DashboardPage() {
               />
             </div>
           ) : (
-            <div className="mt-3 grid gap-4 md:grid-cols-2 xl:grid-cols-6">
+            <div className="mt-3 grid gap-3.5 sm:gap-4 grid-cols-1 sm:grid-cols-3">
               <QuickAccessCard
                 href="/loans/new"
                 title="Catat Peminjaman"
                 description="Catat transaksi peminjaman buku."
                 icon={<LoanIcon />}
-                className="xl:col-span-2"
               />
 
               <QuickAccessCard
@@ -1160,15 +1191,13 @@ export default function DashboardPage() {
                 title="Catat Pengembalian"
                 description="Proses pengembalian buku."
                 icon={<ReturnIcon />}
-                className="xl:col-span-2"
               />
 
               <QuickAccessCard
                 href="/transactions"
                 title="Riwayat Transaksi"
-                description="Lihat riwayat transaksi."
+                description="Lihat riwayat transaksi perpustakaan."
                 icon={<HistoryIcon />}
-                className="md:col-span-2"
               />
             </div>
           )}
@@ -1337,73 +1366,25 @@ export default function DashboardPage() {
           <Modal
             open={Boolean(selectedDetailItem)}
             onClose={() => setSelectedDetailItem(null)}
-            size="4xl"
+            size="2xl"
             title="Detail Transaksi Peminjaman"
             description="Informasi lengkap transaksi dan rincian denda per eksemplar."
           >
-            <div className="space-y-5">
+            <div className="space-y-5 min-w-0 max-w-full">
               {/* Ringkasan Metadata Transaksi */}
-              <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-3.5 p-4 rounded-xl bg-surface-subtle border border-border text-xs">
-                <div>
-                  <span className="text-text-muted block text-[11px] uppercase tracking-wider font-semibold">
-                    Kode Transaksi
-                  </span>
-                  <span className="font-mono font-bold text-text-main text-sm">
-                    {selectedDetailItem.loanNumber}
-                  </span>
-                </div>
-                <div>
-                  <span className="text-text-muted block text-[11px] uppercase tracking-wider font-semibold">
-                    Member
-                  </span>
-                  <span className="font-semibold text-text-main text-sm block truncate">
-                    {selectedDetailItem.memberName}
-                  </span>
-                  {selectedDetailItem.memberNumber && selectedDetailItem.memberNumber !== "-" && (
-                    <span className="text-[11px] text-text-muted font-mono">
-                      {selectedDetailItem.memberNumber}
+              <div className="rounded-xl border border-border bg-surface-subtle p-4 space-y-3.5 text-xs">
+                {/* Baris 1: Header (Kode Transaksi & Status) */}
+                <div className="flex flex-wrap items-center justify-between gap-3 pb-3 border-b border-border-subtle">
+                  <div>
+                    <span className="text-text-muted block text-[11px] uppercase tracking-wider font-semibold">
+                      Kode Transaksi
                     </span>
-                  )}
-                </div>
-                <div>
-                  <span className="text-text-muted block text-[11px] uppercase tracking-wider font-semibold">
-                    Petugas
-                  </span>
-                  <span className="font-medium text-text-main text-sm block truncate">
-                    {selectedDetailItem.rawItem.user?.name || "-"}
-                  </span>
-                </div>
-                <div>
-                  <span className="text-text-muted block text-[11px] uppercase tracking-wider font-semibold">
-                    Tanggal Pinjam
-                  </span>
-                  <span className="font-medium text-text-main">
-                    {formatDate(selectedDetailItem.borrowedAt)}
-                  </span>
-                </div>
-                <div>
-                  <span className="text-text-muted block text-[11px] uppercase tracking-wider font-semibold">
-                    Jatuh Tempo
-                  </span>
-                  <span className="font-medium text-text-main">
-                    {formatDate(selectedDetailItem.dueAt)}
-                  </span>
-                </div>
-                <div>
-                  <span className="text-text-muted block text-[11px] uppercase tracking-wider font-semibold">
-                    Tanggal Kembali
-                  </span>
-                  <span className="font-medium text-text-main">
-                    {selectedDetailItem.rawItem.loan.returnedAt
-                      ? formatDate(selectedDetailItem.rawItem.loan.returnedAt)
-                      : "-"}
-                  </span>
-                </div>
-                <div>
-                  <span className="text-text-muted block text-[11px] uppercase tracking-wider font-semibold">
-                    Status Transaksi
-                  </span>
-                  <div className="mt-1">
+                    <span className="font-mono font-bold text-text-main text-base sm:text-lg">
+                      {selectedDetailItem.loanNumber}
+                    </span>
+                  </div>
+
+                  <div className="flex items-center gap-2">
                     <Badge
                       variant={
                         detailCirc.overallStatus === "COMPLETED"
@@ -1423,80 +1404,184 @@ export default function DashboardPage() {
                         ? "Jatuh Tempo Hari Ini"
                         : "Aktif"}
                     </Badge>
+                    {detailCirc.totalFine !== null && detailCirc.totalFine > 0 && (
+                      <span className="rounded-md bg-red-50 dark:bg-red-950/40 px-2.5 py-1 text-xs font-bold text-red-600 dark:text-red-400 border border-red-200 dark:border-red-900/50 tabular-nums">
+                        Total Denda: Rp {detailCirc.totalFine.toLocaleString("id-ID")}
+                      </span>
+                    )}
                   </div>
                 </div>
-                <div>
-                  <span className="text-text-muted block text-[11px] uppercase tracking-wider font-semibold">
-                    Total Denda
-                  </span>
-                  <span
-                    className={`text-sm font-bold block mt-0.5 tabular-nums ${
-                      detailCirc.totalFine === null
-                        ? "text-warning-text"
-                        : detailCirc.totalFine > 0
-                        ? "text-danger-text"
-                        : "text-text-main"
-                    }`}
-                  >
-                    {detailCirc.totalFine === null
-                      ? "Menunggu konfigurasi"
-                      : detailCirc.totalFine > 0
-                      ? `Rp ${detailCirc.totalFine.toLocaleString("id-ID")}`
-                      : "Rp 0"}
-                  </span>
+
+                {/* Baris 2: Entitas (Member & Petugas) */}
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pb-3 border-b border-border-subtle">
+                  <div>
+                    <span className="text-text-muted block text-[11px] uppercase tracking-wider font-semibold">
+                      Anggota Peminjam
+                    </span>
+                    <span className="font-semibold text-text-main text-sm block mt-0.5">
+                      {selectedDetailItem.memberName}
+                    </span>
+                    {selectedDetailItem.memberNumber && selectedDetailItem.memberNumber !== "-" && (
+                      <span className="text-[11px] text-text-muted font-mono block mt-0.5">
+                        No. Anggota: {selectedDetailItem.memberNumber}
+                      </span>
+                    )}
+                  </div>
+
+                  <div>
+                    <span className="text-text-muted block text-[11px] uppercase tracking-wider font-semibold">
+                      Petugas Pencatat
+                    </span>
+                    <span className="font-medium text-text-main text-sm block mt-0.5">
+                      {canViewOfficer(role ?? undefined)
+                        ? selectedDetailItem.rawItem.user?.name || "-"
+                        : "Staf Perpustakaan"}
+                    </span>
+                    {canViewOfficer(role ?? undefined) && selectedDetailItem.rawItem.user?.role && (
+                      <span className="text-[11px] text-text-muted block mt-0.5">
+                        Hak Akses: {selectedDetailItem.rawItem.user.role}
+                      </span>
+                    )}
+                  </div>
+                </div>
+
+                {/* Baris 3: Jadwal Sirkulasi (Selalu 3 Kolom Konsisten) */}
+                <div className="grid grid-cols-3 gap-2.5 pt-0.5">
+                  <div>
+                    <span className="text-text-muted block text-[11px] uppercase tracking-wider font-semibold">
+                      Tanggal Pinjam
+                    </span>
+                    <span className="font-medium text-text-main text-xs sm:text-sm mt-0.5 block whitespace-nowrap">
+                      {formatDate(selectedDetailItem.borrowedAt)}
+                    </span>
+                  </div>
+
+                  <div>
+                    <span className="text-text-muted block text-[11px] uppercase tracking-wider font-semibold">
+                      Jatuh Tempo
+                    </span>
+                    <span
+                      className={`text-xs sm:text-sm mt-0.5 block whitespace-nowrap font-semibold ${
+                        detailCirc.overallStatus === "OVERDUE"
+                          ? "text-danger-text"
+                          : "text-text-main"
+                      }`}
+                    >
+                      {formatDate(selectedDetailItem.dueAt)}
+                    </span>
+                  </div>
+
+                  <div>
+                    <span className="text-text-muted block text-[11px] uppercase tracking-wider font-semibold">
+                      Tanggal Kembali
+                    </span>
+                    <span className="font-medium text-text-secondary text-xs sm:text-sm mt-0.5 block whitespace-nowrap">
+                      {selectedDetailItem.rawItem.loan.returnedAt
+                        ? formatDate(selectedDetailItem.rawItem.loan.returnedAt)
+                        : "-"}
+                    </span>
+                  </div>
                 </div>
               </div>
 
               {/* Daftar Eksemplar Buku */}
-              <div className="space-y-2">
+              <div className="space-y-2 min-w-0 max-w-full">
                 <h4 className="text-xs font-bold uppercase tracking-wider text-text-secondary">
                   Daftar Eksemplar ({detailCirc.items.length})
                 </h4>
-                <div className="rounded-lg border border-border">
-                  <table className="w-full text-left text-xs table-auto">
+
+                {/* Tampilan Mobile & Tablet: Kartu Eksemplar Bersih & Tidak Terpotong */}
+                <div className="md:hidden space-y-2.5">
+                  {detailCirc.items.map((ex) => (
+                    <div
+                      key={ex.id}
+                      className="rounded-lg border border-border bg-surface-subtle p-3 space-y-2 text-xs"
+                    >
+                      <div className="flex items-start justify-between gap-2">
+                        <span className="font-mono font-bold text-text-main">
+                          {ex.copyCode}
+                        </span>
+                        <Badge variant={ex.status === "RETURNED" ? "success" : "neutral"}>
+                          {ex.status === "RETURNED" ? "Dikembalikan" : "Dipinjam"}
+                        </Badge>
+                      </div>
+
+                      <p className="font-medium text-text-main" title={ex.bookTitle}>
+                        {ex.bookTitle}
+                      </p>
+
+                      <div className="pt-2 border-t border-border-subtle flex items-center justify-between text-[11px] text-text-muted tabular-nums">
+                        <span>
+                          {ex.returnedAt ? `Kembali: ${formatDate(ex.returnedAt)}` : "Belum kembali"}
+                        </span>
+                        {ex.fineAmount !== null && ex.fineAmount > 0 ? (
+                          <span className="font-bold text-danger-text">
+                            Denda: Rp {ex.fineAmount.toLocaleString("id-ID")}
+                          </span>
+                        ) : ex.daysOverdue > 0 ? (
+                          <span className="font-semibold text-danger-text">
+                            Terlambat {ex.daysOverdue} hari
+                          </span>
+                        ) : (
+                          <span>Tepat waktu</span>
+                        )}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+
+                {/* Tampilan Desktop: Tabel Eksemplar Bebas Horizontal Scroll */}
+                <div className="hidden md:block rounded-lg border border-border overflow-x-auto min-w-0 max-w-full">
+                  <table className="w-full text-left text-xs">
+                    <colgroup>
+                      <col className="w-[20%]" />
+                      <col className="w-[30%]" />
+                      <col className="w-[12%]" />
+                      <col className="w-[14%]" />
+                      <col className="w-[12%]" />
+                      <col className="w-[12%]" />
+                    </colgroup>
                     <thead className="border-b border-border bg-slate-100 dark:bg-slate-800 text-[11px] font-bold uppercase tracking-wider text-slate-700 dark:text-slate-200">
                       <tr>
-                        <th className="px-3.5 py-2.5 whitespace-nowrap">Kode Eksemplar</th>
-                        <th className="px-3.5 py-2.5">Judul Buku</th>
-                        <th className="px-3.5 py-2.5 whitespace-nowrap">Status Pengembalian</th>
-                        <th className="px-3.5 py-2.5 whitespace-nowrap">Tanggal Kembali</th>
-                        <th className="px-3.5 py-2.5 text-center whitespace-nowrap">Hari Terlambat</th>
-                        <th className="px-3.5 py-2.5 text-right whitespace-nowrap">Denda</th>
+                        <th className="px-3 py-2.5 whitespace-nowrap">Kode Eksemplar</th>
+                        <th className="px-3 py-2.5">Judul Buku</th>
+                        <th className="px-2 py-2.5 text-center whitespace-nowrap">Status</th>
+                        <th className="px-2 py-2.5 text-center whitespace-nowrap">Tgl Kembali</th>
+                        <th className="px-2 py-2.5 text-center whitespace-nowrap">Terlambat</th>
+                        <th className="px-3 py-2.5 text-right whitespace-nowrap">Denda</th>
                       </tr>
                     </thead>
                     <tbody className="divide-y divide-border-subtle bg-surface">
                       {detailCirc.items.map((ex) => (
                         <tr key={ex.id} className="hover:bg-surface-subtle/70">
-                          <td className="px-3.5 py-2.5 font-mono font-medium text-text-main whitespace-nowrap">
+                          <td className="px-3 py-2.5 font-mono font-medium text-text-main whitespace-nowrap" title={ex.copyCode}>
                             {ex.copyCode}
                           </td>
-                          <td className="px-3.5 py-2.5 text-text-main font-medium min-w-[140px]" title={ex.bookTitle}>
+                          <td className="px-3 py-2.5 text-text-main font-medium truncate max-w-[170px]" title={ex.bookTitle}>
                             {ex.bookTitle}
                           </td>
-                          <td className="px-3.5 py-2.5 whitespace-nowrap">
-                            <Badge variant={ex.status === "RETURNED" ? "success" : "neutral"}>
-                              {ex.status === "RETURNED" ? "Dikembalikan" : "Dipinjam"}
+                          <td className="px-2 py-2.5 text-center whitespace-nowrap">
+                            <Badge variant={ex.status === "RETURNED" ? "success" : "neutral"} className="text-[10px] px-1.5 py-0.5">
+                              {ex.status === "RETURNED" ? "Kembali" : "Dipinjam"}
                             </Badge>
                           </td>
-                          <td className="px-3.5 py-2.5 whitespace-nowrap text-text-secondary tabular-nums">
+                          <td className="px-2 py-2.5 text-center text-text-secondary tabular-nums text-[11px] whitespace-nowrap">
                             {ex.returnedAt ? formatDate(ex.returnedAt) : "-"}
                           </td>
-                          <td className="px-3.5 py-2.5 whitespace-nowrap text-center tabular-nums">
+                          <td className="px-2 py-2.5 text-center tabular-nums text-[11px] whitespace-nowrap">
                             {ex.daysOverdue > 0 ? (
                               <span className="font-semibold text-danger-text">{ex.daysOverdue} hari</span>
                             ) : (
-                              <span className="text-text-muted">0 hari</span>
+                              <span className="text-text-muted">-</span>
                             )}
                           </td>
-                          <td className="px-3.5 py-2.5 whitespace-nowrap text-right tabular-nums">
-                            {ex.fineAmount === null ? (
-                              <span className="text-warning-text font-medium">Menunggu konfigurasi</span>
-                            ) : ex.fineAmount > 0 ? (
+                          <td className="px-3 py-2.5 text-right tabular-nums text-[11px] font-medium whitespace-nowrap">
+                            {ex.fineAmount !== null && ex.fineAmount > 0 ? (
                               <span className="font-bold text-danger-text">
                                 Rp {ex.fineAmount.toLocaleString("id-ID")}
                               </span>
                             ) : (
-                              <span className="text-text-muted">Rp 0</span>
+                              <span className="text-text-subtle select-none">-</span>
                             )}
                           </td>
                         </tr>

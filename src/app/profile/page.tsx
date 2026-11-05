@@ -1,22 +1,15 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import Card from "@/components/ui/Card";
 import Badge from "@/components/ui/Badge";
 import Button from "@/components/ui/Button";
 import BackLink from "@/components/ui/BackLink";
 import ConfirmationDialog from "@/components/ui/ConfirmationDialog";
-import { getSession, saveAuthData, getAuthData } from "@/lib/auth";
-import { logoutApi, updateCompanyUserApi, getErrorMessage } from "@/lib/api";
-import { useToast } from "@/components/ui/Toast";
-import { useSubmitHotkey } from "@/hooks/useHotkeys";
+import { getSession } from "@/lib/auth";
+import { logoutApi } from "@/lib/api";
 
 export default function ProfilePage() {
-  const { toast } = useToast();
-
-  // Active Modes: "view" | "edit-profile"
-  const [mode, setMode] = useState<"view" | "edit-profile">("view");
-
   // Real Backend Data State (Lazy initialization dari session)
   const [initialUser] = useState(() => {
     if (typeof window !== "undefined") {
@@ -49,16 +42,12 @@ export default function ProfilePage() {
   });
 
   const [userId] = useState(initialUser.id);
-  const [name, setName] = useState(initialUser.name);
+  const [name] = useState(initialUser.name);
   const [email] = useState(initialUser.email);
   const [role] = useState(initialUser.role);
   const [companyName] = useState(initialUser.companyName);
 
-  // Edit Temp Form State
-  const [editName, setEditName] = useState("");
-
   // Modal & Loading State
-  const [isSubmitting, setIsSubmitting] = useState(false);
   const [showLogoutConfirm, setShowLogoutConfirm] = useState(false);
 
   const isSuperAdmin = role === "SUPER_ADMIN";
@@ -90,70 +79,10 @@ export default function ProfilePage() {
         .toUpperCase()
     : "U";
 
-  // Open Edit Profile Mode
-  const handleStartEditProfile = () => {
-    setEditName(name);
-    setMode("edit-profile");
-  };
-
-  // Cancel edit mode
-  const handleCancelMode = () => {
-    setMode("view");
-  };
-
-  // Handle Real Save Profile (Name)
-  const handleSaveProfile = async (e?: React.FormEvent) => {
-    e?.preventDefault();
-
-    const trimmedName = editName.trim();
-    if (!trimmedName) {
-      toast.error("Nama lengkap tidak boleh kosong.");
-      return;
-    }
-
-    if (trimmedName === name) {
-      toast.warning("Data masih sama, tidak ada perubahan yang disimpan.");
-      setMode("view");
-      return;
-    }
-
-    setIsSubmitting(true);
-    try {
-      if (userId) {
-        await updateCompanyUserApi(userId, { name: trimmedName });
-      }
-
-      // Update local state
-      setName(trimmedName);
-
-      // Update auth session in local storage
-      const auth = getAuthData();
-      if (auth && auth.user) {
-        auth.user.name = trimmedName;
-        saveAuthData(auth);
-      }
-
-      setMode("view");
-      toast.success("Nama profil berhasil diperbarui.");
-    } catch (err: unknown) {
-      toast.error(getErrorMessage(err, "Gagal memperbarui data profil."));
-    } finally {
-      setIsSubmitting(false);
-    }
-  };
-
-  useSubmitHotkey(() => void handleSaveProfile(), {
-    enabled: mode === "edit-profile",
-    loading: isSubmitting,
-  });
-
   const handleLogout = async () => {
     setShowLogoutConfirm(false);
     await logoutApi();
   };
-
-  const inputBaseStyle =
-    "w-full h-11 rounded-lg border border-border bg-surface px-3 py-2 text-sm text-text-main placeholder:text-text-subtle focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-500/20 disabled:bg-surface-muted disabled:text-text-muted";
 
   return (
     <div className="mx-auto max-w-4xl space-y-4 sm:space-y-6 p-3.5 sm:p-6 lg:p-8">
@@ -226,175 +155,67 @@ export default function ProfilePage() {
       </Card>
 
       {/* ========================================================= */}
-      {/* MAIN INTERACTIVE CARD (AUTHENTIC BACKEND DATA SCHEMA)    */}
+      {/* MAIN CARD (INFORMASI AKUN - READ-ONLY)                   */}
       {/* ========================================================= */}
       <Card className="border-border bg-surface p-4 sm:p-6 lg:p-7 shadow-sm">
-        {/* 1. VIEW MODE (AUTHENTIC DATA ONLY) */}
-        {mode === "view" && (
-          <div key="view" className="animate-profile-fade">
-            <div className="flex flex-col gap-3.5 sm:flex-row sm:items-center sm:justify-between pb-4 sm:pb-5 border-b border-border-subtle">
-              <div className="min-w-0 pr-2">
-                <h2 className="text-base sm:text-lg font-bold text-text-main">Informasi Akun Pengguna</h2>
-                <p className="text-xs text-text-muted mt-0.5">
-                  Data identitas akun dan hak akses operasional yang terdaftar pada sistem BukuFlow.
-                </p>
-              </div>
+        <div>
+          <div className="pb-4 sm:pb-5 border-b border-border-subtle">
+            <h2 className="text-base sm:text-lg font-bold text-text-main">Informasi Akun Pengguna</h2>
+            <p className="text-xs text-text-muted mt-0.5">
+              Data identitas akun dan hak akses operasional yang terdaftar pada sistem BukuFlow.
+            </p>
+          </div>
 
-              {/* ACTION BUTTONS */}
-              <div className="flex items-center gap-2 sm:shrink-0">
-                <Button
-                  type="button"
-                  variant="primary"
-                  size="sm"
-                  onClick={handleStartEditProfile}
-                  icon={<EditIcon />}
-                  className="flex-1 sm:flex-initial"
-                >
-                  Ubah Nama
-                </Button>
+          {/* READ-ONLY INFO GRID (ONLY REAL FIELDS FROM BACKEND) */}
+          <div className="grid grid-cols-1 gap-3 sm:gap-4 pt-4 sm:pt-5 sm:grid-cols-2">
+            <div className="rounded-xl border border-border-subtle bg-surface-muted/70 p-3.5">
+              <span className="text-[11px] font-semibold uppercase tracking-wider text-text-muted">
+                Nama Lengkap
+              </span>
+              <p className="mt-1 text-sm font-semibold text-text-main">{name}</p>
+            </div>
+
+            <div className="rounded-xl border border-border-subtle bg-surface-muted/70 p-3.5">
+              <span className="text-[11px] font-semibold uppercase tracking-wider text-text-muted">
+                Alamat Email Login
+              </span>
+              <p className="mt-1 text-sm font-semibold text-text-main break-all">{email}</p>
+            </div>
+
+            <div className="rounded-xl border border-border-subtle bg-surface-muted/70 p-3.5">
+              <span className="text-[11px] font-semibold uppercase tracking-wider text-text-muted">
+                Hak Akses / Peran Akun
+              </span>
+              <p className="mt-1 text-sm font-semibold text-text-main">{getRoleLabel(role)}</p>
+            </div>
+
+            <div className="rounded-xl border border-border-subtle bg-surface-muted/70 p-3.5">
+              <span className="text-[11px] font-semibold uppercase tracking-wider text-text-muted">
+                Instansi / Sekolah
+              </span>
+              <p className="mt-1 text-sm font-semibold text-text-main">
+                {displayCompanyName}
+              </p>
+            </div>
+
+            <div className="rounded-xl border border-border-subtle bg-surface-muted/70 p-3.5">
+              <span className="text-[11px] font-semibold uppercase tracking-wider text-text-muted">
+                Status Akun
+              </span>
+              <div className="mt-1 flex items-center gap-2">
+                <span className="h-2 w-2 rounded-full bg-emerald-500" />
+                <span className="text-sm font-semibold text-emerald-700">Aktif (ACTIVE)</span>
               </div>
             </div>
 
-            {/* READ-ONLY INFO GRID (ONLY REAL FIELDS FROM BACKEND) */}
-            <div className="grid grid-cols-1 gap-3 sm:gap-4 pt-4 sm:pt-5 sm:grid-cols-2">
-              <div className="rounded-xl border border-border-subtle bg-surface-muted/70 p-3.5">
-                <span className="text-[11px] font-semibold uppercase tracking-wider text-text-muted">
-                  Nama Lengkap
-                </span>
-                <p className="mt-1 text-sm font-semibold text-text-main">{name}</p>
-              </div>
-
-              <div className="rounded-xl border border-border-subtle bg-surface-muted/70 p-3.5">
-                <span className="text-[11px] font-semibold uppercase tracking-wider text-text-muted">
-                  Alamat Email Login
-                </span>
-                <p className="mt-1 text-sm font-semibold text-text-main break-all">{email}</p>
-              </div>
-
-              <div className="rounded-xl border border-border-subtle bg-surface-muted/70 p-3.5">
-                <span className="text-[11px] font-semibold uppercase tracking-wider text-text-muted">
-                  Hak Akses / Peran Akun
-                </span>
-                <p className="mt-1 text-sm font-semibold text-text-main">{getRoleLabel(role)}</p>
-              </div>
-
-              <div className="rounded-xl border border-border-subtle bg-surface-muted/70 p-3.5">
-                <span className="text-[11px] font-semibold uppercase tracking-wider text-text-muted">
-                  Instansi / Sekolah
-                </span>
-                <p className="mt-1 text-sm font-semibold text-text-main">
-                  {displayCompanyName}
-                </p>
-              </div>
-
-              <div className="rounded-xl border border-border-subtle bg-surface-muted/70 p-3.5">
-                <span className="text-[11px] font-semibold uppercase tracking-wider text-text-muted">
-                  Status Akun
-                </span>
-                <div className="mt-1 flex items-center gap-2">
-                  <span className="h-2 w-2 rounded-full bg-emerald-500" />
-                  <span className="text-sm font-semibold text-emerald-700">Aktif (ACTIVE)</span>
-                </div>
-              </div>
-
-              <div className="rounded-xl border border-border-subtle bg-surface-muted/70 p-3.5">
-                <span className="text-[11px] font-semibold uppercase tracking-wider text-text-muted">
-                  User ID Sistem
-                </span>
-                <p className="mt-1 text-xs font-mono font-medium text-text-secondary break-all">{userId || "-"}</p>
-              </div>
+            <div className="rounded-xl border border-border-subtle bg-surface-muted/70 p-3.5">
+              <span className="text-[11px] font-semibold uppercase tracking-wider text-text-muted">
+                User ID Sistem
+              </span>
+              <p className="mt-1 text-xs font-mono font-medium text-text-secondary break-all">{userId || "-"}</p>
             </div>
           </div>
-        )}
-
-        {/* 2. EDIT PROFILE MODE (FORM REAL BACKEND FIELDS) */}
-        {mode === "edit-profile" && (
-          <div key="edit-profile" className="animate-profile-fade">
-            <form onSubmit={handleSaveProfile}>
-              <div className="mb-4 sm:mb-5 border-b border-border-subtle pb-3 sm:pb-4">
-                <h2 className="text-base sm:text-lg font-bold text-text-main">Form Ubah Nama Profil</h2>
-                <p className="text-xs text-text-muted">
-                  Perbarui nama lengkap akun pengguna Anda.
-                </p>
-              </div>
-
-              <div className="grid grid-cols-1 gap-3.5 sm:gap-4 sm:grid-cols-2">
-                <div>
-                  <label htmlFor="profile-name" className="mb-1 block text-xs font-semibold text-text-secondary">
-                    Nama Lengkap <span className="text-red-500">*</span>
-                  </label>
-                  <input
-                    id="profile-name"
-                    type="text"
-                    value={editName}
-                    onChange={(e) => setEditName(e.target.value)}
-                    placeholder="Masukkan nama lengkap"
-                    required
-                    className={inputBaseStyle}
-                  />
-                </div>
-
-                <div>
-                  <label htmlFor="profile-email" className="mb-1 block text-xs font-semibold text-text-secondary">
-                    Alamat Email (Akun Login)
-                  </label>
-                  <input
-                    id="profile-email"
-                    type="email"
-                    value={email}
-                    disabled
-                    title="Alamat email login dikelola oleh Administrator"
-                    className={inputBaseStyle}
-                  />
-                  <span className="mt-1 block text-xs text-text-muted">
-                    Email login bersifat permanen untuk autentikasi.
-                  </span>
-                </div>
-
-                <div>
-                  <label htmlFor="profile-role" className="mb-1 block text-xs font-semibold text-text-secondary">
-                    Peran Akun
-                  </label>
-                  <input
-                    id="profile-role"
-                    type="text"
-                    value={getRoleLabel(role)}
-                    disabled
-                    className={inputBaseStyle}
-                  />
-                </div>
-
-                <div>
-                  <label htmlFor="profile-company" className="mb-1 block text-xs font-semibold text-text-secondary">
-                    Instansi
-                  </label>
-                  <input
-                    id="profile-company"
-                    type="text"
-                    value={displayCompanyName}
-                    disabled
-                    className={inputBaseStyle}
-                  />
-                </div>
-              </div>
-
-              {/* ACTION BUTTONS */}
-              <div className="flex flex-col-reverse sm:flex-row items-stretch sm:items-center sm:justify-end gap-2 sm:gap-3 border-t border-border-subtle pt-4 mt-5 sm:mt-6">
-                <Button type="button" variant="secondary" onClick={handleCancelMode} className="justify-center">
-                  Batal
-                </Button>
-                <Button
-                  type="submit"
-                  loading={isSubmitting}
-                  aria-keyshortcuts="Control+Enter Meta+Enter"
-                  className="justify-center"
-                >
-                  Simpan Perubahan
-                </Button>
-              </div>
-            </form>
-          </div>
-        )}
+        </div>
       </Card>
 
       {/* CONFIRMATION MODAL LOGOUT */}
@@ -412,15 +233,6 @@ export default function ProfilePage() {
 }
 
 // Icons
-function EditIcon() {
-  return (
-    <svg aria-hidden="true" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-      <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7" />
-      <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z" />
-    </svg>
-  );
-}
-
 function BuildingIcon() {
   return (
     <svg aria-hidden="true" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">

@@ -1050,16 +1050,14 @@ export default function OfficeBooksPage() {
   return (
     <div className="min-h-screen bg-surface-subtle">
       <div className="mx-auto w-full max-w-7xl px-3 py-4 sm:px-5 sm:py-5 lg:px-6">
-        {/* Tombol Navigasi Kembali */}
-        <div className="mb-4">
-          <BackLink href="/office/dashboard">
-            Kembali ke Dashboard Office
-          </BackLink>
-        </div>
-
         {/* HEADER & ACTIONS */}
         <PageHeader
           className="mb-5 sm:mb-6"
+          backLink={
+            <BackLink href="/office/dashboard">
+              Kembali ke Dashboard Office
+            </BackLink>
+          }
           title="Master Buku (Office)"
           description="Kelola data buku dan eksemplar perpustakaan per instansi."
           actions={
@@ -1088,7 +1086,7 @@ export default function OfficeBooksPage() {
                   disabled={Boolean(error) || loading || !selectedCompanyId || books.length === 0 || exportLoading}
                   className="w-full sm:w-auto text-xs h-9 px-3 text-center whitespace-nowrap flex items-center justify-center gap-1.5 shrink-0"
                 >
-                  <svg viewBox="0 0 24 24" fill="none" className="h-4 w-4 text-emerald-600 shrink-0" aria-hidden="true"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8l-6-6Z" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" /><path d="M14 2v6h6M8 13h8M8 17h8" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" /></svg>
+                  <svg viewBox="0 0 24 24" fill="none" className="h-4 w-4 shrink-0" aria-hidden="true"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8l-6-6Z" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" /><path d="M14 2v6h6M8 13h8M8 17h8" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" /></svg>
                   <span>Ekspor Excel</span>
                 </Button>
 
@@ -1215,7 +1213,8 @@ export default function OfficeBooksPage() {
                 className="mb-4"
               />
             ) : (
-              <Card className="overflow-hidden">
+              <>
+                <Card className="overflow-hidden">
                 {/* SKELETON INITIAL LOADING */}
                 {loading && books.length === 0 && (
                   <TableSkeleton rows={6} cols={6} />
@@ -1514,23 +1513,29 @@ export default function OfficeBooksPage() {
                     )}
                   </div>
                 )}
-
-                {/* PAGINATION DENGAN PER HALAMAN DI BAWAH */}
-                {books.length > 0 && (
-                  <Pagination
-                    currentPage={page}
-                    totalPages={totalPages}
-                    onPageChange={(nextPage) => setPage(nextPage)}
-                    totalItems={total}
-                    pageSize={pageSize}
-                    onPageSizeChange={(newSize) => {
-                      setPageSize(newSize);
-                      setPage(1);
-                    }}
-                  />
-                )}
               </Card>
-            )}
+
+              {/* PAGINATION (SEPARATE CARD) */}
+              {books.length > 0 && (
+                <div className="mt-4">
+                  <div className="rounded-xl border border-border bg-surface shadow-2xs">
+                    <Pagination
+                      currentPage={page}
+                      totalPages={totalPages}
+                      onPageChange={(nextPage) => setPage(nextPage)}
+                      totalItems={total}
+                      pageSize={pageSize}
+                      onPageSizeChange={(newSize) => {
+                        setPageSize(newSize);
+                        setPage(1);
+                      }}
+                      className="border-t-0 rounded-xl"
+                    />
+                  </div>
+                </div>
+              )}
+            </>
+          )}
           </>
         )}
 

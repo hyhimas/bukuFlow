@@ -1221,7 +1221,7 @@ export default function MasterBooksPage() {
                 disabled={Boolean(error) || loading || books.length === 0 || exportLoading}
                 className="w-full sm:w-auto text-xs h-9 px-3 text-center whitespace-nowrap flex items-center justify-center gap-1.5 shrink-0"
               >
-                <svg viewBox="0 0 24 24" fill="none" className="h-4 w-4 text-emerald-600 shrink-0" aria-hidden="true"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8l-6-6Z" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" /><path d="M14 2v6h6M8 13h8M8 17h8" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" /></svg>
+                <svg viewBox="0 0 24 24" fill="none" className="h-4 w-4 shrink-0" aria-hidden="true"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8l-6-6Z" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" /><path d="M14 2v6h6M8 13h8M8 17h8" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" /></svg>
                 <span>Ekspor Excel</span>
               </Button>
 
@@ -1328,7 +1328,8 @@ export default function MasterBooksPage() {
             className="mb-4"
           />
         ) : (
-          <Card className="overflow-hidden">
+          <>
+            <Card className="overflow-hidden">
             <DataTable
               rows={books}
               columns={columns}
@@ -1562,23 +1563,29 @@ export default function MasterBooksPage() {
                 );
               }}
             />
-
-            {/* PAGINATION (MOBILE, TABLET & DESKTOP) */}
-            {books.length > 0 && total > 0 && (
-              <Pagination
-                currentPage={page}
-                totalPages={totalPages}
-                onPageChange={(nextPage) => setPage(nextPage)}
-                totalItems={total}
-                pageSize={pageSize}
-                onPageSizeChange={(newSize) => {
-                  setPageSize(newSize);
-                  setPage(1);
-                }}
-              />
-            )}
           </Card>
-        )}
+
+          {/* PAGINATION (SEPARATE CARD) */}
+          {books.length > 0 && total > 0 && (
+            <div className="mt-4">
+              <div className="rounded-xl border border-border bg-surface shadow-2xs">
+                <Pagination
+                  currentPage={page}
+                  totalPages={totalPages}
+                  onPageChange={(nextPage) => setPage(nextPage)}
+                  totalItems={total}
+                  pageSize={pageSize}
+                  onPageSizeChange={(newSize) => {
+                    setPageSize(newSize);
+                    setPage(1);
+                  }}
+                  className="border-t-0 rounded-xl"
+                />
+              </div>
+            </div>
+          )}
+        </>
+      )}
       </div>
 
       {/* =====================================================

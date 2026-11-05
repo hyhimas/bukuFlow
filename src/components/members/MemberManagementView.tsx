@@ -988,19 +988,19 @@ export default function MemberManagementView({ scope }: MemberManagementViewProp
   return (
     <div className="min-h-screen bg-surface-subtle">
       <div className="page-container py-6">
-        <BackLink href={isOffice ? "/office/dashboard" : "/dashboard"}>
-          {isOffice ? "Kembali ke Office Dashboard" : "Kembali ke Dashboard"}
-        </BackLink>
-
-        <div className="mt-4">
-          <PageHeader
-            className="mb-5 sm:mb-6"
-            title="Master Anggota"
-            description={
-              isOffice
-                ? "Inspeksi dan kelola data anggota perpustakaan seluruh instansi."
-                : "Kelola data anggota perpustakaan, status keaktifan, dan nomor identitas."
-            }
+        <PageHeader
+          className="mb-5 sm:mb-6"
+          backLink={
+            <BackLink href={isOffice ? "/office/dashboard" : "/dashboard"}>
+              {isOffice ? "Kembali ke Office Dashboard" : "Kembali ke Dashboard"}
+            </BackLink>
+          }
+          title="Master Anggota"
+          description={
+            isOffice
+              ? "Inspeksi dan kelola data anggota perpustakaan seluruh instansi."
+              : "Kelola data anggota perpustakaan, status keaktifan, dan nomor identitas."
+          }
             actions={
               <div className="flex flex-col sm:flex-row sm:items-center gap-2 sm:gap-2.5 w-full sm:w-auto">
                 {isOffice && (
@@ -1025,7 +1025,7 @@ export default function MemberManagementView({ scope }: MemberManagementViewProp
                     disabled={(isOffice && !selectedCompanyId) || Boolean(error) || loading || members.length === 0 || exportLoading}
                     className="w-full sm:w-auto text-xs h-9 px-3 text-center whitespace-nowrap flex items-center justify-center gap-1.5 shrink-0"
                   >
-                    <svg viewBox="0 0 24 24" fill="none" className="h-4 w-4 text-emerald-600 shrink-0" aria-hidden="true"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8l-6-6Z" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" /><path d="M14 2v6h6M8 13h8M8 17h8" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" /></svg>
+                    <svg viewBox="0 0 24 24" fill="none" className="h-4 w-4 shrink-0" aria-hidden="true"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8l-6-6Z" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" /><path d="M14 2v6h6M8 13h8M8 17h8" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" /></svg>
                     <span>Ekspor Excel</span>
                   </Button>
 
@@ -1074,7 +1074,6 @@ export default function MemberManagementView({ scope }: MemberManagementViewProp
               </div>
             }
           />
-        </div>
 
         {/* PROMPT JIKA BELUM PILIH INSTANSI (OFFICE SCOPE) */}
         {isOffice && !selectedCompanyId ? (
@@ -1153,7 +1152,8 @@ export default function MemberManagementView({ scope }: MemberManagementViewProp
                 className="mb-4"
               />
             ) : (
-              <Card className="mt-5 overflow-hidden">
+              <>
+                <Card className="mt-5 overflow-hidden">
                 <DataTable
                   rows={members}
                   columns={columns}
@@ -1285,24 +1285,30 @@ export default function MemberManagementView({ scope }: MemberManagementViewProp
                     );
                   }}
                 />
-
-                {/* PAGINATION */}
-                {members.length > 0 && total > 0 && (
-                  <Pagination
-                    currentPage={page}
-                    totalPages={totalPages}
-                    totalItems={total}
-                    pageSize={pageSize}
-                    pageSizeOptions={[5, 10, 20, 50, 100]}
-                    onPageSizeChange={(newSize) => {
-                      savedTotalRef.current = 0;
-                      setPageSize(newSize);
-                      setPage(1);
-                    }}
-                    onPageChange={(p) => setPage(p)}
-                  />
-                )}
               </Card>
+
+              {/* PAGINATION (SEPARATE CARD) */}
+              {members.length > 0 && total > 0 && (
+                <div className="mt-4">
+                  <div className="rounded-xl border border-border bg-surface shadow-2xs">
+                    <Pagination
+                      currentPage={page}
+                      totalPages={totalPages}
+                      totalItems={total}
+                      pageSize={pageSize}
+                      pageSizeOptions={[5, 10, 20, 50, 100]}
+                      onPageSizeChange={(newSize) => {
+                        savedTotalRef.current = 0;
+                        setPageSize(newSize);
+                        setPage(1);
+                      }}
+                      onPageChange={(p) => setPage(p)}
+                      className="border-t-0 rounded-xl"
+                    />
+                  </div>
+                </div>
+              )}
+            </>
           )}
           </>
         )}

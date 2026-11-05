@@ -711,47 +711,46 @@ export default function UserManagementView({ scope }: UserManagementViewProps) {
   return (
     <div className="min-h-screen bg-surface-subtle">
       <div className="page-container py-6">
-        <BackLink href={isOffice ? "/office/dashboard" : "/dashboard"}>
-          {isOffice ? "Kembali ke Office Dashboard" : "Kembali ke Dashboard"}
-        </BackLink>
+        <PageHeader
+          className="mb-5 sm:mb-6"
+          backLink={
+            <BackLink href={isOffice ? "/office/dashboard" : "/dashboard"}>
+              {isOffice ? "Kembali ke Office Dashboard" : "Kembali ke Dashboard"}
+            </BackLink>
+          }
+          title={isOffice ? "Kelola Pengguna" : "Pengaturan Pengguna"}
+          description={
+            isOffice
+              ? "Kelola akun pengguna, hak akses, dan status keaktifan per instansi."
+              : "Kelola akun staf dan administrator yang memiliki akses ke sistem perpustakaan."
+          }
+          actions={
+            <div className="flex flex-col sm:flex-row sm:items-center gap-2 sm:gap-2.5 w-full sm:w-auto">
+              {isOffice && (
+                <CompanySwitcher
+                  size="sm"
+                  selectedCompanyId={selectedCompanyId}
+                  onSelectCompany={(id) => {
+                    savedTotalRef.current = 0;
+                    setStoredOfficeCompanyId(id);
+                    setSelectedCompanyId(id);
+                    setPage(1);
+                  }}
+                />
+              )}
 
-        <div className="mt-4">
-          <PageHeader
-            className="mb-5 sm:mb-6"
-            title={isOffice ? "Kelola Pengguna" : "Pengaturan Pengguna"}
-            description={
-              isOffice
-                ? "Kelola akun pengguna, hak akses, dan status keaktifan per instansi."
-                : "Kelola akun staf dan administrator yang memiliki akses ke sistem perpustakaan."
-            }
-            actions={
-              <div className="flex flex-col sm:flex-row sm:items-center gap-2 sm:gap-2.5 w-full sm:w-auto">
-                {isOffice && (
-                  <CompanySwitcher
-                    size="sm"
-                    selectedCompanyId={selectedCompanyId}
-                    onSelectCompany={(id) => {
-                      savedTotalRef.current = 0;
-                      setStoredOfficeCompanyId(id);
-                      setSelectedCompanyId(id);
-                      setPage(1);
-                    }}
-                  />
-                )}
-
-                <Button
-                  type="button"
-                  variant="primary"
-                  onClick={openCreateModal}
-                  disabled={(isOffice && !selectedCompanyId) || isInactiveCompany || Boolean(error) || loading}
-                  className="w-full sm:w-auto text-xs h-9 px-3.5 font-semibold text-center whitespace-nowrap"
-                >
-                  + Tambah Pengguna
-                </Button>
-              </div>
-            }
-          />
-        </div>
+              <Button
+                type="button"
+                variant="primary"
+                onClick={openCreateModal}
+                disabled={(isOffice && !selectedCompanyId) || isInactiveCompany || Boolean(error) || loading}
+                className="w-full sm:w-auto text-xs h-9 px-3.5 font-semibold text-center whitespace-nowrap"
+              >
+                + Tambah Pengguna
+              </Button>
+            </div>
+          }
+        />
 
         {/* PROMPT JIKA BELUM PILIH INSTANSI (OFFICE SCOPE) */}
         {isOffice && !selectedCompanyId ? (
@@ -832,7 +831,8 @@ export default function UserManagementView({ scope }: UserManagementViewProps) {
                 className="mt-4"
               />
             ) : (
-              <Card className="mt-5 overflow-hidden">
+              <>
+                <Card className="mt-5 overflow-hidden">
                 <DataTable
                   rows={users}
                   columns={columns}
@@ -963,24 +963,30 @@ export default function UserManagementView({ scope }: UserManagementViewProps) {
                     );
                   }}
                 />
-
-                {/* PAGINATION */}
-                {users.length > 0 && total > 0 && (
-                  <Pagination
-                    currentPage={page}
-                    totalPages={totalPages}
-                    totalItems={total}
-                    pageSize={pageSize}
-                    pageSizeOptions={[5, 10, 20, 50, 100]}
-                    onPageSizeChange={(newSize) => {
-                      savedTotalRef.current = 0;
-                      setPageSize(newSize);
-                      setPage(1);
-                    }}
-                    onPageChange={(p) => setPage(p)}
-                  />
-                )}
               </Card>
+
+              {/* PAGINATION (SEPARATE CARD) */}
+              {users.length > 0 && total > 0 && (
+                <div className="mt-4">
+                  <div className="rounded-xl border border-border bg-surface shadow-2xs">
+                    <Pagination
+                      currentPage={page}
+                      totalPages={totalPages}
+                      totalItems={total}
+                      pageSize={pageSize}
+                      pageSizeOptions={[5, 10, 20, 50, 100]}
+                      onPageSizeChange={(newSize) => {
+                        savedTotalRef.current = 0;
+                        setPageSize(newSize);
+                        setPage(1);
+                      }}
+                      onPageChange={(p) => setPage(p)}
+                      className="border-t-0 rounded-xl"
+                    />
+                  </div>
+                </div>
+              )}
+            </>
           )}
           </>
         )}

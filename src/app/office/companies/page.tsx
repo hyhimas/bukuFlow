@@ -17,7 +17,7 @@ import RowActions from "@/components/ui/RowActions";
 import Pagination from "@/components/ui/Pagination";
 import DataTable, { DataTableColumn } from "@/components/ui/DataTable";
 import Skeleton, { TableSkeleton } from "@/components/ui/Skeleton";
-import { useSearchHotkey, useSubmitHotkey } from "@/hooks/useHotkeys";
+import { useSubmitHotkey } from "@/hooks/useHotkeys";
 
 import { getSession, isStoredSessionExpired, hasStoredAuth } from "@/lib/auth";
 import {
@@ -46,8 +46,7 @@ export default function OfficeCompaniesPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
 
-  // Search & Pagination (Server-side via GET /office/company?page=&size=)
-  const [search, setSearch] = useState("");
+  // Pagination & Sorting (Server-side via GET /office/company?page=&size=)
   const [sortBy, setSortBy] = useState<string>("name");
   const [sortOrder, setSortOrder] = useState<"asc" | "desc">("asc");
   const [page, setPage] = useState(1);
@@ -81,11 +80,6 @@ export default function OfficeCompaniesPage() {
 
   const [initialLoaded, setInitialLoaded] = useState(false);
   const [tableLoading, setTableLoading] = useState(false);
-
-  const searchInputRef = useRef<HTMLInputElement>(null);
-  useSearchHotkey(searchInputRef, {
-    enabled: !error && !loading,
-  });
 
   // 1. Guard Super Admin
   useEffect(() => {
@@ -141,8 +135,45 @@ export default function OfficeCompaniesPage() {
 
   useEffect(() => {
     if (!isAuthorized) return;
-    void loadCompanies();
-  }, [isAuthorized, loadCompanies]);
+    let ignore = false;
+    getCompaniesPaginatedApi({
+      page,
+      size: pageSize,
+      sortby: sortBy,
+      order: sortOrder,
+    })
+      .then((res) => {
+        if (ignore) return;
+        setCompanies(res.items);
+        if (res.total >= 0) {
+          savedTotalRef.current = res.total;
+          setTotalItems(res.total);
+          setTotalPages(Math.max(1, Math.ceil(res.total / pageSize)));
+        } else if (savedTotalRef.current > 0) {
+          setTotalItems(savedTotalRef.current);
+          setTotalPages(Math.max(1, Math.ceil(savedTotalRef.current / pageSize)));
+        } else {
+          setTotalPages(res.totalPages);
+        }
+        setInitialLoaded(true);
+        setError("");
+      })
+      .catch((err: unknown) => {
+        if (ignore) return;
+        const msg = getErrorMessage(err, "Gagal memuat daftar instansi.");
+        setError(msg);
+      })
+      .finally(() => {
+        if (!ignore) {
+          setLoading(false);
+          setTableLoading(false);
+        }
+      });
+
+    return () => {
+      ignore = true;
+    };
+  }, [isAuthorized, page, pageSize, sortBy, sortOrder]);
 
   // Open Form
   const openCreateModal = () => {
@@ -323,30 +354,6 @@ export default function OfficeCompaniesPage() {
     }
   };
 
-  // Filtered List on Current Page
-  const filteredCompanies = companies.filter((c) => {
-    return (
-      search.trim() === "" ||
-      c.name.toLowerCase().includes(search.toLowerCase()) ||
-      c.code.toLowerCase().includes(search.toLowerCase()) ||
-      (c.address && c.address.toLowerCase().includes(search.toLowerCase()))
-    );
-  });
-
-  const sortedCompanies = useMemo(() => {
-    return [...filteredCompanies].sort((a, b) => {
-      if (sortBy === "name") {
-        const comp = a.name.localeCompare(b.name, "id-ID", { sensitivity: "base" });
-        return sortOrder === "desc" ? -comp : comp;
-      }
-      if (sortBy === "code") {
-        const comp = (a.code || "").localeCompare(b.code || "", "id-ID", { sensitivity: "base" });
-        return sortOrder === "desc" ? -comp : comp;
-      }
-      return 0;
-    });
-  }, [filteredCompanies, sortBy, sortOrder]);
-
   const getStatusBadge = (status: CompanyStatus) => {
     switch (status) {
       case "ACTIVE":
@@ -478,14 +485,6 @@ export default function OfficeCompaniesPage() {
             ))}
           </div>
 
-          {/* Search & Filter Card Skeleton */}
-          <Card className="p-4">
-            <div className="grid gap-3 sm:grid-cols-[minmax(0,1fr)_200px]">
-              <Skeleton className="h-10 w-full rounded-lg" />
-              <Skeleton className="h-10 w-full rounded-lg" />
-            </div>
-          </Card>
-
           {/* Table Skeleton */}
           <Card className="overflow-hidden">
             <TableSkeleton rows={5} cols={5} />
@@ -575,50 +574,34 @@ export default function OfficeCompaniesPage() {
           </Card>
         </div>
 
-        {/* SEARCH & MOBILE/TABLET SORT */}
-        <Card className="mt-6 p-4">
-          <div className="grid gap-3 md:grid-cols-[minmax(0,1fr)_200px] lg:grid-cols-1">
-            <Input
-              ref={searchInputRef}
-              id="company-search"
-              label="Pencarian"
-              value={search}
+        {/* MOBILE/TABLET SORT */}
+        <div className="mt-4 flex justify-end lg:hidden">
+          <div className="w-full sm:w-60">
+            <Dropdown
+              id="sort-filter"
+              label="Urutan"
+              value={`${sortBy}-${sortOrder}`}
               disabled={Boolean(error) || loading}
-              onChange={(e) => {
-                setSearch(e.target.value);
+              onChange={(val) => {
+                const [newSortBy, newSortOrder] = val.split("-");
+                setSortBy(newSortBy);
+                setSortOrder(newSortOrder as "asc" | "desc");
                 setPage(1);
               }}
-              placeholder="Cari nama sekolah atau kode instansi... (tekan /)"
+              options={[
+                { value: "name-asc", label: "Nama (A - Z)" },
+                { value: "name-desc", label: "Nama (Z - A)" },
+                { value: "code-asc", label: "Kode (A - Z)" },
+                { value: "code-desc", label: "Kode (Z - A)" },
+              ]}
             />
-
-            {/* Sort hanya untuk Mobile & Tablet (di Desktop disembunyikan karena sudah ada sortable header di tabel) */}
-            <div className="lg:hidden">
-              <Dropdown
-                id="sort-filter"
-                label="Urutan"
-                value={`${sortBy}-${sortOrder}`}
-                disabled={Boolean(error) || loading}
-                onChange={(val) => {
-                  const [newSortBy, newSortOrder] = val.split("-");
-                  setSortBy(newSortBy);
-                  setSortOrder(newSortOrder as "asc" | "desc");
-                  setPage(1);
-                }}
-                options={[
-                  { value: "name-asc", label: "Nama (A - Z)" },
-                  { value: "name-desc", label: "Nama (Z - A)" },
-                  { value: "code-asc", label: "Kode (A - Z)" },
-                  { value: "code-desc", label: "Kode (Z - A)" },
-                ]}
-              />
-            </div>
           </div>
-        </Card>
+        </div>
 
         {/* TABLE LIST */}
         <Card className="relative mt-6 overflow-hidden">
           <DataTable
-            rows={sortedCompanies}
+            rows={companies}
             columns={columns}
             keyExtractor={(comp) => comp.id}
             loading={tableLoading}
@@ -640,12 +623,8 @@ export default function OfficeCompaniesPage() {
             emptyState={
               <div className="p-8">
                 <EmptyState
-                  title={search ? "Instansi Tidak Ditemukan" : "Belum Ada Instansi"}
-                  description={
-                    search
-                      ? `Tidak ada instansi yang sesuai dengan kriteria pencarian "${search}".`
-                      : "Mulai dengan mendaftarkan sekolah atau perpustakaan pertama Anda."
-                  }
+                  title="Belum Ada Instansi"
+                  description="Mulai dengan mendaftarkan sekolah atau perpustakaan pertama Anda."
                 />
               </div>
             }
@@ -732,23 +711,28 @@ export default function OfficeCompaniesPage() {
               </div>
             )}
           />
-
-          {/* PAGINATION */}
-          {filteredCompanies.length > 0 && (
-            <Pagination
-              currentPage={page}
-              totalPages={totalPages}
-              totalItems={totalItems}
-              pageSize={pageSize}
-              onPageChange={setPage}
-              onPageSizeChange={(newSize) => {
-                setPageSize(newSize);
-                setPage(1);
-              }}
-              pageSizeOptions={[5, 10, 20, 50]}
-            />
-          )}
         </Card>
+
+        {/* PAGINATION (SEPARATE CARD) */}
+        {companies.length > 0 && (
+          <div className="mt-4">
+            <div className="rounded-xl border border-border bg-surface shadow-2xs">
+              <Pagination
+                currentPage={page}
+                totalPages={totalPages}
+                totalItems={totalItems}
+                pageSize={pageSize}
+                onPageChange={setPage}
+                onPageSizeChange={(newSize) => {
+                  setPageSize(newSize);
+                  setPage(1);
+                }}
+                pageSizeOptions={[5, 10, 20, 50]}
+                className="border-t-0 rounded-xl"
+              />
+            </div>
+          </div>
+        )}
         </>
       )}
       </div>

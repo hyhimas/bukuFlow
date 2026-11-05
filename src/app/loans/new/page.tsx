@@ -1273,32 +1273,35 @@ export default function NewLoanPage() {
         }
       }
 
-      // B. Jika belum ada di layar, cari spesifik ke backend menggunakan prefix (1 request saja)
+      // B. Cari ke server via endpoint search (pencarian langsung dengan barcode/kode mentah)
       if (!matchedBook) {
         try {
-          const searchResults = await searchBooksApi(candidatePrefix);
-          if (searchResults.length > 0) {
+          const directResults = await searchBooksApi(rawCode);
+          if (directResults.length > 0) {
             matchedBook =
-              searchResults.find(
+              directResults.find(
+                (b) =>
+                  b.code.toUpperCase() === code ||
+                  (b.isbn && b.isbn.toUpperCase() === code) ||
+                  b.code.toUpperCase() === candidatePrefix,
+              ) || directResults[0] || null;
+          }
+        } catch {
+          // Lanjut ke pencarian prefix
+        }
+      }
+
+      // C. Jika belum ditemukan dan prefix berbeda dengan kode mentah, cari prefix ke server
+      if (!matchedBook && candidatePrefix !== code) {
+        try {
+          const prefixResults = await searchBooksApi(candidatePrefix);
+          if (prefixResults.length > 0) {
+            matchedBook =
+              prefixResults.find(
                 (b) =>
                   b.code.toUpperCase() === candidatePrefix ||
                   b.code.toUpperCase() === code,
-              ) || null;
-          }
-        } catch (searchErr: unknown) {
-          toast.error(
-            getErrorMessage(searchErr, "Gangguan server saat mencari buku.")
-          );
-          return;
-        }
-      }
-
-      // C. Jika belum ditemukan dan prefix berbeda dengan kode mentah, cari kode langsung
-      if (!matchedBook && candidatePrefix !== code) {
-        try {
-          const exactResults = await searchBooksApi(code);
-          if (exactResults.length > 0) {
-            matchedBook = exactResults.find((b) => b.code.toUpperCase() === code || (b.isbn && b.isbn.toUpperCase() === code)) || null;
+              ) || prefixResults[0] || null;
           }
         } catch (searchErr: unknown) {
           toast.error(
@@ -1309,7 +1312,7 @@ export default function NewLoanPage() {
       }
 
       if (!matchedBook) {
-        toast.error(`Buku atau eksemplar dengan kode "${rawCode}" tidak ditemukan.`);
+        toast.error(`Buku atau eksemplar dengan kode "${rawCode}" tidak ditemukan di server.`);
         return;
       }
 
@@ -1320,7 +1323,7 @@ export default function NewLoanPage() {
         return;
       }
 
-      // Ambil copies dari buku yang cocok (Hanya 1 request ke server)
+      // Ambil copies dari buku yang cocok langsung dari server (GET /catalog/books/{book_id}/copies)
       try {
         allLoadedCopies = await getBookCopiesApi(matchedBook.id);
       } catch (copyErr: unknown) {
@@ -1846,126 +1849,156 @@ export default function NewLoanPage() {
                       </div>
                     )}
 
-                  {members.length > 0 && (
-                    <div className="mt-5 space-y-3">
-                      <div className="flex items-center justify-between gap-3">
-                        <h3 className="text-sm font-semibold text-text-secondary">
-                          {memberQuery.trim()
-                            ? "Hasil pencarian"
-                            : "Daftar anggota"}
-                        </h3>
+                  {members.length > 0 && (() => {
+                    const isSearching = Boolean(memberQuery.trim());
+                    const visibleMembers = members.filter((member) => {
+                      if (isSearching) return true;
+                      const activeCount = memberActiveLoanCounts[member.id];
+                      const reachedMax =
+                        typeof activeCount === "number" &&
+                        typeof maxActiveLoans === "number" &&
+                        activeCount >= maxActiveLoans;
+                      return !reachedMax;
+                    });
 
-                        <p className="shrink-0 text-xs text-text-muted">
-                          {memberTotal > 0 ? `${memberTotal} anggota` : `${members.length} anggota`}
-                        </p>
-                      </div>
+                    if (visibleMembers.length === 0 && !isSearching) {
+                      return (
+                        <div className="mt-5 rounded-lg border border-dashed border-border bg-surface-subtle/50 p-4 text-center">
+                          <p className="text-sm font-medium text-text-secondary">
+                            Semua anggota pada daftar ini telah mencapai batas maksimal transaksi ({maxActiveLoans ?? 3}).
+                          </p>
+                          <p className="mt-1 text-xs text-text-muted">
+                            Gunakan kolom pencarian di atas untuk mencari anggota tertentu berdasarkan nama, nomor anggota, NIK, atau nomor HP.
+                          </p>
+                        </div>
+                      );
+                    }
 
-                      {members.map((member) => {
-                        const inactive = member.status === "INACTIVE";
-                        const activeCount = memberActiveLoanCounts[member.id];
-                        const reachedMax =
-                          typeof activeCount === "number" && typeof maxActiveLoans === "number" && activeCount >= maxActiveLoans;
-                        const isDisabled = inactive || reachedMax;
+                    return (
+                      <div className="mt-5 space-y-3">
+                        <div className="flex items-center justify-between gap-3">
+                          <h3 className="text-sm font-semibold text-text-secondary">
+                            {isSearching
+                              ? "Hasil pencarian"
+                              : "Daftar anggota"}
+                          </h3>
 
-                        return (
-                          <Button
-                            key={member.id}
-                            type="button"
-                            variant="ghost"
-                            disabled={isDisabled}
-                            onClick={() => void handleSelectMember(member)}
-                            className={`w-full h-auto rounded-lg border p-3 sm:px-4 sm:py-3 text-left justify-start font-normal transition ${
-                              inactive
-                                ? "cursor-not-allowed border-border bg-surface-subtle text-text-subtle"
-                                : reachedMax
-                                ? "cursor-not-allowed border-amber-200 bg-amber-50/50 text-text-secondary hover:bg-amber-50/50"
-                                : "border-border bg-surface hover:border-blue-300 hover:bg-blue-50"
-                            }`}
-                          >
-                            <div className="flex w-full items-center justify-between gap-4">
-                              <div className="min-w-0">
-                                <div className="flex flex-wrap items-center gap-2">
-                                  <p
-                                    className={`truncate font-semibold ${
-                                      inactive
-                                        ? "text-text-subtle"
-                                        : reachedMax
-                                        ? "text-text-secondary"
-                                        : "text-text-main"
-                                    }`}
-                                  >
-                                    {member.name}
-                                  </p>
+                          <p className="shrink-0 text-xs text-text-muted">
+                            {isSearching
+                              ? (memberTotal > 0 ? `${memberTotal} anggota` : `${members.length} anggota`)
+                              : `${visibleMembers.length} anggota`}
+                          </p>
+                        </div>
 
-                                  {typeof activeCount === "number" && (
-                                    <span
-                                      className={`rounded px-1.5 py-0.5 text-xs font-medium ${
-                                        reachedMax
-                                          ? "bg-amber-100 text-amber-900 font-semibold"
-                                          : "bg-surface-muted text-text-secondary"
+                        {visibleMembers.map((member) => {
+                          const inactive = member.status === "INACTIVE";
+                          const activeCount = memberActiveLoanCounts[member.id];
+                          const reachedMax =
+                            typeof activeCount === "number" &&
+                            typeof maxActiveLoans === "number" &&
+                            activeCount >= maxActiveLoans;
+                          const isDisabled = inactive || reachedMax;
+
+                          return (
+                            <Button
+                              key={member.id}
+                              type="button"
+                              variant="ghost"
+                              disabled={isDisabled}
+                              onClick={() => void handleSelectMember(member)}
+                              className={`w-full h-auto rounded-lg border p-3 sm:px-4 sm:py-3 text-left justify-start font-normal transition ${
+                                inactive
+                                  ? "cursor-not-allowed border-border bg-surface-subtle text-text-subtle"
+                                  : reachedMax
+                                  ? "cursor-not-allowed border-amber-500/30 bg-amber-500/10 text-text-secondary hover:bg-amber-500/10"
+                                  : "border-border bg-surface hover:border-blue-300 hover:bg-blue-50 dark:hover:bg-blue-950/30"
+                              }`}
+                            >
+                              <div className="flex w-full items-center justify-between gap-4">
+                                <div className="min-w-0">
+                                  <div className="flex flex-wrap items-center gap-2">
+                                    <p
+                                      className={`truncate font-semibold ${
+                                        inactive
+                                          ? "text-text-subtle"
+                                          : reachedMax
+                                          ? "text-text-secondary"
+                                          : "text-text-main"
                                       }`}
                                     >
-                                      {activeCount}/{maxActiveLoans ?? "∞"} Transaksi Aktif
-                                    </span>
-                                  )}
+                                      {member.name}
+                                    </p>
+
+                                    {typeof activeCount === "number" && (
+                                      <span
+                                        className={`rounded px-1.5 py-0.5 text-xs font-medium ${
+                                          reachedMax
+                                            ? "bg-amber-100 text-amber-900 dark:bg-amber-950/70 dark:text-amber-200 border border-amber-300 dark:border-amber-700/60 font-semibold"
+                                            : "bg-surface-muted text-text-secondary"
+                                        }`}
+                                      >
+                                        {activeCount}/{maxActiveLoans ?? "∞"} Transaksi Aktif
+                                      </span>
+                                    )}
+                                  </div>
+
+                                  <p
+                                    className={`mt-1 truncate text-sm ${
+                                      inactive
+                                        ? "text-text-subtle"
+                                        : "text-text-muted"
+                                    }`}
+                                  >
+                                    {member.memberNumber} <span className="mx-1 select-none text-text-subtle" aria-hidden="true">&bull;</span> {member.phone || "-"}
+                                  </p>
+
+                                  {inactive ? (
+                                    <p className="mt-1 text-xs font-medium text-text-muted">
+                                      Anggota tidak aktif dan tidak dapat membuat peminjaman baru.
+                                    </p>
+                                  ) : reachedMax ? (
+                                    <p className="mt-1 text-xs font-medium text-amber-700 dark:text-amber-300">
+                                      Sudah mencapai batas maksimal {maxActiveLoans} transaksi aktif. Selesaikan atau kembalikan pinjaman sebelumnya terlebih dahulu.
+                                    </p>
+                                  ) : null}
                                 </div>
 
-                                <p
-                                  className={`mt-1 truncate text-sm ${
+                                <span
+                                  className={`shrink-0 rounded-full px-2.5 py-1 text-xs font-medium ${
                                     inactive
-                                      ? "text-text-subtle"
-                                      : "text-text-muted"
+                                      ? "bg-surface-muted text-text-muted"
+                                      : reachedMax
+                                      ? "bg-amber-100 text-amber-900 dark:bg-amber-950/70 dark:text-amber-200 font-semibold border border-amber-300 dark:border-amber-700/60"
+                                      : "bg-emerald-50 dark:bg-emerald-950/50 text-emerald-700 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800/60"
                                   }`}
                                 >
-                                  {member.memberNumber} <span className="mx-1 select-none text-text-subtle" aria-hidden="true">&bull;</span> {member.phone || "-"}
-                                </p>
-
-                                {inactive ? (
-                                  <p className="mt-1 text-xs font-medium text-text-muted">
-                                    Anggota tidak aktif dan tidak dapat membuat peminjaman baru.
-                                  </p>
-                                ) : reachedMax ? (
-                                  <p className="mt-1 text-xs font-medium text-amber-800">
-                                    Sudah mencapai batas maksimal {maxActiveLoans} transaksi aktif. Selesaikan atau kembalikan pinjaman sebelumnya terlebih dahulu.
-                                  </p>
-                                ) : null}
-                              </div>
-
-                              <span
-                                className={`shrink-0 rounded-full px-2.5 py-1 text-xs font-medium ${
-                                  inactive
-                                    ? "bg-surface-muted text-text-muted"
+                                  {inactive
+                                    ? "Tidak aktif"
                                     : reachedMax
-                                    ? "bg-amber-100 text-amber-900 font-semibold border border-amber-200"
-                                    : "bg-emerald-50 text-emerald-700"
-                                }`}
-                              >
-                                {inactive
-                                  ? "Tidak aktif"
-                                  : reachedMax
-                                  ? "Maks Transaksi"
-                                  : "Pilih Anggota"}
-                              </span>
-                            </div>
-                          </Button>
-                        );
-                      })}
+                                    ? "Maks Transaksi"
+                                    : "Pilih Anggota"}
+                                </span>
+                              </div>
+                            </Button>
+                          );
+                        })}
 
-                      {/* MEMBER PAGINATION (MOBILE, TABLET & DESKTOP) */}
-                      <Pagination
-                        currentPage={memberPage}
-                        totalPages={memberTotalPages}
-                        onPageChange={(nextPage) => setMemberPage(nextPage)}
-                        totalItems={memberTotal}
-                        pageSize={memberPageSize}
-                        onPageSizeChange={(newSize) => {
-                          setMemberPageSize(newSize);
-                          setMemberPage(1);
-                        }}
-                        className="mt-4 -mx-4 -mb-4 sm:-mx-5 sm:-mb-5 rounded-b-xl border-t"
-                      />
-                    </div>
-                  )}
+                        {/* MEMBER PAGINATION (MOBILE, TABLET & DESKTOP) */}
+                        <Pagination
+                          currentPage={memberPage}
+                          totalPages={memberTotalPages}
+                          onPageChange={(nextPage) => setMemberPage(nextPage)}
+                          totalItems={memberTotal}
+                          pageSize={memberPageSize}
+                          onPageSizeChange={(newSize) => {
+                            setMemberPageSize(newSize);
+                            setMemberPage(1);
+                          }}
+                          className="mt-4 -mx-4 -mb-4 sm:-mx-5 sm:-mb-5 rounded-b-xl border-t"
+                        />
+                      </div>
+                    );
+                  })()}
                 </>
               )}
 
@@ -1979,7 +2012,7 @@ export default function NewLoanPage() {
                         <p className="font-semibold text-text-main">
                           {selectedMember.name}
                         </p>
-                        <span className="rounded-full bg-blue-100 px-2.5 py-0.5 text-xs font-semibold text-blue-700">
+                        <span className="rounded-full bg-blue-100 dark:bg-blue-950/60 dark:text-blue-300 dark:border dark:border-blue-800/40 px-2.5 py-0.5 text-xs font-semibold text-blue-700">
                           {selectedMember.status === "ACTIVE"
                             ? "Anggota Aktif"
                             : "Tidak Aktif"}
@@ -2001,14 +2034,14 @@ export default function NewLoanPage() {
 
                       {/* WARNING KUOTA MAKSIMAL TRANSAKSI AKTIF */}
                       {isMaxActiveLoansReached && (
-                        <div className="mt-2.5 rounded-md border border-red-200 bg-red-50 px-3 py-2 text-xs text-red-900" role="alert">
+                        <div className="mt-2.5 rounded-md border border-red-200 dark:border-red-900/50 bg-red-50 dark:bg-red-950/40 px-3 py-2 text-xs text-red-900 dark:text-red-300" role="alert">
                           <span className="font-semibold">Batas Kuota Tercapai:</span> Anggota ini telah mencapai batas {maxActiveLoans} peminjaman aktif. Selesaikan peminjaman sebelumnya terlebih dahulu.
                         </div>
                       )}
 
                       {/* WARNING TERLAMBAT */}
                       {memberHasOverdue && (
-                        <div className="mt-2 rounded-md border border-red-300 bg-red-50 px-3 py-1.5 text-xs text-red-900">
+                        <div className="mt-2 rounded-md border border-red-300 dark:border-red-900/50 bg-red-50 dark:bg-red-950/40 px-3 py-1.5 text-xs text-red-900 dark:text-red-300">
                           <span className="font-semibold">Peringatan:</span> Anggota memiliki riwayat pinjaman buku yang terlambat dikembalikan!
                         </div>
                       )}
@@ -2221,7 +2254,7 @@ export default function NewLoanPage() {
 
                 {/* WARNING KUOTA MAKSIMAL PINJAMAN AKTIF PADA SECTION PILIH BUKU */}
                 {isMaxActiveLoansReached && (
-                  <div className="mt-3.5 rounded-md border border-red-200 bg-red-50 px-3.5 py-2.5 text-xs text-red-900" role="alert">
+                  <div className="mt-3.5 rounded-md border border-red-200 dark:border-red-900/50 bg-red-50 dark:bg-red-950/40 px-3.5 py-2.5 text-xs text-red-900 dark:text-red-300" role="alert">
                     <span className="font-semibold">Peminjaman Dikunci:</span> Anggota ini telah mencapai batas {maxActiveLoans} peminjaman aktif. Pemilihan buku dinonaktifkan.
                   </div>
                 )}
@@ -2490,12 +2523,12 @@ export default function NewLoanPage() {
 
                         {/* INFO COPY */}
                         <div className="sm:col-span-2">
-                          <div className="rounded-lg border border-blue-100 bg-blue-50 px-4 py-3">
-                            <p className="text-sm font-medium text-blue-900">
+                          <div className="rounded-lg border border-blue-100 dark:border-blue-900/50 bg-blue-50 dark:bg-blue-950/40 px-4 py-3">
+                            <p className="text-sm font-medium text-blue-900 dark:text-blue-200">
                               Kode eksemplar dibuat otomatis
                             </p>
 
-                            <p className="mt-1 text-xs leading-5 text-blue-700">
+                            <p className="mt-1 text-xs leading-5 text-blue-700 dark:text-blue-300">
                               Sistem akan membuat kode eksemplar secara berurutan
                               berdasarkan kode buku. Contoh: LP-001, LP-002,
                               LP-003.
@@ -2560,9 +2593,9 @@ export default function NewLoanPage() {
                           id={`book-card-${book.id}`}
                           className={`rounded-xl border p-4 transition-all duration-300 ${
                             isHighlighted
-                              ? "border-blue-500 bg-blue-50/90 ring-4 ring-blue-500/30 shadow-md scale-[1.01]"
+                              ? "border-blue-500 bg-blue-50/90 dark:border-blue-500 dark:bg-blue-950/50 ring-4 ring-blue-500/30 shadow-md scale-[1.01]"
                               : selected
-                                ? "border-blue-400 bg-blue-50/60"
+                                ? "border-blue-400 bg-blue-50/60 dark:border-blue-500/60 dark:bg-blue-950/30"
                                 : unavailable
                                   ? "border-border bg-surface-subtle"
                                   : "border-border bg-surface hover:border-border"
@@ -2623,7 +2656,7 @@ export default function NewLoanPage() {
                                     className={`rounded-full px-2 py-0.5 text-xs font-semibold ${
                                       archived
                                         ? "bg-surface-muted text-text-muted"
-                                        : "bg-emerald-50 text-emerald-700"
+                                        : "bg-emerald-50 text-emerald-700 dark:bg-emerald-950/50 dark:text-emerald-300 dark:border dark:border-emerald-800/40"
                                     }`}
                                   >
                                     {archived ? "Diarsipkan" : "Aktif"}
@@ -2647,15 +2680,15 @@ export default function NewLoanPage() {
                                 <div
                                   className={`rounded-lg border px-2.5 py-1.5 text-center ${
                                     book.availableCopies > 0
-                                      ? "border-emerald-100 bg-emerald-50"
-                                      : "border-red-100 bg-red-50"
+                                      ? "border-emerald-100 bg-emerald-50 dark:border-emerald-900/40 dark:bg-emerald-950/40"
+                                      : "border-red-100 bg-red-50 dark:border-red-900/40 dark:bg-red-950/40"
                                   }`}
                                 >
                                   <p
                                     className={`text-[11px] font-semibold uppercase tracking-wide ${
                                       book.availableCopies > 0
-                                        ? "text-emerald-600"
-                                        : "text-red-500"
+                                        ? "text-emerald-600 dark:text-emerald-400"
+                                        : "text-red-500 dark:text-red-400"
                                     }`}
                                   >
                                     Tersedia
@@ -2663,8 +2696,8 @@ export default function NewLoanPage() {
                                   <p
                                     className={`mt-0.5 text-base font-bold leading-none ${
                                       book.availableCopies > 0
-                                        ? "text-emerald-700"
-                                        : "text-red-600"
+                                        ? "text-emerald-700 dark:text-emerald-300"
+                                        : "text-red-600 dark:text-red-300"
                                     }`}
                                   >
                                     {book.availableCopies}
@@ -2705,7 +2738,7 @@ export default function NewLoanPage() {
                               className={`mt-3 rounded-md px-3 py-2 text-xs font-medium ${
                                 archived
                                   ? "bg-surface-muted text-text-muted"
-                                  : "bg-red-50 text-red-600"
+                                  : "bg-red-50 text-red-600 dark:bg-red-950/50 dark:text-red-400 dark:border dark:border-red-900/40"
                               }`}
                             >
                               {archived
@@ -2715,7 +2748,7 @@ export default function NewLoanPage() {
                           )}
 
                           {selectedItem && (
-                            <div className="mt-4 border-t border-blue-200 pt-4">
+                            <div className="mt-4 border-t border-blue-200 dark:border-blue-900/50 pt-4">
                               <div className="flex items-center justify-between gap-3">
                                 <div>
                                   <p className="text-sm font-semibold text-text-main">
@@ -2778,7 +2811,7 @@ export default function NewLoanPage() {
                                               copyDisabled
                                                 ? "cursor-not-allowed bg-surface-subtle opacity-60 border-border"
                                                 : checked
-                                                  ? "border-blue-500 bg-blue-50/50 cursor-pointer ring-1 ring-blue-200"
+                                                  ? "border-blue-500 bg-blue-50/50 dark:bg-blue-950/60 dark:border-blue-400 cursor-pointer ring-1 ring-blue-200 dark:ring-blue-800/80"
                                                   : "border-border bg-surface hover:border-border cursor-pointer"
                                             }`}
                                           >
@@ -2790,7 +2823,7 @@ export default function NewLoanPage() {
                                                 onChange={() =>
                                                   toggleCopy(book.id, copy)
                                                 }
-                                                className="h-4 w-4 rounded border-border text-blue-600 focus:ring-blue-500 disabled:cursor-not-allowed"
+                                                className="h-4 w-4 rounded border-border text-blue-600 focus:ring-blue-500 disabled:cursor-not-allowed bg-surface"
                                               />
                                               <p className="truncate text-xs sm:text-sm font-semibold text-text-main">
                                                 {copy.code}
@@ -2800,12 +2833,12 @@ export default function NewLoanPage() {
                                             <span
                                               className={`shrink-0 rounded-full px-2 py-0.5 text-xs font-semibold ${
                                                 copy.status === "AVAILABLE"
-                                                  ? "bg-emerald-50 text-emerald-700"
+                                                  ? "bg-emerald-50 text-emerald-700 dark:bg-emerald-950/60 dark:text-emerald-300 dark:border dark:border-emerald-800/40"
                                                   : copy.status === "BORROWED"
-                                                    ? "bg-amber-50 text-amber-700"
+                                                    ? "bg-amber-50 text-amber-700 dark:bg-amber-950/60 dark:text-amber-300 dark:border dark:border-amber-800/40"
                                                     : copy.status === "INACTIVE"
                                                       ? "bg-surface-muted text-text-muted"
-                                                      : "bg-red-50 text-red-600"
+                                                      : "bg-red-50 text-red-600 dark:bg-red-950/60 dark:text-red-400 dark:border dark:border-red-800/40"
                                               }`}
                                             >
                                               {copy.status === "AVAILABLE"
@@ -2823,7 +2856,7 @@ export default function NewLoanPage() {
 
                                     {/* COPIES PAGINATION (WHEN > 5 COPIES) */}
                                     {copyTotalPages > 1 && (
-                                      <div className="mt-2.5 pt-2 border-t border-blue-100/80">
+                                      <div className="mt-2.5 pt-2 border-t border-blue-100/80 dark:border-blue-900/50">
                                         <Pagination
                                           compact
                                           currentPage={safeCopyPage}
@@ -2846,7 +2879,7 @@ export default function NewLoanPage() {
 
                               <p className="mt-3 text-xs sm:text-sm text-text-secondary">
                                 Eksemplar dipilih:{" "}
-                                <span className="font-semibold text-blue-700">
+                                <span className="font-semibold text-blue-700 dark:text-blue-400">
                                   {selectedItem.selectedCopyIds.length}
                                 </span>{" "}
                                 dari {selectedItem.copies.length} eksemplar
@@ -2912,7 +2945,7 @@ export default function NewLoanPage() {
                         key={item.book.id}
                         id={`selected-book-${item.book.id}`}
                         className={`flex items-center gap-2.5 px-3 py-2.5 transition-colors ${
-                          isHighlighted ? "bg-blue-50/80 ring-2 ring-blue-500/40" : ""
+                          isHighlighted ? "bg-blue-50/80 dark:bg-blue-950/60 ring-2 ring-blue-500/40" : ""
                         }`}
                       >
                         <div className="min-w-0 flex-1">
@@ -3020,7 +3053,7 @@ export default function NewLoanPage() {
                 <p className="font-semibold text-text-secondary">Checklist Kelengkapan:</p>
                 <div
                   className={`flex items-center gap-2 ${
-                    selectedMember ? "text-emerald-700 font-medium" : "text-text-muted"
+                    selectedMember ? "text-emerald-700 dark:text-emerald-400 font-medium" : "text-text-muted"
                   }`}
                 >
                   <span className="text-sm font-bold leading-none">{selectedMember ? "✓" : "○"}</span>
@@ -3030,7 +3063,7 @@ export default function NewLoanPage() {
                   className={`flex items-center gap-2 ${
                     selectedBooks.length > 0 &&
                     selectedBooks.every((item) => item.selectedCopyIds.length > 0)
-                      ? "text-emerald-700 font-medium"
+                      ? "text-emerald-700 dark:text-emerald-400 font-medium"
                       : "text-text-muted"
                   }`}
                 >
@@ -3049,7 +3082,7 @@ export default function NewLoanPage() {
                 </div>
                 <div
                   className={`flex items-center gap-2 ${
-                    borrowedAt && dueAt && !dateError ? "text-emerald-700 font-medium" : "text-text-muted"
+                    borrowedAt && dueAt && !dateError ? "text-emerald-700 dark:text-emerald-400 font-medium" : "text-text-muted"
                   }`}
                 >
                   <span className="text-sm font-bold leading-none">
@@ -3084,7 +3117,7 @@ export default function NewLoanPage() {
 
               {/* PERINGATAN BLOKIR SUBMIT JIKA KUOTA PENUH */}
               {isMaxActiveLoansReached && (
-                <div className="mt-3 rounded-md border border-red-200 bg-red-50 p-2.5 text-xs text-red-800" role="alert">
+                <div className="mt-3 rounded-md border border-red-200 dark:border-red-900/50 bg-red-50 dark:bg-red-950/40 p-2.5 text-xs text-red-800 dark:text-red-300" role="alert">
                   <p className="font-semibold">Peminjaman Tidak Dapat Diproses</p>
                   <p className="mt-0.5">
                     Anggota ini telah mencapai batas {maxActiveLoans} peminjaman aktif. Selesaikan atau kembalikan pinjaman sebelumnya terlebih dahulu.

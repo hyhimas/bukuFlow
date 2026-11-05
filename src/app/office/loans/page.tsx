@@ -37,7 +37,7 @@ import {
 } from "@/lib/api";
 import type { Company } from "@/lib/types";
 import { useToast } from "@/components/ui/Toast";
-import { exportToExcel } from "@/lib/export/excel";
+import { exportToExcel, type ExportPeriod, getExportDateRange } from "@/lib/export/excel";
 
 type TransactionStatus = "ACTIVE" | "OVERDUE" | "COMPLETED";
 
@@ -157,18 +157,13 @@ function OfficeLoansContent() {
   const savedTotalRef = useRef(0);
 
   // Sinkronisasi status filter dari query URL searchParams (?status=ACTIVE/OVERDUE)
-  useEffect(() => {
-    const rawStatus = searchParams.get("status")?.toUpperCase();
-    if (rawStatus === "ACTIVE" || rawStatus === "OVERDUE" || rawStatus === "COMPLETED") {
-      setStatus(rawStatus);
-      setFilterStatus(rawStatus);
-      setPage(1);
-    } else if (searchParams.has("status") && !rawStatus) {
-      setStatus("");
-      setFilterStatus("");
-      setPage(1);
-    }
-  }, [searchParams]);
+  const [prevUrlStatus, setPrevUrlStatus] = useState(urlStatusParam);
+  if (urlStatusParam !== prevUrlStatus) {
+    setPrevUrlStatus(urlStatusParam);
+    setStatus(initialStatus);
+    setFilterStatus(initialStatus);
+    setPage(1);
+  }
 
   const searchInputRef = useRef<HTMLInputElement>(null);
   useSearchHotkey(searchInputRef, {
@@ -178,8 +173,25 @@ function OfficeLoansContent() {
   // Detail Modal
   const [selectedLoan, setSelectedLoan] = useState<OfficeLoanItem | null>(null);
 
-  // Export to Excel
+  // Export to Excel Modal & Period Filter
+  const [isExportOpen, setIsExportOpen] = useState(false);
+  const [exportPeriod, setExportPeriod] = useState<ExportPeriod>("ALL");
+  const [exportStartDate, setExportStartDate] = useState("");
+  const [exportEndDate, setExportEndDate] = useState("");
   const [exportLoading, setExportLoading] = useState(false);
+
+  function openExport() {
+    if (!selectedCompanyId) {
+      toast.warning("Pilih instansi terlebih dahulu.");
+      return;
+    }
+    setIsExportOpen(true);
+  }
+
+  function closeExport() {
+    setIsExportOpen(false);
+  }
+
   const selectedCompany = companies.find((c) => c.id === selectedCompanyId);
   const selectedCompanyName = selectedCompany?.name || "Perpustakaan";
   const isInactiveCompany =
@@ -455,6 +467,21 @@ function OfficeLoansContent() {
         ),
       },
       {
+        key: "fine",
+        header: "Denda",
+        width: "140px",
+        render: (loan) => {
+          if (loan.fineAmount && loan.fineAmount > 0) {
+            return (
+              <span className="text-xs sm:text-sm font-bold text-danger-text tabular-nums whitespace-nowrap">
+                Rp {loan.fineAmount.toLocaleString("id-ID")}
+              </span>
+            );
+          }
+          return <span className="text-text-subtle select-none">-</span>;
+        },
+      },
+      {
         key: "actions",
         header: "Aksi",
         width: "80px",
@@ -513,18 +540,26 @@ function OfficeLoansContent() {
       return;
     }
 
+    if (exportPeriod === "CUSTOM" && (!exportStartDate || !exportEndDate)) {
+      toast.warning("Silakan pilih tanggal mulai dan tanggal selesai untuk periode custom.");
+      return;
+    }
+
     try {
       setExportLoading(true);
       const BATCH_SIZE = 100;
       let allLoans: OfficeLoanItem[] = [];
+
+      const { startDate: targetStartDate, endDate: targetEndDate } =
+        getExportDateRange(exportPeriod, exportStartDate, exportEndDate);
 
       const firstRes = await searchOfficeLoansApi(selectedCompanyId, {
         page: 1,
         size: BATCH_SIZE,
         q: debouncedSearch.trim() || undefined,
         status: status || undefined,
-        startDate: startDate || undefined,
-        endDate: endDate || undefined,
+        startDate: targetStartDate || undefined,
+        endDate: targetEndDate || undefined,
         due_from: dueFrom || undefined,
         due_to: dueTo || undefined,
         returned_from: returnedFrom || undefined,
@@ -543,8 +578,8 @@ function OfficeLoansContent() {
             size: BATCH_SIZE,
             q: debouncedSearch.trim() || undefined,
             status: status || undefined,
-            startDate: startDate || undefined,
-            endDate: endDate || undefined,
+            startDate: targetStartDate || undefined,
+            endDate: targetEndDate || undefined,
             due_from: dueFrom || undefined,
             due_to: dueTo || undefined,
             returned_from: returnedFrom || undefined,
@@ -555,8 +590,19 @@ function OfficeLoansContent() {
         }
       }
 
+      // Filter tanggal secara presisi di sisi client
+      if (targetStartDate || targetEndDate) {
+        allLoans = allLoans.filter((item) => {
+          const itemDate = (item.borrowedAt || item.createdAt || "").slice(0, 10);
+          if (!itemDate) return true;
+          if (targetStartDate && itemDate < targetStartDate) return false;
+          if (targetEndDate && itemDate > targetEndDate) return false;
+          return true;
+        });
+      }
+
       if (allLoans.length === 0) {
-        toast.warning("Tidak ada data transaksi peminjaman untuk diekspor.");
+        toast.warning("Tidak ada data transaksi peminjaman untuk periode terpilih.");
         return;
       }
 
@@ -603,6 +649,7 @@ function OfficeLoansContent() {
         "Peminjaman"
       );
       toast.success("Data peminjaman berhasil diekspor ke Excel.");
+      setIsExportOpen(false);
     } catch (err: unknown) {
       toast.error(getErrorMessage(err, "Gagal mengekspor data peminjaman."));
     } finally {
@@ -649,7 +696,7 @@ function OfficeLoansContent() {
                 type="button"
                 variant="secondary"
                 size="sm"
-                onClick={handleExportExcel}
+                onClick={openExport}
                 disabled={Boolean(error) || !selectedCompanyId || exportLoading || tableLoading || loans.length === 0}
                 loading={exportLoading}
                 className="w-full sm:w-auto text-xs h-9 px-3 text-center whitespace-nowrap flex items-center justify-center gap-1.5 shrink-0"
@@ -657,7 +704,7 @@ function OfficeLoansContent() {
                 <svg
                   viewBox="0 0 24 24"
                   fill="none"
-                  className="mr-1.5 inline h-4 w-4 text-emerald-600"
+                  className="mr-1.5 inline h-4 w-4 shrink-0"
                   aria-hidden="true"
                 >
                   <path
@@ -1012,6 +1059,11 @@ function OfficeLoansContent() {
                               <Badge variant={getStatusVariant(loan.status)}>
                                 {getStatusLabel(loan.status)}
                               </Badge>
+                              {loan.fineAmount && loan.fineAmount > 0 && (
+                                <span className="mt-0.5 block text-xs font-semibold text-danger-text tabular-nums">
+                                  Denda: Rp {loan.fineAmount.toLocaleString("id-ID")}
+                                </span>
+                              )}
                             </div>
                           </div>
 
@@ -1416,145 +1468,206 @@ function OfficeLoansContent() {
             onClose={() => setSelectedLoan(null)}
             title="Detail Transaksi Peminjaman"
             description="Informasi lengkap transaksi peminjaman pada instansi terpilih."
-            size="4xl"
+            size="2xl"
           >
-            <div className="space-y-5">
+            <div className="space-y-5 min-w-0 max-w-full">
               {/* Ringkasan Metadata Transaksi */}
-              <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-3.5 p-4 rounded-xl bg-surface-subtle border border-border text-xs">
-                <div>
-                  <span className="text-text-muted block text-[11px] uppercase tracking-wider font-semibold">
-                    Kode Transaksi
-                  </span>
-                  <span className="font-mono font-bold text-text-main text-sm">
-                    {selectedLoan.loanNumber}
-                  </span>
-                  {selectedLoan.rawLoanNumber &&
-                    selectedLoan.rawLoanNumber !== selectedLoan.loanNumber && (
-                      <span className="block mt-0.5 text-[11px] text-text-muted font-mono truncate" title={selectedLoan.rawLoanNumber}>
-                        ID Sistem: {selectedLoan.rawLoanNumber}
-                      </span>
-                    )}
-                </div>
-
-                <div>
-                  <span className="text-text-muted block text-[11px] uppercase tracking-wider font-semibold">
-                    Member
-                  </span>
-                  <span className="font-semibold text-text-main text-sm block truncate">
-                    {selectedLoan.memberName ||
-                      (selectedLoan.memberNumber
-                        ? `Anggota (${selectedLoan.memberNumber})`
-                        : "Anggota")}
-                  </span>
-                  {selectedLoan.memberNumber && selectedLoan.memberNumber !== "-" && (
-                    <span className="text-[11px] text-text-muted font-mono">
-                      No. Anggota: {selectedLoan.memberNumber}
+              <div className="rounded-xl border border-border bg-surface-subtle p-4 space-y-3.5 text-xs">
+                {/* Baris 1: Header (Kode Transaksi, Status, Denda, Instansi) */}
+                <div className="flex flex-wrap items-center justify-between gap-3 pb-3 border-b border-border-subtle">
+                  <div>
+                    <span className="text-text-muted block text-[11px] uppercase tracking-wider font-semibold">
+                      Kode Transaksi
                     </span>
-                  )}
-                </div>
-
-                <div>
-                  <span className="text-text-muted block text-[11px] uppercase tracking-wider font-semibold">
-                    Petugas
-                  </span>
-                  <span className="font-medium text-text-main text-sm block truncate">
-                    {selectedLoan.officerName || "-"}
-                  </span>
-                  {selectedLoan.borrowedBy && selectedLoan.borrowedBy !== "-" && (
-                    <span className="text-[11px] text-text-muted font-mono truncate block" title={selectedLoan.borrowedBy}>
-                      ID: {selectedLoan.borrowedBy}
+                    <span className="font-mono font-bold text-text-main text-base sm:text-lg">
+                      {selectedLoan.loanNumber}
                     </span>
-                  )}
-                </div>
+                    {selectedLoan.rawLoanNumber &&
+                      selectedLoan.rawLoanNumber !== selectedLoan.loanNumber && (
+                        <span className="block mt-0.5 text-[11px] text-text-muted font-mono" title={selectedLoan.rawLoanNumber}>
+                          ID Sistem: {selectedLoan.rawLoanNumber}
+                        </span>
+                      )}
+                  </div>
 
-                <div>
-                  <span className="text-text-muted block text-[11px] uppercase tracking-wider font-semibold">
-                    Tanggal Pinjam
-                  </span>
-                  <span className="font-medium text-text-main text-sm">
-                    {formatDate(selectedLoan.borrowedAt)}
-                  </span>
-                </div>
+                  <div className="flex flex-wrap items-center gap-2">
+                    <span className="rounded-md bg-blue-50 dark:bg-blue-950/40 px-2.5 py-1 text-xs font-mono font-semibold text-blue-700 dark:text-blue-300 border border-blue-200 dark:border-blue-900/50">
+                      ID: {selectedLoan.companyId}
+                    </span>
 
-                <div>
-                  <span className="text-text-muted block text-[11px] uppercase tracking-wider font-semibold">
-                    Jatuh Tempo
-                  </span>
-                  <span
-                    className={`text-sm font-semibold tabular-nums ${
-                      selectedLoan.status === "OVERDUE"
-                        ? "text-danger-text"
-                        : "text-text-main"
-                    }`}
-                  >
-                    {formatDate(selectedLoan.dueAt)}
-                  </span>
-                </div>
-
-                <div>
-                  <span className="text-text-muted block text-[11px] uppercase tracking-wider font-semibold">
-                    Pengembalian
-                  </span>
-                  <span className="font-medium text-text-secondary text-sm">
-                    {selectedLoan.returnedAt ? formatDate(selectedLoan.returnedAt) : "-"}
-                  </span>
-                </div>
-
-                <div>
-                  <span className="text-text-muted block text-[11px] uppercase tracking-wider font-semibold">
-                    Status Transaksi
-                  </span>
-                  <div className="mt-1">
                     <Badge variant={getStatusVariant(selectedLoan.status)}>
                       {getStatusLabel(selectedLoan.status)}
                     </Badge>
+
+                    {selectedLoan.fineAmount && selectedLoan.fineAmount > 0 && (
+                      <span className="rounded-md bg-red-50 dark:bg-red-950/40 px-2.5 py-1 text-xs font-bold text-red-600 dark:text-red-400 border border-red-200 dark:border-red-900/50 tabular-nums">
+                        Total Denda: Rp {selectedLoan.fineAmount.toLocaleString("id-ID")}
+                      </span>
+                    )}
                   </div>
                 </div>
 
-                <div>
-                  <span className="text-text-muted block text-[11px] uppercase tracking-wider font-semibold">
-                    ID Instansi
-                  </span>
-                  <span className="font-mono text-xs text-text-secondary truncate block mt-0.5">
-                    {selectedLoan.companyId}
-                  </span>
+                {/* Baris 2: Entitas (Member & Petugas) */}
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pb-3 border-b border-border-subtle">
+                  <div>
+                    <span className="text-text-muted block text-[11px] uppercase tracking-wider font-semibold">
+                      Anggota Peminjam
+                    </span>
+                    <span className="font-semibold text-text-main text-sm block mt-0.5">
+                      {selectedLoan.memberName ||
+                        (selectedLoan.memberNumber
+                          ? `Anggota (${selectedLoan.memberNumber})`
+                          : "Anggota")}
+                    </span>
+                    {selectedLoan.memberNumber && selectedLoan.memberNumber !== "-" && (
+                      <span className="text-[11px] text-text-muted font-mono block mt-0.5">
+                        No. Anggota: {selectedLoan.memberNumber}
+                      </span>
+                    )}
+                  </div>
+
+                  <div>
+                    <span className="text-text-muted block text-[11px] uppercase tracking-wider font-semibold">
+                      Petugas Pencatat
+                    </span>
+                    <span className="font-medium text-text-main text-sm block mt-0.5">
+                      {selectedLoan.officerName || "-"}
+                    </span>
+                    {selectedLoan.borrowedBy && selectedLoan.borrowedBy !== "-" && (
+                      <span className="text-[11px] text-text-muted font-mono block mt-0.5" title={selectedLoan.borrowedBy}>
+                        ID Petugas: {selectedLoan.borrowedBy}
+                      </span>
+                    )}
+                  </div>
+                </div>
+
+                {/* Baris 3: Jadwal Sirkulasi (Selalu 3 Kolom Konsisten) */}
+                <div className="grid grid-cols-3 gap-2.5 pt-0.5">
+                  <div>
+                    <span className="text-text-muted block text-[11px] uppercase tracking-wider font-semibold">
+                      Tanggal Pinjam
+                    </span>
+                    <span className="font-medium text-text-main text-xs sm:text-sm mt-0.5 block whitespace-nowrap">
+                      {formatDate(selectedLoan.borrowedAt)}
+                    </span>
+                  </div>
+
+                  <div>
+                    <span className="text-text-muted block text-[11px] uppercase tracking-wider font-semibold">
+                      Jatuh Tempo
+                    </span>
+                    <span
+                      className={`text-xs sm:text-sm mt-0.5 block whitespace-nowrap font-semibold ${
+                        selectedLoan.status === "OVERDUE"
+                          ? "text-danger-text"
+                          : "text-text-main"
+                      }`}
+                    >
+                      {formatDate(selectedLoan.dueAt)}
+                    </span>
+                  </div>
+
+                  <div>
+                    <span className="text-text-muted block text-[11px] uppercase tracking-wider font-semibold">
+                      Tanggal Kembali
+                    </span>
+                    <span className="font-medium text-text-secondary text-xs sm:text-sm mt-0.5 block whitespace-nowrap">
+                      {selectedLoan.returnedAt ? formatDate(selectedLoan.returnedAt) : "-"}
+                    </span>
+                  </div>
                 </div>
               </div>
 
               {/* Daftar Eksemplar Buku */}
-              <div className="space-y-2">
+              <div className="space-y-2 min-w-0 max-w-full">
                 <h4 className="text-xs font-bold uppercase tracking-wider text-text-secondary">
                   Daftar Eksemplar ({selectedLoan.items?.length || selectedLoan.copyIds.length})
                 </h4>
-                <div className="rounded-lg border border-border">
-                  <table className="w-full text-left text-xs table-auto">
+
+                {/* Tampilan Mobile & Tablet: Kartu Eksemplar Bersih & Tidak Terpotong */}
+                <div className="md:hidden space-y-2.5">
+                  {selectedLoan.items && selectedLoan.items.length > 0 ? (
+                    selectedLoan.items.map((item, idx) => (
+                      <div
+                        key={item.id || idx}
+                        className="rounded-lg border border-border bg-surface-subtle p-3 space-y-2 text-xs"
+                      >
+                        <div className="flex items-start justify-between gap-2">
+                          <span className="font-mono font-bold text-text-main">
+                            {item.copyCode || "-"}
+                          </span>
+                          <Badge variant={selectedLoan.status === "COMPLETED" ? "success" : "neutral"}>
+                            {selectedLoan.status === "COMPLETED" ? "Dikembalikan" : "Dipinjam"}
+                          </Badge>
+                        </div>
+
+                        <p className="font-medium text-text-main" title={item.bookTitle}>
+                          {item.bookTitle}
+                        </p>
+
+                        {item.fineAmount && item.fineAmount > 0 && (
+                          <div className="pt-2 border-t border-border-subtle flex items-center justify-between text-[11px]">
+                            <span className="text-text-muted">Denda Keterlambatan</span>
+                            <span className="font-bold text-danger-text tabular-nums">
+                              Rp {item.fineAmount.toLocaleString("id-ID")}
+                            </span>
+                          </div>
+                        )}
+                      </div>
+                    ))
+                  ) : (
+                    <div className="p-3 text-center text-xs text-text-muted rounded-lg border border-border">
+                      Tidak ada data eksemplar
+                    </div>
+                  )}
+                </div>
+
+                {/* Tampilan Desktop: Tabel Eksemplar Bebas Horizontal Scroll */}
+                <div className="hidden md:block rounded-lg border border-border overflow-x-auto min-w-0 max-w-full">
+                  <table className="w-full text-left text-xs">
+                    <colgroup>
+                      <col className="w-[30%]" />
+                      <col className="w-[44%]" />
+                      <col className="w-[14%]" />
+                      <col className="w-[12%]" />
+                    </colgroup>
                     <thead className="border-b border-border bg-slate-100 dark:bg-slate-800 text-[11px] font-bold uppercase tracking-wider text-slate-700 dark:text-slate-200">
                       <tr>
-                        <th className="px-3.5 py-2.5 whitespace-nowrap">Kode Eksemplar</th>
-                        <th className="px-3.5 py-2.5">Judul Buku</th>
-                        <th className="px-3.5 py-2.5 whitespace-nowrap">Status Pengembalian</th>
+                        <th className="px-3 py-2.5 whitespace-nowrap">Kode Eksemplar</th>
+                        <th className="px-3 py-2.5">Judul Buku</th>
+                        <th className="px-2 py-2.5 text-center whitespace-nowrap">Status</th>
+                        <th className="px-3 py-2.5 text-right whitespace-nowrap">Denda</th>
                       </tr>
                     </thead>
                     <tbody className="divide-y divide-border-subtle bg-surface">
                       {selectedLoan.items && selectedLoan.items.length > 0 ? (
                         selectedLoan.items.map((item, idx) => (
                           <tr key={item.id || idx} className="hover:bg-surface-subtle/70">
-                            <td className="px-3.5 py-2.5 font-mono font-medium text-text-main whitespace-nowrap">
+                            <td className="px-3 py-2.5 font-mono font-medium text-text-main whitespace-nowrap">
                               {item.copyCode || "-"}
                             </td>
-                            <td className="px-3.5 py-2.5 text-text-main font-medium min-w-[140px]" title={item.bookTitle}>
+                            <td className="px-3 py-2.5 text-text-main font-medium truncate max-w-[200px]" title={item.bookTitle}>
                               {item.bookTitle}
                             </td>
-                            <td className="px-3.5 py-2.5 whitespace-nowrap">
-                              <Badge variant={selectedLoan.status === "COMPLETED" ? "success" : "neutral"}>
-                                {selectedLoan.status === "COMPLETED" ? "Dikembalikan" : "Dipinjam"}
+                            <td className="px-2 py-2.5 text-center whitespace-nowrap">
+                              <Badge variant={selectedLoan.status === "COMPLETED" ? "success" : "neutral"} className="text-[10px] px-1.5 py-0.5">
+                                {selectedLoan.status === "COMPLETED" ? "Kembali" : "Dipinjam"}
                               </Badge>
+                            </td>
+                            <td className="px-3 py-2.5 text-right tabular-nums text-[11px] font-medium whitespace-nowrap">
+                              {item.fineAmount && item.fineAmount > 0 ? (
+                                <span className="font-bold text-danger-text">
+                                  Rp {item.fineAmount.toLocaleString("id-ID")}
+                                </span>
+                              ) : (
+                                <span className="text-text-subtle select-none">-</span>
+                              )}
                             </td>
                           </tr>
                         ))
                       ) : selectedLoan.copyIds.length === 0 ? (
                         <tr>
-                          <td colSpan={3} className="px-3.5 py-4 text-center text-text-muted">
+                          <td colSpan={4} className="px-3.5 py-4 text-center text-text-muted">
                             Tidak ada data eksemplar
                           </td>
                         </tr>
@@ -1567,10 +1680,13 @@ function OfficeLoansContent() {
                             <td className="px-3.5 py-2.5 text-text-main font-medium">
                               Salinan Buku #{idx + 1}
                             </td>
-                            <td className="px-3.5 py-2.5 whitespace-nowrap">
-                              <Badge variant={selectedLoan.status === "COMPLETED" ? "success" : "neutral"}>
-                                {selectedLoan.status === "COMPLETED" ? "Dikembalikan" : "Dipinjam"}
+                            <td className="px-3.5 py-2.5 text-center whitespace-nowrap">
+                              <Badge variant={selectedLoan.status === "COMPLETED" ? "success" : "neutral"} className="text-[10px] px-1.5 py-0.5">
+                                {selectedLoan.status === "COMPLETED" ? "Kembali" : "Dipinjam"}
                               </Badge>
+                            </td>
+                            <td className="px-3.5 py-2.5 whitespace-nowrap text-right text-text-subtle select-none">
+                              -
                             </td>
                           </tr>
                         ))
@@ -1602,6 +1718,94 @@ function OfficeLoansContent() {
             </div>
           </Modal>
         )}
+
+        {/* MODAL EKSPOR EXCEL & FILTER PERIODE */}
+        <Modal
+          open={isExportOpen}
+          onClose={closeExport}
+          title="Ekspor Excel"
+          description="Pilih periode transaksi peminjaman yang ingin diekspor."
+          size="md"
+        >
+          <div className="space-y-4 pt-1">
+            <div className="space-y-2">
+              {[
+                { value: "ALL" as const, label: "Seluruh transaksi" },
+                { value: "7_DAYS" as const, label: "7 hari terakhir" },
+                { value: "1_MONTH" as const, label: "1 bulan terakhir" },
+                { value: "1_YEAR" as const, label: "1 tahun terakhir" },
+                { value: "CUSTOM" as const, label: "Periode custom" },
+              ].map((option) => {
+                const selected = exportPeriod === option.value;
+
+                return (
+                  <Button
+                    key={option.value}
+                    type="button"
+                    variant="ghost"
+                    onClick={() => setExportPeriod(option.value)}
+                    className={[
+                      "w-full h-auto flex items-center justify-start gap-3 rounded-lg border px-4 py-3 text-left text-sm font-normal transition",
+                      selected
+                        ? "border-blue-600 bg-blue-50 text-blue-700 dark:bg-blue-950/40 dark:text-blue-300 dark:border-blue-500"
+                        : "border-border bg-surface text-text-secondary hover:border-border hover:bg-surface-subtle",
+                    ].join(" ")}
+                  >
+                    <span
+                      className={`flex h-4 w-4 shrink-0 items-center justify-center rounded-full border ${
+                        selected
+                          ? "border-blue-600 bg-blue-600 text-white dark:border-blue-500 dark:bg-blue-500"
+                          : "border-border bg-surface"
+                      }`}
+                    >
+                      {selected && (
+                        <span className="h-1.5 w-1.5 rounded-full bg-surface" />
+                      )}
+                    </span>
+                    <span className="font-medium">{option.label}</span>
+                  </Button>
+                );
+              })}
+            </div>
+
+            {exportPeriod === "CUSTOM" && (
+              <div className="mt-4 grid gap-3 sm:grid-cols-2">
+                <DatePicker
+                  id="office-export-start-date"
+                  label="Dari tanggal"
+                  value={exportStartDate}
+                  onChange={(value) => setExportStartDate(value)}
+                />
+                <DatePicker
+                  id="office-export-end-date"
+                  label="Sampai tanggal"
+                  value={exportEndDate}
+                  min={exportStartDate || undefined}
+                  onChange={(value) => setExportEndDate(value)}
+                />
+              </div>
+            )}
+
+            <div className="flex justify-end gap-2.5 pt-4 border-t border-border mt-4">
+              <Button
+                type="button"
+                variant="secondary"
+                onClick={closeExport}
+                disabled={exportLoading}
+              >
+                Batal
+              </Button>
+              <Button
+                type="button"
+                onClick={() => void handleExportExcel()}
+                loading={exportLoading}
+                disabled={exportLoading}
+              >
+                Unduh Excel
+              </Button>
+            </div>
+          </div>
+        </Modal>
       </div>
     </div>
   );

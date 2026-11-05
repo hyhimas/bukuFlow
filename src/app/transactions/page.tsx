@@ -25,6 +25,7 @@ import {
   canAccessTransactions,
   canAccessMasterData,
   canManageReturns,
+  canViewOfficer,
 } from "@/lib/authorization";
 import { listLoansApi, getCompanySettingsApi, getErrorMessage } from "@/lib/api";
 import {
@@ -259,28 +260,38 @@ function TransactionsContent() {
 
   const canViewMember = userRole ? canAccessMasterData(userRole) : false;
   const canReturn = userRole ? canManageReturns(userRole) : false;
+  const canViewOfficerUser = userRole ? canViewOfficer(userRole) : false;
 
   // =========================================================
   // SYNC FROM URL QUERY PARAMS (DEEP LINKING / QUICKCARD)
   // =========================================================
 
-  useEffect(() => {
+  const currentUrlParamsKey = `${searchParams.get("status") || ""}|${searchParams.get("due_to") || searchParams.get("dueTo") || ""}|${searchParams.get("due_from") || searchParams.get("dueFrom") || ""}|${searchParams.get("search") ?? ""}`;
+  const [prevUrlParamsKey, setPrevUrlParamsKey] = useState(currentUrlParamsKey);
+
+  if (currentUrlParamsKey !== prevUrlParamsKey) {
+    setPrevUrlParamsKey(currentUrlParamsKey);
+
     const rawStatus = searchParams.get("status")?.toUpperCase();
-    if (rawStatus === "ACTIVE" || rawStatus === "OVERDUE" || rawStatus === "COMPLETED") {
-      // eslint-disable-next-line react-hooks/set-state-in-effect -- Sinkronisasi filter status dan kata kunci pencarian dari URL searchParams
-      setStatus((prev) => (prev !== rawStatus ? rawStatus : prev));
-      setFilterStatus((prev) => (prev !== rawStatus ? rawStatus : prev));
-    } else if (searchParams.has("status") && !rawStatus) {
-      setStatus("");
-      setFilterStatus("");
-    }
+    const nextStatus: TransactionStatus | "" =
+      rawStatus === "ACTIVE" || rawStatus === "OVERDUE" || rawStatus === "COMPLETED" ? rawStatus : "";
+    setStatus(nextStatus);
+    setFilterStatus(nextStatus);
+
+    const rawDueTo = searchParams.get("due_to") || searchParams.get("dueTo") || "";
+    setDueTo(rawDueTo);
+    setFilterDueTo(rawDueTo);
+
+    const rawDueFrom = searchParams.get("due_from") || searchParams.get("dueFrom") || "";
+    setDueFrom(rawDueFrom);
+    setFilterDueFrom(rawDueFrom);
 
     const rawSearch = searchParams.get("search");
     if (rawSearch !== null && rawSearch !== search) {
       setSearch(rawSearch);
       setDebouncedSearch(rawSearch);
     }
-  }, [searchParams]);
+  }
 
   // =========================================================
   // DEBOUNCE SEARCH
@@ -463,25 +474,14 @@ function TransactionsContent() {
         width: "140px",
         render: (t) => {
           const circ = calculateTransactionCirculation(t.loan, t.items, dailyFineRate);
-          if (circ.totalFine === null) {
-            return (
-              <span className="text-xs font-semibold text-warning-text whitespace-nowrap">
-                Menunggu konfigurasi
-              </span>
-            );
-          }
-          if (circ.totalFine > 0) {
+          if (circ.totalFine !== null && circ.totalFine > 0) {
             return (
               <span className="text-xs sm:text-sm font-bold text-danger-text tabular-nums whitespace-nowrap">
                 Rp {circ.totalFine.toLocaleString("id-ID")}
               </span>
             );
           }
-          return (
-            <span className="text-xs sm:text-sm font-medium text-text-muted tabular-nums whitespace-nowrap">
-              Rp 0
-            </span>
-          );
+          return <span className="text-text-subtle select-none">-</span>;
         },
       },
       {
@@ -656,12 +656,16 @@ function TransactionsContent() {
     setDueTo("");
     setReturnedFrom("");
     setReturnedTo("");
+    setFilterStatus("");
+    setFilterStartDate("");
+    setFilterEndDate("");
+    setFilterDueFrom("");
+    setFilterDueTo("");
+    setFilterReturnedFrom("");
+    setFilterReturnedTo("");
 
     resetPagination();
-
-    if (searchParams.has("status") || searchParams.has("search")) {
-      router.replace("/transactions", { scroll: false });
-    }
+    router.replace("/transactions", { scroll: false });
   }
 
   // =========================================================
@@ -705,11 +709,30 @@ function TransactionsContent() {
     closeFilter();
 
     const nextParams = new URLSearchParams(searchParams.toString());
-    if (filterStatus) {
-      nextParams.set("status", filterStatus);
-    } else {
-      nextParams.delete("status");
+    if (filterStatus) nextParams.set("status", filterStatus);
+    else nextParams.delete("status");
+
+    if (filterStartDate) nextParams.set("startDate", filterStartDate);
+    else nextParams.delete("startDate");
+
+    if (filterEndDate) nextParams.set("endDate", filterEndDate);
+    else nextParams.delete("endDate");
+
+    if (filterDueFrom) nextParams.set("dueFrom", filterDueFrom);
+    else nextParams.delete("dueFrom");
+
+    if (filterDueTo) nextParams.set("dueTo", filterDueTo);
+    else {
+      nextParams.delete("dueTo");
+      nextParams.delete("due_to");
     }
+
+    if (filterReturnedFrom) nextParams.set("returnedFrom", filterReturnedFrom);
+    else nextParams.delete("returnedFrom");
+
+    if (filterReturnedTo) nextParams.set("returnedTo", filterReturnedTo);
+    else nextParams.delete("returnedTo");
+
     const qs = nextParams.toString();
     router.replace(qs ? `/transactions?${qs}` : "/transactions", { scroll: false });
   }
@@ -738,24 +761,85 @@ function TransactionsContent() {
 
   function removeStartDateFilter() {
     setStartDate("");
+    setFilterStartDate("");
     resetPagination();
+
+    const nextParams = new URLSearchParams(searchParams.toString());
+    nextParams.delete("startDate");
+    nextParams.delete("start_date");
+    const qs = nextParams.toString();
+    router.replace(qs ? `/transactions?${qs}` : "/transactions", { scroll: false });
   }
 
   function removeEndDateFilter() {
     setEndDate("");
+    setFilterEndDate("");
     resetPagination();
+
+    const nextParams = new URLSearchParams(searchParams.toString());
+    nextParams.delete("endDate");
+    nextParams.delete("end_date");
+    const qs = nextParams.toString();
+    router.replace(qs ? `/transactions?${qs}` : "/transactions", { scroll: false });
+  }
+
+  function removeDueFromFilter() {
+    setDueFrom("");
+    setFilterDueFrom("");
+    resetPagination();
+
+    const nextParams = new URLSearchParams(searchParams.toString());
+    nextParams.delete("dueFrom");
+    nextParams.delete("due_from");
+    const qs = nextParams.toString();
+    router.replace(qs ? `/transactions?${qs}` : "/transactions", { scroll: false });
+  }
+
+  function removeDueToFilter() {
+    setDueTo("");
+    setFilterDueTo("");
+    resetPagination();
+
+    const nextParams = new URLSearchParams(searchParams.toString());
+    nextParams.delete("dueTo");
+    nextParams.delete("due_to");
+    const qs = nextParams.toString();
+    router.replace(qs ? `/transactions?${qs}` : "/transactions", { scroll: false });
+  }
+
+  function removeReturnedFromFilter() {
+    setReturnedFrom("");
+    setFilterReturnedFrom("");
+    resetPagination();
+
+    const nextParams = new URLSearchParams(searchParams.toString());
+    nextParams.delete("returnedFrom");
+    nextParams.delete("returned_from");
+    const qs = nextParams.toString();
+    router.replace(qs ? `/transactions?${qs}` : "/transactions", { scroll: false });
+  }
+
+  function removeReturnedToFilter() {
+    setReturnedTo("");
+    setFilterReturnedTo("");
+    resetPagination();
+
+    const nextParams = new URLSearchParams(searchParams.toString());
+    nextParams.delete("returnedTo");
+    nextParams.delete("returned_to");
+    const qs = nextParams.toString();
+    router.replace(qs ? `/transactions?${qs}` : "/transactions", { scroll: false });
   }
 
   function removeStatusFilter() {
     setStatus("");
+    setFilterStatus("");
     resetPagination();
 
-    if (searchParams.has("status")) {
-      const nextParams = new URLSearchParams(searchParams.toString());
-      nextParams.delete("status");
-      const qs = nextParams.toString();
-      router.replace(qs ? `/transactions?${qs}` : "/transactions", { scroll: false });
-    }
+    const nextParams = new URLSearchParams(searchParams.toString());
+    nextParams.delete("status");
+    const qs = nextParams.toString();
+    router.replace(qs ? `/transactions?${qs}` : "/transactions", { scroll: false });
   }
 
   // =========================================================
@@ -855,7 +939,7 @@ function TransactionsContent() {
                 }`
             )
             .join(", "),
-          Petugas: user?.name ?? "-",
+          ...(canViewOfficerUser ? { Petugas: user?.name ?? "-" } : {}),
           "Tanggal Peminjaman": formatDate(loan.borrowedAt || loan.createdAt),
           "Jatuh Tempo": formatDate(loan.dueAt),
           "Tanggal Pengembalian": formatDate(loan.returnedAt),
@@ -924,7 +1008,7 @@ function TransactionsContent() {
                 <svg
                   viewBox="0 0 24 24"
                   fill="none"
-                  className="h-4 w-4 text-emerald-600"
+                  className="h-4 w-4 shrink-0"
                   aria-hidden="true"
                 >
                   <path
@@ -980,7 +1064,11 @@ function TransactionsContent() {
                       setDebouncedSearch(search);
                     }
                   }}
-                  placeholder="Cari nomor peminjaman, anggota, buku, petugas... (tekan /)"
+                  placeholder={
+                    canViewOfficerUser
+                      ? "Cari nomor peminjaman, anggota, buku, petugas... (tekan /)"
+                      : "Cari nomor peminjaman, anggota, buku... (tekan /)"
+                  }
                 />
               </div>
 
@@ -1047,10 +1135,7 @@ function TransactionsContent() {
                   type="button"
                   variant="secondary"
                   size="sm"
-                  onClick={() => {
-                    setDueFrom("");
-                    resetPagination();
-                  }}
+                  onClick={removeDueFromFilter}
                   className="rounded-full px-3 py-1 text-xs"
                 >
                   Jatuh Tempo Dari: {formatDate(dueFrom)}
@@ -1063,10 +1148,7 @@ function TransactionsContent() {
                   type="button"
                   variant="secondary"
                   size="sm"
-                  onClick={() => {
-                    setDueTo("");
-                    resetPagination();
-                  }}
+                  onClick={removeDueToFilter}
                   className="rounded-full px-3 py-1 text-xs"
                 >
                   Jatuh Tempo Sampai: {formatDate(dueTo)}
@@ -1079,10 +1161,7 @@ function TransactionsContent() {
                   type="button"
                   variant="secondary"
                   size="sm"
-                  onClick={() => {
-                    setReturnedFrom("");
-                    resetPagination();
-                  }}
+                  onClick={removeReturnedFromFilter}
                   className="rounded-full px-3 py-1 text-xs"
                 >
                   Kembali Dari: {formatDate(returnedFrom)}
@@ -1095,10 +1174,7 @@ function TransactionsContent() {
                   type="button"
                   variant="secondary"
                   size="sm"
-                  onClick={() => {
-                    setReturnedTo("");
-                    resetPagination();
-                  }}
+                  onClick={removeReturnedToFilter}
                   className="rounded-full px-3 py-1 text-xs"
                 >
                   Kembali Sampai: {formatDate(returnedTo)}
@@ -1595,7 +1671,7 @@ function TransactionsContent() {
                             <div>
                               <Badge variant="success">Selesai</Badge>
                               {circ.totalFine !== null && circ.totalFine > 0 && (
-                                <span className="mt-0.5 block text-xs font-medium text-text-muted tabular-nums">
+                                <span className="mt-0.5 block text-xs font-semibold text-danger-text tabular-nums">
                                   Denda: Rp {circ.totalFine.toLocaleString("id-ID")}
                                 </span>
                               )}
@@ -1605,12 +1681,8 @@ function TransactionsContent() {
                               <Badge variant="danger">
                                 Terlambat ({circ.maxDaysOverdue} hr)
                               </Badge>
-                              {circ.totalFine === null ? (
-                                <span className="mt-0.5 block text-xs font-semibold text-amber-600">
-                                  Denda: Menunggu konfigurasi
-                                </span>
-                              ) : (
-                                <span className="mt-0.5 block text-xs font-semibold text-red-600 tabular-nums">
+                              {circ.totalFine !== null && circ.totalFine > 0 && (
+                                <span className="mt-0.5 block text-xs font-semibold text-danger-text tabular-nums">
                                   Denda: Rp {circ.totalFine.toLocaleString("id-ID")}
                                 </span>
                               )}
@@ -1667,19 +1739,21 @@ function TransactionsContent() {
                       </div>
                     </div>
 
-                    {/* DATES & PETUGAS GRID (2x2 Grid) */}
+                    {/* DATES & PETUGAS GRID */}
                     <div className="mt-3 grid grid-cols-2 gap-2 border-t border-border-subtle pt-2.5 text-xs">
-                      <div className="rounded-lg border border-border-subtle bg-surface-subtle px-2.5 py-1.5">
-                        <span className="text-[11px] font-semibold uppercase tracking-wide text-text-muted block">
-                          Petugas
-                        </span>
-                        <p
-                          className="mt-0.5 truncate font-semibold text-text-secondary"
-                          title={transaction.user?.name ?? "-"}
-                        >
-                          {transaction.user?.name ?? "-"}
-                        </p>
-                      </div>
+                      {canViewOfficerUser && (
+                        <div className="rounded-lg border border-border-subtle bg-surface-subtle px-2.5 py-1.5">
+                          <span className="text-[11px] font-semibold uppercase tracking-wide text-text-muted block">
+                            Petugas
+                          </span>
+                          <p
+                            className="mt-0.5 truncate font-semibold text-text-secondary"
+                            title={transaction.user?.name ?? "-"}
+                          >
+                            {transaction.user?.name ?? "-"}
+                          </p>
+                        </div>
+                      )}
 
                       <div className="rounded-lg border border-border-subtle bg-surface-subtle px-2.5 py-1.5">
                         <span className="text-[11px] font-semibold uppercase tracking-wide text-text-muted block">
@@ -1705,7 +1779,7 @@ function TransactionsContent() {
                         </p>
                       </div>
 
-                      <div className="rounded-lg border border-border-subtle bg-surface-subtle px-2.5 py-1.5">
+                      <div className={`rounded-lg border border-border-subtle bg-surface-subtle px-2.5 py-1.5 ${!canViewOfficerUser ? "col-span-2 sm:col-span-1" : ""}`}>
                         <span className="text-[11px] font-semibold uppercase tracking-wide text-text-muted block">
                           Tanggal Kembali
                         </span>
@@ -1804,73 +1878,25 @@ function TransactionsContent() {
             <Modal
               open={Boolean(selectedDetailTransaction)}
               onClose={() => setSelectedDetailTransaction(null)}
-              size="4xl"
+              size="2xl"
               title="Detail Transaksi Peminjaman"
               description="Informasi lengkap transaksi dan rincian denda per eksemplar."
             >
-              <div className="space-y-5">
+              <div className="space-y-5 min-w-0 max-w-full">
                 {/* Ringkasan Metadata Transaksi */}
-                <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-3.5 p-4 rounded-xl bg-surface-subtle border border-border text-xs">
-                  <div>
-                    <span className="text-text-muted block text-[11px] uppercase tracking-wider font-semibold">
-                      Kode Transaksi
-                    </span>
-                    <span className="font-mono font-bold text-text-main text-sm">
-                      {selectedDetailTransaction.loan.loanNumber}
-                    </span>
-                  </div>
-                  <div>
-                    <span className="text-text-muted block text-[11px] uppercase tracking-wider font-semibold">
-                      Member
-                    </span>
-                    <span className="font-semibold text-text-main text-sm block truncate">
-                      {selectedDetailTransaction.member?.name || "-"}
-                    </span>
-                    {selectedDetailTransaction.member?.memberNumber && (
-                      <span className="text-[11px] text-text-muted font-mono">
-                        {selectedDetailTransaction.member.memberNumber}
+                <div className="rounded-xl border border-border bg-surface-subtle p-4 space-y-3.5 text-xs">
+                  {/* Baris 1: Header (Kode Transaksi & Status) */}
+                  <div className="flex flex-wrap items-center justify-between gap-3 pb-3 border-b border-border-subtle">
+                    <div>
+                      <span className="text-text-muted block text-[11px] uppercase tracking-wider font-semibold">
+                        Kode Transaksi
                       </span>
-                    )}
-                  </div>
-                  <div>
-                    <span className="text-text-muted block text-[11px] uppercase tracking-wider font-semibold">
-                      Petugas
-                    </span>
-                    <span className="font-medium text-text-main text-sm block truncate">
-                      {selectedDetailTransaction.user?.name || "-"}
-                    </span>
-                  </div>
-                  <div>
-                    <span className="text-text-muted block text-[11px] uppercase tracking-wider font-semibold">
-                      Tanggal Pinjam
-                    </span>
-                    <span className="font-medium text-text-main">
-                      {formatDate(selectedDetailTransaction.loan.borrowedAt || selectedDetailTransaction.loan.createdAt)}
-                    </span>
-                  </div>
-                  <div>
-                    <span className="text-text-muted block text-[11px] uppercase tracking-wider font-semibold">
-                      Jatuh Tempo
-                    </span>
-                    <span className="font-medium text-text-main">
-                      {formatDate(selectedDetailTransaction.loan.dueAt)}
-                    </span>
-                  </div>
-                  <div>
-                    <span className="text-text-muted block text-[11px] uppercase tracking-wider font-semibold">
-                      Tanggal Kembali
-                    </span>
-                    <span className="font-medium text-text-main">
-                      {selectedDetailTransaction.loan.returnedAt
-                        ? formatDate(selectedDetailTransaction.loan.returnedAt)
-                        : "-"}
-                    </span>
-                  </div>
-                  <div>
-                    <span className="text-text-muted block text-[11px] uppercase tracking-wider font-semibold">
-                      Status Transaksi
-                    </span>
-                    <div className="mt-1">
+                      <span className="font-mono font-bold text-text-main text-base sm:text-lg">
+                        {selectedDetailTransaction.loan.loanNumber}
+                      </span>
+                    </div>
+
+                    <div className="flex items-center gap-2">
                       <Badge
                         variant={
                           detailCirc.overallStatus === "COMPLETED"
@@ -1886,80 +1912,184 @@ function TransactionsContent() {
                           ? `Terlambat (${detailCirc.maxDaysOverdue} hari)`
                           : "Aktif"}
                       </Badge>
+                      {detailCirc.totalFine !== null && detailCirc.totalFine > 0 && (
+                        <span className="rounded-md bg-red-50 dark:bg-red-950/40 px-2.5 py-1 text-xs font-bold text-red-600 dark:text-red-400 border border-red-200 dark:border-red-900/50 tabular-nums">
+                          Total Denda: Rp {detailCirc.totalFine.toLocaleString("id-ID")}
+                        </span>
+                      )}
                     </div>
                   </div>
-                  <div>
-                    <span className="text-text-muted block text-[11px] uppercase tracking-wider font-semibold">
-                      Total Denda
-                    </span>
-                    <span
-                      className={`text-sm font-bold block mt-0.5 tabular-nums ${
-                        detailCirc.totalFine === null
-                          ? "text-warning-text"
-                          : detailCirc.totalFine > 0
-                          ? "text-danger-text"
-                          : "text-text-main"
-                      }`}
-                    >
-                      {detailCirc.totalFine === null
-                        ? "Menunggu konfigurasi"
-                        : detailCirc.totalFine > 0
-                        ? `Rp ${detailCirc.totalFine.toLocaleString("id-ID")}`
-                        : "Rp 0"}
-                    </span>
+
+                  {/* Baris 2: Entitas (Member & Petugas) */}
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pb-3 border-b border-border-subtle">
+                    <div>
+                      <span className="text-text-muted block text-[11px] uppercase tracking-wider font-semibold">
+                        Anggota Peminjam
+                      </span>
+                      <span className="font-semibold text-text-main text-sm block mt-0.5">
+                        {selectedDetailTransaction.member?.name || "-"}
+                      </span>
+                      {selectedDetailTransaction.member?.memberNumber && (
+                        <span className="text-[11px] text-text-muted font-mono block mt-0.5">
+                          No. Anggota: {selectedDetailTransaction.member.memberNumber}
+                        </span>
+                      )}
+                    </div>
+
+                    <div>
+                      <span className="text-text-muted block text-[11px] uppercase tracking-wider font-semibold">
+                        Petugas Pencatat
+                      </span>
+                      <span className="font-medium text-text-main text-sm block mt-0.5">
+                        {canViewOfficerUser
+                          ? selectedDetailTransaction.user?.name || "-"
+                          : "Staf Perpustakaan"}
+                      </span>
+                      {canViewOfficerUser && selectedDetailTransaction.user?.role && (
+                        <span className="text-[11px] text-text-muted block mt-0.5">
+                          Hak Akses: {selectedDetailTransaction.user.role}
+                        </span>
+                      )}
+                    </div>
+                  </div>
+
+                  {/* Baris 3: Jadwal Sirkulasi (Selalu 3 Kolom Konsisten) */}
+                  <div className="grid grid-cols-3 gap-2.5 pt-0.5">
+                    <div>
+                      <span className="text-text-muted block text-[11px] uppercase tracking-wider font-semibold">
+                        Tanggal Pinjam
+                      </span>
+                      <span className="font-medium text-text-main text-xs sm:text-sm mt-0.5 block whitespace-nowrap">
+                        {formatDate(selectedDetailTransaction.loan.borrowedAt || selectedDetailTransaction.loan.createdAt)}
+                      </span>
+                    </div>
+
+                    <div>
+                      <span className="text-text-muted block text-[11px] uppercase tracking-wider font-semibold">
+                        Jatuh Tempo
+                      </span>
+                      <span
+                        className={`text-xs sm:text-sm mt-0.5 block whitespace-nowrap font-semibold ${
+                          detailCirc.overallStatus === "OVERDUE"
+                            ? "text-danger-text"
+                            : "text-text-main"
+                        }`}
+                      >
+                        {formatDate(selectedDetailTransaction.loan.dueAt)}
+                      </span>
+                    </div>
+
+                    <div>
+                      <span className="text-text-muted block text-[11px] uppercase tracking-wider font-semibold">
+                        Tanggal Kembali
+                      </span>
+                      <span className="font-medium text-text-secondary text-xs sm:text-sm mt-0.5 block whitespace-nowrap">
+                        {selectedDetailTransaction.loan.returnedAt
+                          ? formatDate(selectedDetailTransaction.loan.returnedAt)
+                          : "-"}
+                      </span>
+                    </div>
                   </div>
                 </div>
 
                 {/* Daftar Eksemplar Buku */}
-                <div className="space-y-2">
+                <div className="space-y-2 min-w-0 max-w-full">
                   <h4 className="text-xs font-bold uppercase tracking-wider text-text-secondary">
                     Daftar Eksemplar ({detailCirc.items.length})
                   </h4>
-                  <div className="rounded-lg border border-border">
-                    <table className="w-full text-left text-xs table-auto">
+
+                  {/* Tampilan Mobile & Tablet: Kartu Eksemplar Bersih & Tidak Terpotong */}
+                  <div className="md:hidden space-y-2.5">
+                    {detailCirc.items.map((ex) => (
+                      <div
+                        key={ex.id}
+                        className="rounded-lg border border-border bg-surface-subtle p-3 space-y-2 text-xs"
+                      >
+                        <div className="flex items-start justify-between gap-2">
+                          <span className="font-mono font-bold text-text-main">
+                            {ex.copyCode}
+                          </span>
+                          <Badge variant={ex.status === "RETURNED" ? "success" : "neutral"}>
+                            {ex.status === "RETURNED" ? "Dikembalikan" : "Dipinjam"}
+                          </Badge>
+                        </div>
+
+                        <p className="font-medium text-text-main" title={ex.bookTitle}>
+                          {ex.bookTitle}
+                        </p>
+
+                        <div className="pt-2 border-t border-border-subtle flex items-center justify-between text-[11px] text-text-muted tabular-nums">
+                          <span>
+                            {ex.returnedAt ? `Kembali: ${formatDate(ex.returnedAt)}` : "Belum kembali"}
+                          </span>
+                          {ex.fineAmount !== null && ex.fineAmount > 0 ? (
+                            <span className="font-bold text-danger-text">
+                              Denda: Rp {ex.fineAmount.toLocaleString("id-ID")}
+                            </span>
+                          ) : ex.daysOverdue > 0 ? (
+                            <span className="font-semibold text-danger-text">
+                              Terlambat {ex.daysOverdue} hari
+                            </span>
+                          ) : (
+                            <span>Tepat waktu</span>
+                          )}
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+
+                  {/* Tampilan Desktop: Tabel Eksemplar Bebas Horizontal Scroll */}
+                  <div className="hidden md:block rounded-lg border border-border overflow-x-auto min-w-0 max-w-full">
+                    <table className="w-full text-left text-xs">
+                      <colgroup>
+                        <col className="w-[20%]" />
+                        <col className="w-[30%]" />
+                        <col className="w-[12%]" />
+                        <col className="w-[14%]" />
+                        <col className="w-[12%]" />
+                        <col className="w-[12%]" />
+                      </colgroup>
                       <thead className="border-b border-border bg-slate-100 dark:bg-slate-800 text-[11px] font-bold uppercase tracking-wider text-slate-700 dark:text-slate-200">
                         <tr>
-                          <th className="px-3.5 py-2.5 whitespace-nowrap">Kode Eksemplar</th>
-                          <th className="px-3.5 py-2.5">Judul Buku</th>
-                          <th className="px-3.5 py-2.5 whitespace-nowrap">Status Pengembalian</th>
-                          <th className="px-3.5 py-2.5 whitespace-nowrap">Tanggal Kembali</th>
-                          <th className="px-3.5 py-2.5 text-center whitespace-nowrap">Hari Terlambat</th>
-                          <th className="px-3.5 py-2.5 text-right whitespace-nowrap">Denda</th>
+                          <th className="px-3 py-2.5 whitespace-nowrap">Kode Eksemplar</th>
+                          <th className="px-3 py-2.5">Judul Buku</th>
+                          <th className="px-2 py-2.5 text-center whitespace-nowrap">Status</th>
+                          <th className="px-2 py-2.5 text-center whitespace-nowrap">Tgl Kembali</th>
+                          <th className="px-2 py-2.5 text-center whitespace-nowrap">Terlambat</th>
+                          <th className="px-3 py-2.5 text-right whitespace-nowrap">Denda</th>
                         </tr>
                       </thead>
                       <tbody className="divide-y divide-border-subtle bg-surface">
                         {detailCirc.items.map((ex) => (
                           <tr key={ex.id} className="hover:bg-surface-subtle/70">
-                            <td className="px-3.5 py-2.5 font-mono font-medium text-text-main whitespace-nowrap">
+                            <td className="px-3 py-2.5 font-mono font-medium text-text-main whitespace-nowrap" title={ex.copyCode}>
                               {ex.copyCode}
                             </td>
-                            <td className="px-3.5 py-2.5 text-text-main font-medium min-w-[140px]" title={ex.bookTitle}>
+                            <td className="px-3 py-2.5 text-text-main font-medium truncate max-w-[170px]" title={ex.bookTitle}>
                               {ex.bookTitle}
                             </td>
-                            <td className="px-3.5 py-2.5 whitespace-nowrap">
-                              <Badge variant={ex.status === "RETURNED" ? "success" : "neutral"}>
-                                {ex.status === "RETURNED" ? "Dikembalikan" : "Dipinjam"}
+                            <td className="px-2 py-2.5 text-center whitespace-nowrap">
+                              <Badge variant={ex.status === "RETURNED" ? "success" : "neutral"} className="text-[10px] px-1.5 py-0.5">
+                                {ex.status === "RETURNED" ? "Kembali" : "Dipinjam"}
                               </Badge>
                             </td>
-                            <td className="px-3.5 py-2.5 whitespace-nowrap text-text-secondary tabular-nums">
+                            <td className="px-2 py-2.5 text-center text-text-secondary tabular-nums text-[11px] whitespace-nowrap">
                               {ex.returnedAt ? formatDate(ex.returnedAt) : "-"}
                             </td>
-                            <td className="px-3.5 py-2.5 whitespace-nowrap text-center tabular-nums">
+                            <td className="px-2 py-2.5 text-center tabular-nums text-[11px] whitespace-nowrap">
                               {ex.daysOverdue > 0 ? (
                                 <span className="font-semibold text-danger-text">{ex.daysOverdue} hari</span>
                               ) : (
-                                <span className="text-text-muted">0 hari</span>
+                                <span className="text-text-muted">-</span>
                               )}
                             </td>
-                            <td className="px-3.5 py-2.5 whitespace-nowrap text-right tabular-nums">
-                              {ex.fineAmount === null ? (
-                                <span className="text-warning-text font-medium">Menunggu konfigurasi</span>
-                              ) : ex.fineAmount > 0 ? (
+                            <td className="px-3 py-2.5 text-right tabular-nums text-[11px] font-medium whitespace-nowrap">
+                              {ex.fineAmount !== null && ex.fineAmount > 0 ? (
                                 <span className="font-bold text-danger-text">
                                   Rp {ex.fineAmount.toLocaleString("id-ID")}
                                 </span>
                               ) : (
-                                <span className="text-text-muted">Rp 0</span>
+                                <span className="text-text-subtle select-none">-</span>
                               )}
                             </td>
                           </tr>

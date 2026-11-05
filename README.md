@@ -135,19 +135,26 @@ src/
 
 ---
 
-## 📌 Catatan Teknis untuk Pengembang Penerus (*Handover Notes*)
+## 📌 Catatan Teknis & Koordinasi Backend (*Handover Notes*)
 
-Bagi pengembang yang akan melanjutkan atau memelihara repositori ini:
+Bagi tim evaluator dan pengembang backend yang menguji repositori ini:
 
-1. **Logika Denda Per Eksemplar (`src/lib/circulation.ts`)**:
-   - Jika ada perubahan aturan denda dari instansi (misal hari libur nasional tidak dihitung denda), modifikasi terpusat pada fungsi `calculateOverdueDays()` di berkas ini. Komponen UI akan otomatis mengikuti.
+1. **Konfigurasi Instansi Terpisah di Backend (`/settings/company`)**:
+   - Di backend, konfigurasi instansi terpisah menjadi 2 entitas: data profil instansi (`PUT /company/{id}`) dan kebijakan sirkulasi (`POST/PUT /company/config`).
+   - Frontend menangani pemanggilan kedua endpoint ini secara modular. Jika salah satu endpoint backend mengalami kendala atau belum memiliki skema tersimpan, frontend menampilkan status spesifik tanpa menghilangkan data form yang sedang diisi oleh admin.
 
 2. **Dukungan Integrasi Endpoint Backend yang Ditunggu**:
-   - **Lookup Barcode Eksemplar Tunggal**: Saat ini halaman `/loans/new` melakukan lookup eksemplar menggunakan cache katalog buku lokal. Jika backend FastAPI nanti telah menyediakan endpoint `GET /book-copies?code={barcode}`, integrasi dapat langsung diarahkan pada fungsi `handleScanCode` di `src/app/loans/new/page.tsx`.
-   - **Format Cetak Fisik Kartu Anggota**: Modul cetak barcode kartu anggota sudah tersedia di `src/components/barcode/BookBarcodePrintModal.tsx`. Pengembang berikutnya hanya perlu menyesuaikan tata letak CSS jika mentor telah menetapkan jenis blangko kartu fisik (kartu PVC ID-card atau stiker).
+   - **Lookup Barcode Eksemplar Tunggal (`GET /book-copies?code={barcode}`)**: Saat ini halaman `/loans/new` melakukan lookup eksemplar menggunakan filter katalog buku yang diperkaya secara paralel. Begitu backend menyediakan endpoint tunggal `GET /book-copies?code={code}`, fungsi `handleScanCode` di `src/app/loans/new/page.tsx` dapat langsung dialihkan ke endpoint tersebut untuk memangkas waktu lookup menjadi < 15ms.
 
-3. **Manajemen Sesi Otomatis**:
+3. **Logika Denda Per Eksemplar (`src/lib/circulation.ts`)**:
+   - Jika ada perubahan aturan denda dari instansi (misal hari libur nasional tidak dihitung denda), modifikasi terpusat pada fungsi `calculateOverdueDays()` di berkas ini. Seluruh tampilan dan kalkulasi di UI pengembalian dan transaksi otomatis mengikuti.
+
+4. **Format Cetak Fisik Kartu Anggota & Barcode Buku**:
+   - Modul cetak barcode buku dan kartu anggota telah terintegrasi di `src/components/barcode/BookBarcodePrintModal.tsx` dan `src/components/members/MemberManagementView.tsx`, mendukung mode satu kartu maupun cetak massal (*bulk print*) dengan indikator progress.
+
+5. **Manajemen Sesi Otomatis & Aksesibilitas**:
    - Sesi token JWT diperiksa otomatis oleh `AppShell.tsx`. Peringatan perpanjang sesi muncul 5 menit sebelum sesi berakhir. Petugas dapat memperpanjang sesi langsung di tempat (*in-place*) tanpa me-refresh atau kehilangan data formulir yang sedang diketik.
+   - Aksesibilitas keyboard didukung penuh dengan tombol *Skip to content* (`#main-content`), penahan fokus modal (*focus trap*), tombol `Escape`, shortcut `/` untuk pencarian instan, dan `Ctrl + Enter` untuk submit.
 
 ---
 

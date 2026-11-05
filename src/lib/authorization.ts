@@ -48,6 +48,10 @@ export function canAccessUserManagement(role?: UserRole): boolean {
   return role === "COMPANY_ADMIN";
 }
 
+export function canViewOfficer(role?: UserRole): boolean {
+  return role === "COMPANY_ADMIN" || role === "SUPER_ADMIN";
+}
+
 export interface RouteAccessResult {
   allowed: boolean;
   redirect: string;

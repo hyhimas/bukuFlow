@@ -166,8 +166,9 @@ export async function loginApi(email: string, password: string) {
       },
       user: raw.user || raw.data, 
     };
-  } catch (error: any) {
-    if (error.message === "Akun belum terhubung ke instansi.") {
+  } catch (error: unknown) {
+    const message = error instanceof Error ? error.message : String(error);
+    if (message === "Akun belum terhubung ke instansi.") {
       throw error;
     }
     throw new Error(formatApiError(error, "Email atau password salah."));
@@ -182,8 +183,9 @@ export async function getMeApi() {
 export async function logoutApi() {
   try {
     await api.post("/auth/logout", {}, { timeout: 1500 });
-  } catch (error: any) {
-    console.warn("Gagal logout di server (tetap membersihkan sesi lokal):", error?.message);
+  } catch (error: unknown) {
+    const message = error instanceof Error ? error.message : String(error);
+    console.warn("Gagal logout di server (tetap membersihkan sesi lokal):", message);
   } finally {
     clearAuthData();
     if (
@@ -250,8 +252,9 @@ export async function getMembersApi(
       order: params?.order,
     });
     return res.items;
-  } catch (error: any) {
-    if (error.response?.status === 404) {
+  } catch (error: unknown) {
+    const err = error as { response?: { status?: number } };
+    if (err.response?.status === 404) {
       return [];
     }
     throw new Error(
@@ -316,7 +319,7 @@ export async function getMembersPaginatedApi(
         size: requestedSize,
         totalPages: 1,
       };
-    } catch (error: any) {
+    } catch (error: unknown) {
       throw new Error(formatApiError(error, "Data anggota gagal dimuat."));
     }
   }
@@ -364,7 +367,7 @@ export async function getMembersPaginatedApi(
       size: requestedSize,
       totalPages,
     };
-  } catch (error: any) {
+  } catch (error: unknown) {
     throw new Error(
       formatApiError(error, "Data anggota gagal dimuat.")
     );
@@ -390,8 +393,9 @@ export async function searchMembersApi(
     if (!Array.isArray(items)) return [];
 
     return items.map(mapRawToMember);
-  } catch (error: any) {
-    if (error.response?.status === 404 || error.response?.status === 422) {
+  } catch (error: unknown) {
+    const err = error as { response?: { status?: number } };
+    if (err.response?.status === 404 || err.response?.status === 422) {
       return [];
     }
     throw new Error(
@@ -404,7 +408,7 @@ export async function getMemberApi(memberId: string): Promise<Member> {
   try {
     const response = await api.get(`/member/${memberId}`);
     return mapRawToMember(response.data);
-  } catch (error: any) {
+  } catch (error: unknown) {
     throw new Error(
       formatApiError(error, "Detail anggota gagal dimuat.")
     );
@@ -451,7 +455,7 @@ export async function createMemberApi(
   try {
     const response = await api.post("/member", payload);
     return mapRawToMember(response.data);
-  } catch (error: any) {
+  } catch (error: unknown) {
     throw new Error(
       formatApiError(error, "Gagal membuat anggota baru.")
     );
@@ -500,7 +504,7 @@ export async function updateMemberApi(
   try {
     const response = await api.patch(`/member/${memberId}`, payload);
     return mapRawToMember(response.data);
-  } catch (error: any) {
+  } catch (error: unknown) {
     throw new Error(
       formatApiError(error, "Gagal memperbarui anggota.")
     );
@@ -511,7 +515,7 @@ export async function deleteMemberApi(memberId: string): Promise<{ id: string; s
   try {
     const response = await api.delete(`/member/${memberId}`);
     return response.data;
-  } catch (error: any) {
+  } catch (error: unknown) {
     throw new Error(
       formatApiError(error, "Gagal menghapus anggota.")
     );
@@ -527,7 +531,7 @@ export async function changeMemberStatusApi(
       status: status === "INACTIVE" ? "INACTIVE" : "ACTIVE",
     });
     return mapRawToMember(response.data);
-  } catch (error: any) {
+  } catch (error: unknown) {
     throw new Error(
       formatApiError(
         error,
@@ -674,7 +678,7 @@ export async function getBooksApi(
         size: requestedSize,
         totalPages: 1,
       };
-    } catch (error: any) {
+    } catch (error: unknown) {
       throw new Error(formatApiError(error, "Katalog buku gagal dimuat."));
     }
   }
@@ -722,7 +726,7 @@ export async function getBooksApi(
       size: requestedSize,
       totalPages,
     };
-  } catch (error: any) {
+  } catch (error: unknown) {
     throw new Error(formatApiError(error, "Katalog buku gagal dimuat."));
   }
 }
@@ -819,7 +823,7 @@ export async function createBookApi(
     }
 
     return createdBook;
-  } catch (error: any) {
+  } catch (error: unknown) {
     throw new Error(
       formatApiError(error, "Gagal membuat buku baru.")
     );
@@ -880,8 +884,9 @@ export async function searchBooksApi(keyword: string = ""): Promise<Book[]> {
         updatedAt: item.updated_at || item.created_at || "",
       };
     });
-  } catch (error: any) {
-    if (error.response?.status === 404 || error.response?.status === 422) {
+  } catch (error: unknown) {
+    const err = error as { response?: { status?: number } };
+    if (err.response?.status === 404 || err.response?.status === 422) {
       return [];
     }
     throw new Error(
@@ -954,8 +959,9 @@ export async function getBookApi(
       createdAt: item.created_at || "",
       updatedAt: item.updated_at || item.created_at || "",
     };
-  } catch (error: any) {
-    if (error.response?.status === 404) {
+  } catch (error: unknown) {
+    const err = error as { response?: { status?: number } };
+    if (err.response?.status === 404) {
       return null;
     }
     throw new Error(
@@ -1034,7 +1040,7 @@ export async function updateBookApi(
       createdAt: item.created_at || "",
       updatedAt: item.updated_at || item.created_at || "",
     };
-  } catch (error: any) {
+  } catch (error: unknown) {
     throw new Error(
       formatApiError(error, "Gagal memperbarui buku.")
     );
@@ -1056,7 +1062,7 @@ export async function deleteBookApi(
 
     const response = await api.delete(endpoint, { params });
     return response.data;
-  } catch (error: any) {
+  } catch (error: unknown) {
     throw new Error(
       formatApiError(error, "Gagal menghapus buku.")
     );
@@ -1078,8 +1084,9 @@ export async function changeBookStatusApi(
           "Buku tidak dapat diarsipkan karena masih memiliki eksemplar yang sedang dipinjam."
         );
       }
-    } catch (e: any) {
-      if (e.message?.includes("masih memiliki eksemplar yang sedang dipinjam")) {
+    } catch (e: unknown) {
+      const message = e instanceof Error ? e.message : String(e);
+      if (message.includes("masih memiliki eksemplar yang sedang dipinjam")) {
         throw e;
       }
     }
@@ -1089,27 +1096,51 @@ export async function changeBookStatusApi(
   return updateBookApi(bookId, { status }, companyId);
 }
 
+export interface GetBookCopiesOptions {
+  companyId?: string;
+  copyCode?: string;
+  code?: string;
+  status?: BookCopyStatus;
+}
+
 export async function getBookCopiesApi(
   bookId: string,
-  companyId?: string
+  optionsOrCompanyId?: string | GetBookCopiesOptions
 ): Promise<BookCopy[]> {
-  const compId = resolveCompanyId(companyId);
+  const options: GetBookCopiesOptions =
+    typeof optionsOrCompanyId === "string"
+      ? { companyId: optionsOrCompanyId }
+      : optionsOrCompanyId || {};
+
+  const compId = resolveCompanyId(options.companyId);
 
   try {
     const auth = typeof window !== "undefined" ? getAuthData() : null;
     const isSuperAdmin = auth?.user?.role === "SUPER_ADMIN";
     let response;
 
-    if (companyId || isSuperAdmin) {
+    const queryParams: Record<string, any> = {};
+    if (options.copyCode || options.code) {
+      queryParams.copy_code = options.copyCode || options.code;
+    }
+    if (options.status) {
+      queryParams.status = options.status;
+    }
+
+    if (options.companyId || isSuperAdmin) {
       try {
         response = await api.get(`/office/catalog/books/${bookId}/copies`, {
-          params: { company_id: compId },
+          params: { company_id: compId, ...queryParams },
         });
       } catch {
-        response = await api.get(`/catalog/books/${bookId}/copies`);
+        response = await api.get(`/catalog/books/${bookId}/copies`, {
+          params: queryParams,
+        });
       }
     } else {
-      response = await api.get(`/catalog/books/${bookId}/copies`);
+      response = await api.get(`/catalog/books/${bookId}/copies`, {
+        params: queryParams,
+      });
     }
 
     const rawData = response.data;
@@ -1164,7 +1195,7 @@ export async function getBookCopiesApi(
     }
 
     return Array.from(copyMap.values());
-  } catch (error: any) {
+  } catch (error: unknown) {
     throw new Error(
       formatApiError(error, "Daftar eksemplar buku gagal dimuat.")
     );
@@ -1256,7 +1287,7 @@ export async function createBookCopiesBulkApi(
       createdAt: item?.created_at || "",
       updatedAt: item?.updated_at || item?.created_at || "",
     }));
-  } catch (error: any) {
+  } catch (error: unknown) {
     throw new Error(
       formatApiError(error, "Gagal membuat eksemplar buku.")
     );
@@ -1288,7 +1319,7 @@ export async function deleteBookCopyApi(
 
     const response = await api.delete(endpoint, { params });
     return response.data;
-  } catch (error: any) {
+  } catch (error: unknown) {
     throw new Error(
       formatApiError(error, "Gagal menghapus eksemplar buku.")
     );
@@ -1312,8 +1343,9 @@ export async function changeBookCopyStatusApi(
     if (targetCopy && targetCopy.status === "BORROWED") {
       throw new Error("Eksemplar yang sedang dipinjam tidak dapat diubah statusnya.");
     }
-  } catch (e: any) {
-    if (e.message?.includes("sedang dipinjam")) {
+  } catch (e: unknown) {
+    const message = e instanceof Error ? e.message : String(e);
+    if (message.includes("sedang dipinjam")) {
       throw e;
     }
   }
@@ -1332,7 +1364,7 @@ export async function changeBookCopyStatusApi(
         createdAt: targetCopy?.createdAt || "",
         updatedAt: targetCopy?.updatedAt || "",
       };
-    } catch (error: any) {
+    } catch (error: unknown) {
       throw new Error(
         formatApiError(error, "Gagal menonaktifkan eksemplar buku.")
       );
@@ -1413,7 +1445,7 @@ export async function changeBookCopyStatusApi(
       createdAt: item.created_at || "",
       updatedAt: item.updated_at || item.created_at || "",
     };
-  } catch (error: any) {
+  } catch (error: unknown) {
     throw new Error(
       formatApiError(error, "Gagal mengubah status eksemplar buku.")
     );
@@ -1433,7 +1465,7 @@ export async function getDashboardApi(): Promise<DashboardApiResponse> {
   try {
     const [dashRes, loansRes] = await Promise.all([
       api.get("/dashboard"),
-      listLoansApi({ page: 1, size: 10, sortby: "created_at", order: "desc" }),
+      listLoansApi({ page: 1, size: 10, sortby: "updated_at", order: "desc" }),
     ]);
 
     const items = dashRes.data?.items || dashRes.data?.data || dashRes.data || {};
@@ -1450,10 +1482,10 @@ export async function getDashboardApi(): Promise<DashboardApiResponse> {
       const getLatestTime = (tx: TransactionData) => {
         const l = tx.loan;
         const times = [
-          l.createdAt ? new Date(l.createdAt).getTime() : 0,
-          l.borrowedAt ? new Date(l.borrowedAt).getTime() : 0,
           l.updatedAt ? new Date(l.updatedAt).getTime() : 0,
           l.returnedAt ? new Date(l.returnedAt).getTime() : 0,
+          l.createdAt ? new Date(l.createdAt).getTime() : 0,
+          l.borrowedAt ? new Date(l.borrowedAt).getTime() : 0,
         ].filter((t) => !Number.isNaN(t) && t > 0);
 
         return times.length > 0 ? Math.max(...times) : 0;
@@ -1477,7 +1509,7 @@ export async function getDashboardApi(): Promise<DashboardApiResponse> {
       recentLoans,
       rawResponse: dashRes.data,
     };
-  } catch (error: any) {
+  } catch (error: unknown) {
     throw new Error(
       formatApiError(error, "Dashboard gagal dimuat.")
     );
@@ -1881,6 +1913,12 @@ function mapRawToTransactionData(raw: any): TransactionData {
           bookCopyId: itemCopyId,
           returnedAt: itemReturnedAt,
           status: itemStatus,
+          fineAmount:
+            typeof rawItem?.fine_amount === "number"
+              ? rawItem.fine_amount
+              : typeof rawItem?.fineAmount === "number"
+              ? rawItem.fineAmount
+              : undefined,
           createdAt: isObject
             ? rawItem.created_at || rawItem.createdAt || loan.createdAt
             : loan.createdAt,
@@ -2069,7 +2107,7 @@ export async function createLoanApi(data: CreateLoanInputData): Promise<Loan> {
     }
 
     throw new Error("Format respons pembuatan peminjaman tidak valid.");
-  } catch (error: any) {
+  } catch (error: unknown) {
     throw new Error(formatApiError(error, "Gagal membuat data peminjaman."));
   }
 }
@@ -2097,21 +2135,25 @@ async function enrichTransactions(
 
     const books: Book[] = Array.isArray(booksRes) ? booksRes : (booksRes?.items || []);
 
-    // Load company user cache (untuk memetakan borrowed_by ke nama petugas asli tanpa fallback)
+    // Load company user cache (hanya untuk COMPANY_ADMIN atau SUPER_ADMIN agar STAFF tidak menembak endpoint /user)
     const companyId = transactions[0]?.loan?.companyId || "";
     const userMap = new Map<string, string>();
     const currentAuth = typeof window !== "undefined" ? getAuthData() : null;
+    const canFetchUsers =
+      currentAuth?.user?.role === "COMPANY_ADMIN" ||
+      currentAuth?.user?.role === "SUPER_ADMIN";
+
     if (currentAuth?.user?.id && currentAuth.user.name) {
       userMap.set(currentAuth.user.id, currentAuth.user.name);
       userMap.set(currentAuth.user.id.toLowerCase(), currentAuth.user.name);
     }
 
     const cachedCompanyUsers = companyId ? companyUserCache.get(companyId) : null;
-    if (cachedCompanyUsers && Date.now() - cachedCompanyUsers.timestamp < 60_000) {
+    if (canFetchUsers && cachedCompanyUsers && Date.now() - cachedCompanyUsers.timestamp < 300_000) {
       for (const [k, v] of cachedCompanyUsers.map.entries()) {
         userMap.set(k, v);
       }
-    } else if (companyId) {
+    } else if (companyId && canFetchUsers) {
       try {
         const usersRes = await getCompanyUsersApi({ size: 10, companyId });
         const newMap = new Map<string, string>();
@@ -2125,7 +2167,8 @@ async function enrichTransactions(
         }
         companyUserCache.set(companyId, { timestamp: Date.now(), map: newMap });
       } catch {
-        // Abaikan jika user tidak memiliki izin memuat daftar user (misal role STAFF)
+        // Jika tidak berhak (403), cache map kosong selama 5 menit agar tidak berulang menembak /user
+        companyUserCache.set(companyId, { timestamp: Date.now(), map: new Map() });
       }
     }
 
@@ -2417,8 +2460,25 @@ export async function listLoansApi(
       }
     }
 
-    if (params?.status) {
-      queryParams.status = Array.isArray(params.status) ? params.status : [params.status];
+    const today = new Date();
+    const todayStr = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, "0")}-${String(today.getDate()).padStart(2, "0")}`;
+    const beforeTodayIso = `${todayStr}T00:00:00.000Z`;
+
+    if (
+      params?.status === "OVERDUE" ||
+      (Array.isArray(params?.status) && params.status.length === 1 && params.status[0] === "OVERDUE")
+    ) {
+      // Backend database tidak menyimpan status OVERDUE, melainkan ACTIVE dengan due_at sebelum hari ini (start of today)
+      queryParams.status = ["ACTIVE"];
+      if (!params?.due_to) {
+        queryParams.due_to = beforeTodayIso;
+      }
+    } else if (Array.isArray(params?.status)) {
+      // Hilangkan OVERDUE dari array status backend jika ada, karena di database tersimpan sebagai ACTIVE
+      const cleanedStatus = Array.from(new Set(params.status.map((s) => s === "OVERDUE" ? "ACTIVE" : s)));
+      queryParams.status = cleanedStatus;
+    } else if (params?.status) {
+      queryParams.status = [params.status];
     }
 
     const compId = resolveCompanyId(params?.companyId);
@@ -2606,11 +2666,13 @@ export async function listLoansApi(
       size,
       totalPages,
     };
-  } catch (error: any) {
+  } catch (error: unknown) {
+    const err = error as { response?: { status?: number }; code?: string };
+    const message = error instanceof Error ? error.message : String(error);
     if (
-      error.response?.status >= 500 ||
-      error.code === "ECONNABORTED" ||
-      error.message?.includes("Server Error")
+      (err.response?.status ?? 0) >= 500 ||
+      err.code === "ECONNABORTED" ||
+      message.includes("Server Error")
     ) {
       throw new Error(
         formatApiError(
@@ -2619,7 +2681,7 @@ export async function listLoansApi(
         )
       );
     }
-    if (error.response?.status === 404 || error.response?.status === 422) {
+    if (err.response?.status === 404 || err.response?.status === 422) {
       throw new Error(
         formatApiError(error, "Daftar peminjaman gagal dimuat."),
       );
@@ -2633,6 +2695,7 @@ export interface ListActiveReturnsParams {
   page?: number;
   size?: number;
   search?: string;
+  due_to?: string;
 }
 
 export async function getActiveReturnsApi(
@@ -2642,6 +2705,7 @@ export async function getActiveReturnsApi(
   let page: number = 1;
   let size: number = 10;
   let search: string | undefined;
+  let due_to: string | undefined;
 
   if (typeof paramsOrCompanyId === "string") {
     companyId = paramsOrCompanyId;
@@ -2650,20 +2714,26 @@ export async function getActiveReturnsApi(
     page = paramsOrCompanyId.page ?? 1;
     size = paramsOrCompanyId.size ?? 10;
     search = paramsOrCompanyId.search;
+    due_to = paramsOrCompanyId.due_to;
   }
 
   const compId = resolveCompanyId(companyId);
   const cleanSearch = search?.trim() || "";
   const isHexLoanId = /^[0-9a-fA-F]{24}$/.test(cleanSearch);
 
-  // Gunakan search loans endpoint (/loan) ke backend secara langsung dengan status pinjaman aktif & terlambat
+  // Gunakan search loans endpoint (/loan) ke backend secara langsung dengan status ACTIVE
+  // Jika due_to disediakan (sebelum hari ini), server akan menyaring transaksi terlambat
+  // Prioritaskan urutan jatuh tempo lebih awal (sortby: due_at asc) agar pinjaman terlambat berada di awal
   const res = await listLoansApi({
     page,
     size: cleanSearch ? Math.max(size, 20) : size,
     q: isHexLoanId ? undefined : (cleanSearch || undefined),
     loan_id: isHexLoanId ? cleanSearch : undefined,
-    status: ["ACTIVE", "OVERDUE"],
+    status: ["ACTIVE"],
+    due_to,
     companyId: compId,
+    sortby: "due_at",
+    order: "asc",
   });
 
   // Guard: pastikan hanya transaksi yang belum selesai dan masih memiliki eksemplar yang dipinjam
@@ -2790,16 +2860,23 @@ export async function returnLoanItemsApi(
         dueAt: raw.due_at || raw.dueAt || "",
         returnedAt: raw.returned_at || raw.returnedAt || "",
         status: (raw.status as Loan["status"]) || "COMPLETED",
+        fineAmount:
+          typeof raw.fine_amount === "number"
+            ? raw.fine_amount
+            : typeof raw.fineAmount === "number"
+            ? raw.fineAmount
+            : undefined,
         createdAt: raw.created_at || raw.createdAt || "",
         updatedAt: raw.updated_at || raw.updatedAt || "",
       };
     }
     throw new Error("Format respons pengembalian tidak valid.");
-  } catch (error: any) {
+  } catch (error: unknown) {
+    const err = error as { response?: { status?: number; data?: { detail?: string; message?: string } } };
     const detail =
-      error.response?.data?.detail || error.response?.data?.message || "";
+      err.response?.data?.detail || err.response?.data?.message || "";
     const isAlreadyReturned =
-      error.response?.status === 409 ||
+      err.response?.status === 409 ||
       (typeof detail === "string" &&
         detail.toLowerCase().includes("sudah dikembalikan"));
 
@@ -2947,7 +3024,7 @@ export async function getOfficeMembersApi(
       size,
       totalPages,
     };
-  } catch (error: any) {
+  } catch (error: unknown) {
     throw new Error(formatApiError(error, "Gagal memuat data anggota office."));
   }
 }
@@ -2990,7 +3067,7 @@ export async function searchOfficeMembersApi(
       createdAt: item.created_at || "",
       updatedAt: item.updated_at || item.created_at || "",
     }));
-  } catch (error: any) {
+  } catch (error: unknown) {
     throw new Error(formatApiError(error, "Gagal mencari data anggota office."));
   }
 }
@@ -3022,7 +3099,7 @@ export async function getOfficeMemberDetailApi(
       createdAt: item.created_at || "",
       updatedAt: item.updated_at || item.created_at || "",
     };
-  } catch (error: any) {
+  } catch (error: unknown) {
     throw new Error(formatApiError(error, "Anggota tidak ditemukan."));
   }
 }
@@ -3084,7 +3161,7 @@ export async function createOfficeMemberApi(
       createdAt: item.created_at || "",
       updatedAt: item.updated_at || item.created_at || "",
     };
-  } catch (error: any) {
+  } catch (error: unknown) {
     throw new Error(formatApiError(error, "Gagal membuat anggota baru."));
   }
 }
@@ -3136,7 +3213,7 @@ export async function updateOfficeMemberApi(
       createdAt: item.created_at || "",
       updatedAt: item.updated_at || item.created_at || "",
     };
-  } catch (error: any) {
+  } catch (error: unknown) {
     throw new Error(formatApiError(error, "Gagal memperbarui data anggota."));
   }
 }
@@ -3474,7 +3551,6 @@ export async function getOfficeCompanyConfigApi(companyId: string): Promise<Offi
   if (!compId) {
     throw new Error("Pilih instansi terlebih dahulu.");
   }
-  const localCfg = getStoredCompanyConfig(compId);
   try {
     const response = await api.get("/office/company/config", {
       params: { company_id: compId },
@@ -3488,18 +3564,17 @@ export async function getOfficeCompanyConfigApi(companyId: string): Promise<Offi
       !Number.isFinite(Number(data.max_active_loans)) ||
       !Number.isFinite(Number(data.late_fee_per_day))
     ) {
-      return localCfg;
+      return null;
     }
     const parsed: OfficeCompanyConfig = {
       default_loan_duration: Number(data.default_loan_duration),
       max_active_loans: Number(data.max_active_loans),
       late_fee_per_day: Number(data.late_fee_per_day),
     };
-    saveStoredCompanyConfig(compId, parsed);
     return parsed;
   } catch (err: any) {
-    if (err?.response?.status === 404 || err?.response?.status === 400) return localCfg;
-    return localCfg;
+    if (err?.response?.status === 404 || err?.response?.status === 400) return null;
+    throw new Error(formatApiError(err, "Gagal memuat konfigurasi kebijakan dari server."));
   }
 }
 
@@ -3525,9 +3600,6 @@ export async function updateOfficeCompanyConfigApi(
     late_fee_per_day: Math.max(0, Math.round(Number(payload.late_fee_per_day))),
   };
 
-  // Simpan ke local persistence terlebih dahulu
-  saveStoredCompanyConfig(compId, body);
-
   try {
     const response = await api.put("/office/company/config", body, {
       params: { company_id: compId },
@@ -3538,13 +3610,9 @@ export async function updateOfficeCompanyConfigApi(
       max_active_loans: Number(data.max_active_loans ?? body.max_active_loans),
       late_fee_per_day: Number(data.late_fee_per_day ?? body.late_fee_per_day),
     };
-    saveStoredCompanyConfig(compId, resCfg);
     return resCfg;
   } catch (err: any) {
-    console.warn("Backend belum berhasil menyimpan konfigurasi instansi secara permanen, fallback ke lokal:", err);
-    // Jika backend mengembalikan 404/400 (misal belum ada upsert di BE),
-    // kita kembalikan konfigurasi yang sudah tersimpan di sistem lokal
-    return body;
+    throw new Error(formatApiError(err, "Gagal menyimpan konfigurasi kebijakan ke server."));
   }
 }
 
@@ -3666,7 +3734,7 @@ export async function getCompanyUsersApi(
       size,
       totalPages: Math.max(1, Math.ceil(total / size)),
     };
-  } catch (error: any) {
+  } catch (error: unknown) {
     throw new Error(formatApiError(error, "Gagal memuat daftar pengguna dari server."));
   }
 }
@@ -3705,7 +3773,7 @@ export async function createCompanyUserApi(
       is_active: isActive,
       createdAt: item?.created_at || item?.createdAt || "",
     };
-  } catch (error: any) {
+  } catch (error: unknown) {
     throw new Error(formatApiError(error, "Gagal membuat pengguna baru."));
   }
 }
@@ -3742,7 +3810,7 @@ export async function updateCompanyUserApi(
       is_active: isActive,
       updatedAt: item?.updated_at || item?.updatedAt || "",
     };
-  } catch (error: any) {
+  } catch (error: unknown) {
     throw new Error(formatApiError(error, "Gagal memperbarui pengguna."));
   }
 }
@@ -3751,7 +3819,7 @@ export async function deleteCompanyUserApi(userId: string): Promise<boolean> {
   try {
     await api.delete(`/user/${userId}`);
     return true;
-  } catch (error: any) {
+  } catch (error: unknown) {
     throw new Error(formatApiError(error, "Gagal menghapus pengguna."));
   }
 }
@@ -3835,7 +3903,7 @@ export async function getOfficeUsersApi(
       size,
       totalPages,
     };
-  } catch (error: any) {
+  } catch (error: unknown) {
     throw new Error(formatApiError(error, "Gagal memuat daftar pengguna office."));
   }
 }
@@ -3887,7 +3955,7 @@ export async function createOfficeUserApi(
       status: (u.is_active !== undefined ? u.is_active : true) ? "ACTIVE" : "INACTIVE",
       createdAt: u.created_at || "",
     };
-  } catch (error: any) {
+  } catch (error: unknown) {
     throw new Error(formatApiError(error, "Gagal membuat pengguna baru."));
   }
 }
@@ -3928,7 +3996,7 @@ export async function updateOfficeUserApi(
       createdAt: u.created_at || "",
       updatedAt: u.updated_at || u.created_at || "",
     };
-  } catch (error: any) {
+  } catch (error: unknown) {
     throw new Error(formatApiError(error, "Gagal memperbarui pengguna."));
   }
 }
@@ -4086,6 +4154,7 @@ export interface OfficeLoanBookItem {
   bookCode?: string;
   copyCode?: string;
   status?: string;
+  fineAmount?: number;
 }
 
 export interface OfficeLoanItem {
@@ -4102,6 +4171,7 @@ export interface OfficeLoanItem {
   dueAt: string;
   returnedAt?: string;
   status: "ACTIVE" | "OVERDUE" | "COMPLETED";
+  fineAmount?: number;
   notes?: string;
   createdAt: string;
   updatedAt?: string;
@@ -4347,6 +4417,12 @@ export async function searchOfficeLoansApi(
           it.code ||
           undefined,
         status: String(it.status || "BORROWED"),
+        fineAmount:
+          typeof it.fine_amount === "number"
+            ? it.fine_amount
+            : typeof it.fineAmount === "number"
+            ? it.fineAmount
+            : undefined,
       }));
 
       const finalCopyIds: string[] = Array.isArray(l.copy_id)
@@ -4401,6 +4477,12 @@ export async function searchOfficeLoansApi(
         dueAt: l.due_at || "",
         returnedAt: l.returned_at || undefined,
         status: (l.status || "ACTIVE") as "ACTIVE" | "OVERDUE" | "COMPLETED",
+        fineAmount:
+          typeof l.fine_amount === "number"
+            ? l.fine_amount
+            : typeof l.fineAmount === "number"
+            ? l.fineAmount
+            : bookItems.reduce((acc, it) => acc + (it.fineAmount || 0), 0) || undefined,
         notes: l.notes || undefined,
         createdAt: l.created_at || "",
         updatedAt: l.updated_at || undefined,
@@ -4478,10 +4560,9 @@ export async function getCompanySettingsApi(
 
   const raw = response.data;
   const data = raw?.data || raw || {};
-  const localCfg = companyId ? getStoredCompanyConfig(companyId) : null;
-  const defaultLoanDuration = data.default_loan_duration ?? data.defaultLoanDuration ?? localCfg?.default_loan_duration;
-  const maxActiveLoans = data.max_active_loans ?? data.maxActiveLoans ?? localCfg?.max_active_loans;
-  const dailyFineRate = data.late_fee_per_day ?? data.dailyFineRate ?? localCfg?.late_fee_per_day;
+  const defaultLoanDuration = data.default_loan_duration ?? data.defaultLoanDuration;
+  const maxActiveLoans = data.max_active_loans ?? data.maxActiveLoans;
+  const dailyFineRate = data.late_fee_per_day ?? data.dailyFineRate;
   if (
     defaultLoanDuration == null ||
     maxActiveLoans == null ||
@@ -4490,22 +4571,6 @@ export async function getCompanySettingsApi(
     !Number.isFinite(Number(maxActiveLoans)) ||
     !Number.isFinite(Number(dailyFineRate))
   ) {
-    if (localCfg) {
-      return {
-        id: String(companyId || ""),
-        companyId: String(companyId || ""),
-        defaultLoanDuration: localCfg.default_loan_duration,
-        maxActiveLoans: localCfg.max_active_loans,
-        dailyFineRate: localCfg.late_fee_per_day,
-        allowRenewal: true,
-        maxRenewals: 1,
-        dateFormat: "YYYY-MM-DD",
-        timezone: "Asia/Jakarta",
-        createdAt: new Date().toISOString(),
-        updatedAt: new Date().toISOString(),
-        isConfigured: true,
-      };
-    }
     return null;
   }
 
@@ -4542,10 +4607,6 @@ export async function updateCompanySettingsApi(
     late_fee_per_day: Number(payload.dailyFineRate),
   };
 
-  if (companyId) {
-    saveStoredCompanyConfig(companyId, body);
-  }
-
   let response;
   try {
     if (isSuperAdmin && companyId) {
@@ -4554,26 +4615,9 @@ export async function updateCompanySettingsApi(
       response = await api.put("/company/config", body);
     }
   } catch (err: unknown) {
-    if (companyId) {
-      // Backend mungkin belum mendukung upsert record untuk instansi baru,
-      // kembalikan data yang sudah tersimpan di persistensi lokal
-      return {
-        id: String(companyId),
-        companyId: String(companyId),
-        defaultLoanDuration: Number(body.default_loan_duration),
-        maxActiveLoans: Number(body.max_active_loans),
-        dailyFineRate: Number(body.late_fee_per_day),
-        allowRenewal: true,
-        maxRenewals: 1,
-        dateFormat: "YYYY-MM-DD",
-        timezone: "Asia/Jakarta",
-        createdAt: new Date().toISOString(),
-        updatedAt: new Date().toISOString(),
-      };
-    }
     const error = err as { response?: { data?: { detail?: string; message?: string } }; message?: string };
     const detailMsg = error.response?.data?.detail || error.response?.data?.message;
-    throw new Error(detailMsg || formatApiError(err, "Gagal menyimpan konfigurasi kebijakan."));
+    throw new Error(detailMsg || formatApiError(err, "Gagal menyimpan konfigurasi kebijakan ke server."));
   }
 
   const raw = response.data;

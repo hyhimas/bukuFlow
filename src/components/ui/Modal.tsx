@@ -93,7 +93,10 @@ export default function Modal({
     previousActiveElementRef.current = document.activeElement as HTMLElement | null;
 
     const originalOverflow = document.body.style.overflow;
+    const originalOverflowX = document.documentElement.style.overflowX;
     document.body.style.overflow = "hidden";
+    document.body.style.overflowX = "hidden";
+    document.documentElement.style.overflowX = "hidden";
 
     // Set initial focus: coba langsung dan pastikan di frame berikutnya
     const setFocus = () => {
@@ -118,6 +121,7 @@ export default function Modal({
     return () => {
       cancelAnimationFrame(rafId);
       document.body.style.overflow = originalOverflow;
+      document.documentElement.style.overflowX = originalOverflowX;
       if (previousActiveElementRef.current?.focus) {
         previousActiveElementRef.current.focus();
       }
@@ -183,8 +187,8 @@ export default function Modal({
     return null;
   }
 
-  const defaultOverlayClass = "fixed inset-0 z-50 flex items-center justify-center overflow-y-auto bg-overlay p-4";
-  const defaultDialogClass = `w-full max-h-[90vh] overflow-y-auto rounded-xl bg-surface dark:border dark:border-border text-text-main shadow-xl outline-none focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand/40 ${SIZE_CLASSES[size]}`;
+  const defaultOverlayClass = "fixed inset-0 z-50 flex items-center justify-center overflow-y-auto overflow-x-hidden bg-overlay p-3 sm:p-4";
+  const defaultDialogClass = `w-full max-h-[90vh] overflow-y-auto overflow-x-hidden rounded-xl bg-surface dark:border dark:border-border text-text-main shadow-xl outline-none focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand/40 min-w-0 ${SIZE_CLASSES[size]}`;
 
   const modalContent = (
     <div
@@ -237,7 +241,7 @@ export default function Modal({
               </div>
             )}
 
-            <div className={contentClassName || "p-5"}>{children}</div>
+            <div className={`min-w-0 max-w-full ${contentClassName || "p-4 sm:p-5"}`}>{children}</div>
           </>
         )}
       </div>

@@ -247,6 +247,16 @@ function LoansContent() {
           />
         </div>
 
+        {/* Banner Penjelasan Mode Baca Saja untuk Admin */}
+        <div className="mb-5 rounded-xl border border-info-border bg-info-soft p-3.5 text-xs text-info-text flex items-start gap-2.5">
+          <svg className="h-4 w-4 shrink-0 text-info-text mt-0.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" aria-hidden="true">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+          </svg>
+          <div>
+            <span className="font-semibold">Mode Baca Saja (Administrator):</span> Halaman ini berfungsi memantau daftar transaksi peminjaman aktif di perpustakaan. Peminjaman baru dan pengembalian buku diproses secara langsung melalui menu sirkulasi kasir oleh staf.
+          </div>
+        </div>
+
         {/* ERROR vs CONTENT */}
         {error ? (
           <ErrorState
@@ -441,10 +451,10 @@ function LoansContent() {
                           <div
                             key={transaction.loan.id}
                             className={[
-                              "rounded-xl border transition",
+                              "rounded-xl border transition overflow-hidden",
                               isSelected
-                                ? "border-blue-500 bg-blue-50/60 ring-1 ring-blue-200"
-                                : "border-border bg-surface hover:border-blue-300 hover:bg-blue-50/40",
+                                ? "border-brand bg-brand-soft ring-1 ring-brand-border shadow-2xs"
+                                : "border-border bg-surface hover:border-brand-border hover:bg-surface-muted/50",
                             ].join(" ")}
                           >
                             <Button
@@ -452,7 +462,7 @@ function LoansContent() {
                               variant="ghost"
                               onClick={() => selectLoan(transaction)}
                               aria-pressed={isSelected}
-                              className="w-full h-auto p-3.5 justify-start text-left font-normal"
+                              className="w-full h-auto p-3.5 justify-start text-left font-normal hover:bg-transparent"
                             >
                               <div className="w-full">
                                 <div className="flex items-start justify-between gap-3">
@@ -474,27 +484,71 @@ function LoansContent() {
                                 </div>
 
                                 <p
-                                  className="mt-1 truncate text-sm font-medium text-text-secondary"
+                                  className={[
+                                    "mt-1 truncate text-sm font-medium",
+                                    isSelected
+                                      ? "text-text-main font-semibold"
+                                      : "text-text-secondary",
+                                  ].join(" ")}
                                   title={transaction.member?.name ?? "-"}
                                 >
                                   {transaction.member?.name ?? "-"}
                                 </p>
 
-                                <p className="mt-1 text-xs text-text-muted sm:text-sm">
+                                <p
+                                  className={[
+                                    "mt-1 text-xs sm:text-sm",
+                                    isSelected
+                                      ? "text-slate-300 dark:text-slate-200"
+                                      : "text-text-muted",
+                                  ].join(" ")}
+                                >
                                   {transaction.items.length} buku
-                                  <span className="mx-1 select-none text-text-subtle" aria-hidden="true">&bull;</span>
+                                  <span
+                                    className={[
+                                      "mx-1 select-none",
+                                      isSelected
+                                        ? "text-slate-400 dark:text-slate-300"
+                                        : "text-text-subtle",
+                                    ].join(" ")}
+                                    aria-hidden="true"
+                                  >
+                                    &bull;
+                                  </span>
                                   {formatDate(transaction.loan.borrowedAt)}
-                                  <span className="mx-1 select-none text-text-subtle" aria-hidden="true">&rarr;</span>
+                                  <span
+                                    className={[
+                                      "mx-1 select-none",
+                                      isSelected
+                                        ? "text-slate-400 dark:text-slate-300"
+                                        : "text-text-subtle",
+                                    ].join(" ")}
+                                    aria-hidden="true"
+                                  >
+                                    &rarr;
+                                  </span>
                                   {formatDate(transaction.loan.dueAt)}
                                 </p>
                               </div>
                             </Button>
 
                             {/* AKSI BARIS: LIHAT ANGGOTA */}
-                            <div className="flex items-center justify-end gap-2 border-t border-border-subtle bg-surface-subtle/40 px-3 py-2 text-xs">
+                            <div
+                              className={[
+                                "flex items-center justify-end gap-2 border-t px-3 py-2 text-xs transition",
+                                isSelected
+                                  ? "border-brand-border/40 bg-brand-soft/60"
+                                  : "border-border-subtle bg-surface-subtle/40",
+                              ].join(" ")}
+                            >
                               <Link
                                 href="/master/members"
-                                className="font-medium text-text-secondary hover:text-text-main transition flex items-center gap-1"
+                                className={[
+                                  "font-medium transition flex items-center gap-1",
+                                  isSelected
+                                    ? "text-brand dark:text-blue-300 hover:underline"
+                                    : "text-text-secondary dark:text-slate-300 hover:text-brand",
+                                ].join(" ")}
                               >
                                 Lihat Anggota
                                 <span aria-hidden="true">→</span>
@@ -516,9 +570,11 @@ function LoansContent() {
                       />
                     </div>
                   )}
+                </Card>
 
-                  {/* PAGINATION */}
-                  <div className="-mx-4 -mb-4 sm:-mx-5 sm:-mb-5 mt-4">
+                {/* PAGINATION (SEPARATE CARD) */}
+                <div className="mt-4">
+                  <div className="rounded-xl border border-border bg-surface shadow-2xs">
                     <Pagination
                       currentPage={page}
                       totalPages={totalPages}
@@ -529,9 +585,10 @@ function LoansContent() {
                         setPageSize(newSize);
                         setPage(1);
                       }}
+                      className="border-t-0 rounded-xl"
                     />
                   </div>
-                </Card>
+                </div>
               </section>
 
               {/* DETAIL */}

@@ -77,6 +77,13 @@ export default function Button({
     lg: "min-h-12 px-5 py-3 text-base rounded-lg gap-2.5",
   };
 
+  // Jika className secara eksplisit menentukan tinggi h-9 atau text-xs dan size default (md),
+  // gunakan preset 'sm' agar min-h-11 tidak memaksakan tinggi tombol menjadi 44px
+  const effectiveSize =
+    size === "md" && (className.includes("h-9") || className.includes("text-xs"))
+      ? "sm"
+      : size;
+
   return (
     <button
       {...props}
@@ -90,11 +97,11 @@ export default function Button({
         focus-visible:ring-offset-2
         disabled:cursor-not-allowed
         disabled:opacity-60
-        ${sizeClass[size]}
+        ${sizeClass[effectiveSize]}
         ${variantClass[variant]}
         ${className}`}
     >
-      {loading && <Spinner className={size === "sm" ? "h-3.5 w-3.5" : "h-4 w-4"} />}
+      {loading && <Spinner className={effectiveSize === "sm" ? "h-3.5 w-3.5" : "h-4 w-4"} />}
       {!loading && icon && <span className="shrink-0" aria-hidden="true">{icon}</span>}
       {children}
     </button>

@@ -367,6 +367,39 @@ export default function AppShell({ children }: AppShellProps) {
     router.replace("/login?reason=expired");
   }, [router]);
 
+  // Hitung Mundur Otomatis Dialihkan ke Login saat Modal Expired Muncul (Total 2 Menit = 120 Detik)
+  const AUTO_REDIRECT_EXPIRED_SECONDS = 120;
+  const WARNING_THRESHOLD_SECONDS = 15;
+  const [expiredRedirectCountdown, setExpiredRedirectCountdown] = useState(AUTO_REDIRECT_EXPIRED_SECONDS);
+  const [prevShowExpiredModal, setPrevShowExpiredModal] = useState(showExpiredModal);
+
+  if (showExpiredModal !== prevShowExpiredModal) {
+    setPrevShowExpiredModal(showExpiredModal);
+    if (!showExpiredModal) {
+      setExpiredRedirectCountdown(AUTO_REDIRECT_EXPIRED_SECONDS);
+    }
+  }
+
+  useEffect(() => {
+    if (!showExpiredModal) return;
+
+    const timer = setInterval(() => {
+      setExpiredRedirectCountdown((prev) => {
+        if (prev <= 1) {
+          clearInterval(timer);
+          handleGoToLogin();
+          return 0;
+        }
+        return prev - 1;
+      });
+    }, 1000);
+
+    return () => {
+      clearInterval(timer);
+      setExpiredRedirectCountdown(AUTO_REDIRECT_EXPIRED_SECONDS);
+    };
+  }, [showExpiredModal, handleGoToLogin]);
+
   // Handle Keyboard Escape saat Expired Modal Muncul
   useEffect(() => {
     if (!showExpiredModal) return;
@@ -416,7 +449,15 @@ export default function AppShell({ children }: AppShellProps) {
       : "Staf";
 
   return (
-    <div className="min-h-screen bg-canvas text-text-main flex">
+    <div className="min-h-screen bg-canvas text-text-main flex max-w-full">
+      {/* SKIP LINK FOR ACCESSIBILITY */}
+      <a
+        href="#main-content"
+        className="sr-only focus:not-sr-only focus:fixed focus:top-4 focus:left-4 focus:z-50 focus:rounded-lg focus:bg-brand focus:px-4 focus:py-2 focus:text-sm focus:font-semibold focus:text-white focus:shadow-lg focus:outline-none focus:ring-2 focus:ring-white"
+      >
+        Lewati ke konten utama
+      </a>
+
       {/* SIDEBAR: Di desktop (lg+) full-height di kiri; di mobile (<lg) berupa drawer overlay */}
       <Sidebar
         open={sidebarOpen}
@@ -427,7 +468,7 @@ export default function AppShell({ children }: AppShellProps) {
       />
 
       {/* SISI KANAN: HEADER & KONTEN UTAMA */}
-      <div className="flex-1 flex flex-col min-w-0">
+      <div className="flex-1 flex flex-col min-w-0 max-w-full overflow-x-clip">
         {/* HEADER UTAMA */}
         <header className="print:hidden sticky top-0 z-30 flex h-16 items-center justify-between border-b border-border bg-surface/95 backdrop-blur-sm px-4 sm:px-6">
           {/* Sisi Kiri: Menu Hamburger (hanya di mobile) & Judul Halaman */}
@@ -656,7 +697,7 @@ export default function AppShell({ children }: AppShellProps) {
       <main
         id="main-content"
         tabIndex={-1}
-        className="flex-1 flex flex-col min-w-0 outline-none focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand/40"
+        className="flex-1 flex flex-col min-w-0 max-w-full overflow-x-clip outline-none focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand/40"
       >
         {children}
       </main>
@@ -691,7 +732,9 @@ export default function AppShell({ children }: AppShellProps) {
               onClick={handleGoToLogin}
               className="w-full justify-center"
             >
-              Masuk Kembali
+              {expiredRedirectCountdown <= WARNING_THRESHOLD_SECONDS
+                ? `Masuk Kembali (${expiredRedirectCountdown}s)`
+                : "Masuk Kembali"}
             </Button>
           </div>
         </div>

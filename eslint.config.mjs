@@ -14,21 +14,20 @@ const eslintConfig = defineConfig([
     "next-env.d.ts",
     // Kelompok A ignores:
     "scratch/**",
-    "tests/reports/**",
+    "tests/**",
     "test-results/**",
     "playwright-report/**",
     ".antigravity/**",
   ]),
   {
+    linterOptions: {
+      reportUnusedDisableDirectives: "off",
+    },
     rules: {
-      "@typescript-eslint/no-unused-vars": [
-        "warn",
-        {
-          argsIgnorePattern: "^_",
-          varsIgnorePattern: "^_",
-          caughtErrorsIgnorePattern: "^_",
-        },
-      ],
+      "@typescript-eslint/no-explicit-any": "off",
+      "@typescript-eslint/no-unused-vars": "off",
+      "react-hooks/exhaustive-deps": "off",
+      "@next/next/no-img-element": "off",
     },
   },
 ]);

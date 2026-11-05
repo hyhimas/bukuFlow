@@ -56,6 +56,13 @@ export default function CompanySettingsPage() {
   const [maxActiveLoans, setMaxActiveLoans] = useState<number | string>("");
   const [dailyFineRate, setDailyFineRate] = useState<number | string>("");
 
+  // Konfigurasi aktif tersimpan di server (hasil GET)
+  const [serverConfig, setServerConfig] = useState<{
+    defaultLoanDuration: number;
+    maxActiveLoans: number;
+    dailyFineRate: number;
+  } | null>(null);
+
   const [loadError, setLoadError] = useState(false);
 
   const loadData = useCallback(async (overrideCompId?: string) => {
@@ -96,11 +103,17 @@ export default function CompanySettingsPage() {
         setDefaultLoanDuration(settingsData.defaultLoanDuration);
         setMaxActiveLoans(settingsData.maxActiveLoans);
         setDailyFineRate(settingsData.dailyFineRate ?? "");
+        setServerConfig({
+          defaultLoanDuration: settingsData.defaultLoanDuration,
+          maxActiveLoans: settingsData.maxActiveLoans,
+          dailyFineRate: settingsData.dailyFineRate ?? 0,
+        });
         setIsInitialConfig(false);
       } else {
         setDefaultLoanDuration(7);
         setMaxActiveLoans(3);
         setDailyFineRate(1000);
+        setServerConfig(null);
         setIsInitialConfig(true);
       }
     } catch (err: unknown) {
@@ -150,6 +163,13 @@ export default function CompanySettingsPage() {
     try {
       setSaving(true);
       await updateCompanySettingsApi(targetCompanyId, {
+        defaultLoanDuration: durationNum,
+        maxActiveLoans: maxLoansNum,
+        dailyFineRate: fineRateNum,
+      });
+
+      // Sinkronkan ringkasan server config setelah berhasil disimpan
+      setServerConfig({
         defaultLoanDuration: durationNum,
         maxActiveLoans: maxLoansNum,
         dailyFineRate: fineRateNum,
@@ -346,15 +366,20 @@ export default function CompanySettingsPage() {
 
                 {/* Right Column: Ringkasan Kebijakan & Action Buttons (lg:col-span-5 xl:col-span-4) */}
                 <div className="space-y-4 lg:col-span-5 xl:col-span-4 lg:sticky lg:top-24">
-                  {/* Section 3: Ringkasan Kebijakan Aktif */}
+                  {/* Section 3: Ringkasan Kebijakan Aktif di Server (Hasil GET) */}
                   <div className="rounded-xl border border-blue-200/80 bg-blue-50/70 p-5 shadow-xs">
-                    <div className="flex items-center gap-2 text-blue-950 font-semibold text-sm mb-3">
-                      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="text-blue-600 shrink-0" aria-hidden="true">
-                        <circle cx="12" cy="12" r="10" />
-                        <path d="M12 16v-4" />
-                        <path d="M12 8h.01" />
-                      </svg>
-                      <h3 className="truncate">Ringkasan Aturan Operasional</h3>
+                    <div className="flex items-center justify-between gap-2 text-blue-950 font-semibold text-sm mb-3">
+                      <div className="flex items-center gap-2 min-w-0">
+                        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="text-blue-600 shrink-0" aria-hidden="true">
+                          <circle cx="12" cy="12" r="10" />
+                          <path d="M12 16v-4" />
+                          <path d="M12 8h.01" />
+                        </svg>
+                        <h3 className="truncate">Ringkasan Aturan Operasional</h3>
+                      </div>
+                      <span className="text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 rounded-md bg-blue-100/90 text-blue-800 border border-blue-200/60 shrink-0">
+                        Aktif di Server
+                      </span>
                     </div>
 
                     <div className="space-y-2.5 text-xs sm:text-sm text-blue-900">
@@ -365,7 +390,11 @@ export default function CompanySettingsPage() {
                         <div className="min-w-0">
                           <p className="text-xs text-text-muted font-medium">Durasi Peminjaman</p>
                           <p className="font-semibold text-text-main">
-                            {defaultLoanDuration !== "" ? `${defaultLoanDuration} hari kalender` : "-"}
+                            {serverConfig
+                              ? `${serverConfig.defaultLoanDuration} hari kalender`
+                              : isInitialConfig
+                              ? "Belum dikonfigurasi"
+                              : "-"}
                           </p>
                         </div>
                       </div>
@@ -377,7 +406,11 @@ export default function CompanySettingsPage() {
                         <div className="min-w-0">
                           <p className="text-xs text-text-muted font-medium">Batas Transaksi Aktif</p>
                           <p className="font-semibold text-text-main">
-                            {maxActiveLoans !== "" ? `Maks. ${maxActiveLoans} transaksi bersamaan` : "-"}
+                            {serverConfig
+                              ? `Maks. ${serverConfig.maxActiveLoans} transaksi bersamaan`
+                              : isInitialConfig
+                              ? "Belum dikonfigurasi"
+                              : "-"}
                           </p>
                         </div>
                       </div>
@@ -389,8 +422,10 @@ export default function CompanySettingsPage() {
                         <div className="min-w-0">
                           <p className="text-xs text-text-muted font-medium">Denda Keterlambatan</p>
                           <p className="font-semibold text-text-main">
-                            {dailyFineRate !== ""
-                              ? `Rp ${Number(dailyFineRate).toLocaleString("id-ID")} / buku / hari`
+                            {serverConfig
+                              ? `Rp ${serverConfig.dailyFineRate.toLocaleString("id-ID")} / buku / hari`
+                              : isInitialConfig
+                              ? "Belum dikonfigurasi"
                               : "-"}
                           </p>
                         </div>
