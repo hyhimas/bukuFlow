@@ -147,6 +147,7 @@ function OfficeLoansContent() {
       setSortBy(field);
       setSortOrder("asc");
     }
+    setPage(1);
   }
 
   // Pagination
@@ -309,6 +310,8 @@ function OfficeLoansContent() {
     returnedTo,
     sortBy,
     sortOrder,
+    setTotal,
+    setTotalPages,
   ]);
 
   useEffect(() => {

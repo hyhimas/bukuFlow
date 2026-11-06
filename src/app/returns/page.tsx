@@ -1046,9 +1046,16 @@ function ReturnsContent() {
                 <Card className="mt-5 p-4 sm:p-5">
               <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
                 <div>
-                  <h3 className="text-lg font-semibold text-text-main">
-                    2. Daftar Peminjaman
-                  </h3>
+                  <div className="flex items-center gap-2">
+                    <h3 className="text-lg font-semibold text-text-main">
+                      2. Daftar Peminjaman
+                    </h3>
+                    {loans.length > 0 && (
+                      <span className="text-xs text-text-muted font-normal">
+                        ({totalItems > 0 ? `${totalItems} peminjaman` : `${loans.length} peminjaman`})
+                      </span>
+                    )}
+                  </div>
                   <p className="mt-1 text-sm text-text-muted">
                     Pilih peminjaman untuk melihat detail pengembalian.
                   </p>

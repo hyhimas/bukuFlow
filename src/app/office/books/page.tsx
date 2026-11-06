@@ -153,6 +153,16 @@ export default function OfficeBooksPage() {
   const [totalPages, setTotalPages] = useState(1);
   const savedTotalRef = useRef(0);
 
+  const handleSortChange = (field: string) => {
+    if (sortBy === field) {
+      setSortOrder((prev) => (prev === "asc" ? "desc" : "asc"));
+    } else {
+      setSortBy(field);
+      setSortOrder("asc");
+    }
+    setPage(1);
+  };
+
   // =====================================================
   // BOOK FORM STATE (TAMBAH / UBAH BUKU)
   // =====================================================
@@ -1261,37 +1271,64 @@ export default function OfficeBooksPage() {
                         <col className="w-[110px]" />
                         <col className="w-[80px]" />
                       </colgroup>
-                      <thead className="border-b border-border bg-surface-subtle text-[11px] font-bold uppercase tracking-wider text-text-muted">
+                      <thead className="border-b border-border bg-surface-subtle text-[11px] font-bold uppercase tracking-wider text-slate-700 dark:text-slate-200">
                         <tr>
-                          <th className="px-3.5 py-3">Kode</th>
-                          <th
-                            className="px-3.5 py-3 cursor-pointer select-none hover:text-text-main transition-colors"
-                            onClick={() => {
-                              setSortBy("title");
-                              setSortOrder((prev) =>
-                                prev === "asc" ? "desc" : "asc"
-                              );
-                              setPage(1);
-                            }}
-                            title="Klik untuk mengurutkan berdasarkan judul buku (A-Z / Z-A)"
-                          >
-                            <div className="flex items-center gap-1.5">
-                              <span>Buku</span>
-                              <span className="text-xs text-text-muted font-medium">
-                                {sortBy === "title"
+                          <th scope="col" className="px-3.5 py-3 text-left">
+                            <Button
+                              type="button"
+                              variant="ghost"
+                              size="sm"
+                              onClick={() => handleSortChange("code")}
+                              className="group -ml-2 h-auto px-2 py-1 inline-flex items-center gap-1.5 text-left text-[11px] font-bold uppercase tracking-wider text-slate-700 dark:text-slate-200 hover:text-text-main transition-colors focus:outline-none"
+                            >
+                              <span>Kode</span>
+                              <span
+                                className={`inline-flex shrink-0 items-center justify-center text-xs ${
+                                  sortBy === "code"
+                                    ? "text-blue-600 dark:text-blue-400 font-bold"
+                                    : "text-text-subtle opacity-0 group-hover:opacity-100 transition-opacity"
+                                }`}
+                                aria-hidden="true"
+                              >
+                                {sortBy === "code"
                                   ? sortOrder === "asc"
-                                    ? "▲ A-Z"
-                                    : "▼ Z-A"
+                                    ? "▲"
+                                    : "▼"
                                   : "↕"}
                               </span>
-                            </div>
+                            </Button>
                           </th>
-                          <th className="px-3 py-3">Kategori</th>
-                          <th className="px-2 py-3 text-center tabular-nums">
+                          <th scope="col" className="px-3.5 py-3 text-left">
+                            <Button
+                              type="button"
+                              variant="ghost"
+                              size="sm"
+                              onClick={() => handleSortChange("title")}
+                              className="group -ml-2 h-auto px-2 py-1 inline-flex items-center gap-1.5 text-left text-[11px] font-bold uppercase tracking-wider text-slate-700 dark:text-slate-200 hover:text-text-main transition-colors focus:outline-none"
+                            >
+                              <span>Buku</span>
+                              <span
+                                className={`inline-flex shrink-0 items-center justify-center text-xs ${
+                                  sortBy === "title"
+                                    ? "text-blue-600 dark:text-blue-400 font-bold"
+                                    : "text-text-subtle opacity-0 group-hover:opacity-100 transition-opacity"
+                                }`}
+                                aria-hidden="true"
+                              >
+                                {sortBy === "title"
+                                  ? sortOrder === "asc"
+                                    ? "▲"
+                                    : "▼"
+                                  : "↕"}
+                              </span>
+                            </Button>
+                          </th>
+                          <th scope="col" className="px-3 py-3 text-left">Kategori</th>
+                          <th scope="col" className="px-2 py-3 text-center tabular-nums">
                             Eksemplar
                           </th>
-                          <th className="px-3 py-3">Status</th>
-                          <th className="px-3 py-3 text-right">Aksi</th>
+                          <th scope="col" className="px-3 py-3 text-left">Status</th>
+                          <th scope="col" className="px-3 py-3 text-right">Aksi</th>
                         </tr>
                       </thead>
 

@@ -381,7 +381,6 @@ function DashboardStatCard({
       <Link
         href={href}
         className={`group block h-full rounded-xl focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand ${className}`}
-        aria-label={`${label}: ${value ?? ""}. Buka daftar terfilter.`}
       >
         {cardElement}
       </Link>

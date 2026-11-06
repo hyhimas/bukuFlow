@@ -818,7 +818,6 @@ export default function NewLoanPage() {
       toast.warning(
         `Anggota ${member.name} telah mencapai batas kuota peminjaman aktif (${activeCount}/${limit}). Selesaikan peminjaman sebelumnya terlebih dahulu.`
       );
-      return false;
     }
 
     setSelectedMember(member);

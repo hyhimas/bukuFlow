@@ -110,9 +110,9 @@ export default function CompanySettingsPage() {
         });
         setIsInitialConfig(false);
       } else {
-        setDefaultLoanDuration(7);
-        setMaxActiveLoans(3);
-        setDailyFineRate(1000);
+        setDefaultLoanDuration("");
+        setMaxActiveLoans("");
+        setDailyFineRate("");
         setServerConfig(null);
         setIsInitialConfig(true);
       }
@@ -393,7 +393,7 @@ export default function CompanySettingsPage() {
                             {serverConfig
                               ? `${serverConfig.defaultLoanDuration} hari kalender`
                               : isInitialConfig
-                              ? "Belum dikonfigurasi"
+                              ? "Belum diatur"
                               : "-"}
                           </p>
                         </div>
@@ -409,7 +409,7 @@ export default function CompanySettingsPage() {
                             {serverConfig
                               ? `Maks. ${serverConfig.maxActiveLoans} transaksi bersamaan`
                               : isInitialConfig
-                              ? "Belum dikonfigurasi"
+                              ? "Belum diatur"
                               : "-"}
                           </p>
                         </div>
@@ -425,7 +425,7 @@ export default function CompanySettingsPage() {
                             {serverConfig
                               ? `Rp ${serverConfig.dailyFineRate.toLocaleString("id-ID")} / buku / hari`
                               : isInitialConfig
-                              ? "Belum dikonfigurasi"
+                              ? "Belum diatur"
                               : "-"}
                           </p>
                         </div>
