@@ -28,7 +28,7 @@ import { useTheme } from "@/context/ThemeContext";
 import LoadingState from "@/components/ui/LoadingState";
 import Button from "@/components/ui/Button";
 import Modal from "@/components/ui/Modal";
-import { getRouteAccess } from "@/lib/authorization";
+import { getRouteAccess, isSupportedRole } from "@/lib/authorization";
 
 interface AppShellProps {
   children: React.ReactNode;
@@ -211,6 +211,7 @@ export default function AppShell({ children }: AppShellProps) {
   // Centralized Route Access Guard
   const activeUser = currentSession?.user || (typeof window !== "undefined" ? getStoredUser() : null);
   const userRole = activeUser?.role;
+  const isUnknownRole = Boolean(activeUser && (!activeUser.role || !isSupportedRole(activeUser.role)));
   const routeAccess = !isLoginPage && userRole ? getRouteAccess(pathname, userRole) : { allowed: true, redirect: "" };
 
   // Auth Guard: Memastikan hanya user tanpa riwayat auth yang langsung diredirect ke login.
@@ -231,6 +232,13 @@ export default function AppShell({ children }: AppShellProps) {
       return;
     }
 
+    // Role tak dikenal (mis. GUEST): bersihkan sesi dan arahkan ke /login
+    if (isUnknownRole) {
+      clearAuthData();
+      router.replace("/login");
+      return;
+    }
+
     // Role-based route guard: jika role tidak diizinkan, arahkan ke target redirect
     if (userRole && !routeAccess.allowed && routeAccess.redirect) {
       router.replace(routeAccess.redirect);
@@ -241,6 +249,7 @@ export default function AppShell({ children }: AppShellProps) {
     authSession,
     isSessionExpired,
     expiredModalDismissed,
+    isUnknownRole,
     userRole,
     routeAccess.allowed,
     routeAccess.redirect,
@@ -421,6 +430,11 @@ export default function AppShell({ children }: AppShellProps) {
 
   if (!mounted || (!currentSession && !isSessionExpired && !isStoredSessionExpired())) {
     return <LoadingState label="Memuat BukuFlow..." />;
+  }
+
+  // Jika role tak dikenal, jangan tertahan di layar "Memverifikasi hak akses..."
+  if (isUnknownRole) {
+    return null;
   }
 
   // Jika hak akses rute belum diizinkan, render LoadingState untuk mencegah kilatan konten

@@ -13,7 +13,7 @@ import Pagination from "@/components/ui/Pagination";
 import PageHeader from "@/components/ui/PageHeader";
 import Skeleton, { TableSkeleton } from "@/components/ui/Skeleton";
 
-import { getSession, isStoredSessionExpired, hasStoredAuth } from "@/lib/auth";
+import { getSession, isStoredSessionExpired, hasStoredAuth, clearAuthData } from "@/lib/auth";
 import { isSupportedRole, canViewOfficer } from "@/lib/authorization";
 import { getDashboardApi, getActiveReturnsApi, getCompanySettingsApi, getErrorMessage } from "@/lib/api";
 import {
@@ -407,15 +407,15 @@ function QuickAccessCard({
   return (
     <Link
       href={href}
-      className={`group rounded-xl border border-border bg-surface p-4 sm:p-5 shadow-xs transition hover:-translate-y-0.5 hover:border-blue-400 dark:hover:border-blue-500 hover:shadow-md focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 flex flex-col justify-center h-full ${className}`}
+      className={`group rounded-xl border-2 border-brand-border/80 bg-brand-soft/40 p-4 sm:p-5 shadow-xs transition hover:-translate-y-0.5 hover:border-brand hover:bg-brand-soft/70 hover:shadow-md focus:outline-none focus-visible:ring-2 focus-visible:ring-brand flex flex-col justify-center h-full ${className}`}
     >
       <div className="flex items-start gap-3.5 sm:gap-4">
-        <div className="flex h-10 w-10 sm:h-11 sm:w-11 shrink-0 items-center justify-center rounded-xl bg-brand-soft text-brand-text transition group-hover:bg-brand-soft/80">
+        <div className="flex h-10 w-10 sm:h-11 sm:w-11 shrink-0 items-center justify-center rounded-xl bg-brand-soft border border-brand-border text-brand-text transition group-hover:scale-105 group-hover:bg-brand group-hover:text-white group-hover:border-brand">
           {icon}
         </div>
 
         <div className="min-w-0 flex-1">
-          <h3 className="font-semibold text-text-main text-sm sm:text-base group-hover:text-blue-500 transition leading-snug">
+          <h3 className="font-bold text-text-main text-sm sm:text-base group-hover:text-brand-text transition leading-snug">
             {title}
           </h3>
           <p className="mt-1 text-xs sm:text-sm text-text-muted leading-relaxed line-clamp-2">
@@ -464,6 +464,7 @@ export default function DashboardPage() {
     }
 
     if (!isSupportedRole(session.user.role)) {
+      clearAuthData();
       router.replace("/login");
       return;
     }
@@ -1143,8 +1144,9 @@ export default function DashboardPage() {
 
         {/* Akses Cepat */}
         <section className="mt-6">
-          <h2 className="text-lg font-semibold text-text-main">
-            {isCompanyAdmin ? "Pengelolaan" : "Akses cepat"}
+          <h2 className="text-lg font-bold text-text-main flex items-center gap-2">
+            <span className="h-4 w-1.5 rounded-full bg-brand inline-block" aria-hidden="true" />
+            {isCompanyAdmin ? "Pengelolaan" : "Akses Cepat"}
           </h2>
 
           {isCompanyAdmin ? (

@@ -797,6 +797,30 @@ export default function NewLoanPage() {
       }
     }
 
+    let limit = maxActiveLoansRef.current;
+    if (typeof limit !== "number") {
+      const session = getSession();
+      const compId = session?.user?.companyId;
+      if (compId) {
+        try {
+          const settings = await getCompanySettingsApi(compId);
+          if (settings && typeof settings.maxActiveLoans === "number") {
+            limit = settings.maxActiveLoans;
+            setMaxActiveLoans(limit);
+          }
+        } catch {
+          // Abaikan jika pemanggilan pengaturan instansi gagal
+        }
+      }
+    }
+
+    if (typeof limit === "number" && activeCount >= limit) {
+      toast.warning(
+        `Anggota ${member.name} telah mencapai batas kuota peminjaman aktif (${activeCount}/${limit}). Selesaikan peminjaman sebelumnya terlebih dahulu.`
+      );
+      return false;
+    }
+
     setSelectedMember(member);
 
     setMembers([]);
@@ -1234,7 +1258,7 @@ export default function NewLoanPage() {
           if (targetCopy.status !== "AVAILABLE") {
             const statusLabel = formatCopyStatusLabel(targetCopy.status);
             toast.warning(
-              `Eksemplar ${targetCopy.code} berstatus "${statusLabel}" (tidak dapat dipinjam).`,
+              `Eksemplar ${targetCopy.code} berstatus "${statusLabel}" dan tidak bisa dipinjam.`,
             );
             return;
           }
@@ -1342,6 +1366,15 @@ export default function NewLoanPage() {
               code.replace(/[^A-Z0-9]/g, ""),
         ) || null;
 
+      // Jika kode yang di-scan cocok persis dengan eksemplar, periksa statusnya
+      if (matchedCopy && matchedCopy.status !== "AVAILABLE") {
+        const statusLabel = formatCopyStatusLabel(matchedCopy.status);
+        toast.warning(
+          `Eksemplar ${matchedCopy.code} berstatus "${statusLabel}" dan tidak bisa dipinjam.`,
+        );
+        return;
+      }
+
       const availableCopies = allLoadedCopies.filter(
         (c) => c.status === "AVAILABLE",
       );
@@ -1353,10 +1386,8 @@ export default function NewLoanPage() {
         return;
       }
 
-      const copyToSelect =
-        matchedCopy && matchedCopy.status === "AVAILABLE"
-          ? matchedCopy
-          : availableCopies[0];
+      // Pemilihan otomatis eksemplar pertama yang tersedia hanya berlaku bila yang di-scan adalah kode buku (bukan kode eksemplar)
+      const copyToSelect = matchedCopy ? matchedCopy : availableCopies[0];
 
       setSelectedBooks((current) => {
         const existing = current.find((item) => item.book.id === matchedBook!.id);

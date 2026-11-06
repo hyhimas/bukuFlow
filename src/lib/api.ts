@@ -2113,6 +2113,7 @@ export async function createLoanApi(data: CreateLoanInputData): Promise<Loan> {
 }
 
 const companyUserCache = new Map<string, { timestamp: number; map: Map<string, string> }>();
+const transactionMemberCache = new Map<string, Member>();
 
 async function enrichTransactions(
   transactions: TransactionData[],
@@ -2178,15 +2179,64 @@ async function enrichTransactions(
       if (m.id) {
         memberMap.set(m.id, m);
         memberMap.set(m.id.toLowerCase(), m);
+        transactionMemberCache.set(m.id, m);
+        transactionMemberCache.set(m.id.toLowerCase(), m);
       }
       if (m.memberNumber) {
         memberMap.set(m.memberNumber, m);
         memberMap.set(m.memberNumber.toLowerCase(), m);
+        transactionMemberCache.set(m.memberNumber, m);
+        transactionMemberCache.set(m.memberNumber.toLowerCase(), m);
       }
       if ((m as any).code) {
         memberMap.set((m as any).code, m);
         memberMap.set((m as any).code.toLowerCase(), m);
       }
+    }
+
+    // Ambil data anggota yang relevan untuk transaksi di halaman aktif jika belum ada di cache/memberMap
+    const neededMemberIds = new Set<string>();
+    for (const tx of transactions) {
+      const mId = tx.loan.memberId;
+      if (mId && mId !== "-" && !mId.startsWith("member-")) {
+        neededMemberIds.add(mId);
+      }
+    }
+
+    const missingMemberIds: string[] = [];
+    for (const mId of neededMemberIds) {
+      if (
+        !memberMap.has(mId) &&
+        !memberMap.has(mId.toLowerCase()) &&
+        !transactionMemberCache.has(mId) &&
+        !transactionMemberCache.has(mId.toLowerCase())
+      ) {
+        missingMemberIds.push(mId);
+      }
+    }
+
+    if (missingMemberIds.length > 0) {
+      await Promise.allSettled(
+        missingMemberIds.map(async (mId) => {
+          try {
+            const m = await getMemberApi(mId);
+            if (m && m.id) {
+              memberMap.set(m.id, m);
+              memberMap.set(m.id.toLowerCase(), m);
+              transactionMemberCache.set(m.id, m);
+              transactionMemberCache.set(m.id.toLowerCase(), m);
+              if (m.memberNumber) {
+                memberMap.set(m.memberNumber, m);
+                memberMap.set(m.memberNumber.toLowerCase(), m);
+                transactionMemberCache.set(m.memberNumber, m);
+                transactionMemberCache.set(m.memberNumber.toLowerCase(), m);
+              }
+            }
+          } catch {
+            // Abaikan jika pemanggilan anggota gagal
+          }
+        })
+      );
     }
 
     // Fast multi-key book map (id, lowercase id, code, uppercase code, isbn)
@@ -2253,11 +2303,15 @@ async function enrichTransactions(
       if (
         !tx.member?.name ||
         tx.member.name === "Anggota" ||
-        tx.member.name === "-"
+        tx.member.name === "-" ||
+        !tx.member?.memberNumber ||
+        tx.member.memberNumber === "-"
       ) {
         const foundMember =
           memberMap.get(tx.loan.memberId) ||
-          memberMap.get(tx.loan.memberId?.toLowerCase());
+          memberMap.get(tx.loan.memberId?.toLowerCase()) ||
+          transactionMemberCache.get(tx.loan.memberId) ||
+          transactionMemberCache.get(tx.loan.memberId?.toLowerCase());
         if (foundMember) {
           tx.member = foundMember;
         }
@@ -2349,7 +2403,7 @@ async function enrichTransactions(
     console.warn("Gagal melakukan enrichment data transaksi:", err);
   }
 
-  return sortTransactionsDesc(transactions);
+  return transactions;
 }
 
 export function sortTransactionsDesc(transactions: TransactionData[]): TransactionData[] {
@@ -2840,10 +2894,27 @@ export async function returnLoanItemsApi(
     };
 
     if (returnedAt) {
-      const cleanReturnedAt = returnedAt.includes("T")
-        ? returnedAt
-        : `${returnedAt.slice(0, 10)}T12:00:00.000Z`;
-      payload.returned_at = cleanReturnedAt;
+      if (returnedAt.includes("T")) {
+        payload.returned_at = returnedAt;
+      } else {
+        const now = new Date();
+        const datePart = returnedAt.slice(0, 10);
+        const parts = datePart.split("-").map(Number);
+        if (parts.length === 3 && !parts.some(Number.isNaN)) {
+          const dt = new Date(
+            parts[0],
+            parts[1] - 1,
+            parts[2],
+            now.getHours(),
+            now.getMinutes(),
+            now.getSeconds(),
+            now.getMilliseconds()
+          );
+          payload.returned_at = dt.toISOString();
+        } else {
+          payload.returned_at = now.toISOString();
+        }
+      }
     }
 
     const response = await api.post(`/loan/returns/${loanId}`, payload);

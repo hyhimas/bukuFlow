@@ -8,7 +8,8 @@ import LogoSpinner from "@/components/ui/LogoSpinner";
 import ThemeSwitcher from "@/components/ui/ThemeSwitcher";
 
 import { loginApi, getErrorMessage } from "@/lib/api";
-import { getAuthData, saveAuthData } from "@/lib/auth";
+import { clearAuthData, getAuthData, saveAuthData } from "@/lib/auth";
+import { isSupportedRole } from "@/lib/authorization";
 
 export default function LoginPage() {
   const router = useRouter();
@@ -28,7 +29,12 @@ export default function LoginPage() {
   });
   const [checkingAuth] = useState(() => {
     if (typeof window !== "undefined") {
-      return Boolean(getAuthData());
+      const auth = getAuthData();
+      if (auth && !isSupportedRole(auth.user.role)) {
+        clearAuthData();
+        return false;
+      }
+      return Boolean(auth);
     }
     return true;
   });
@@ -36,6 +42,10 @@ export default function LoginPage() {
   useEffect(() => {
     const auth = getAuthData();
     if (auth) {
+      if (!isSupportedRole(auth.user.role)) {
+        clearAuthData();
+        return;
+      }
       if (auth.user.role === "SUPER_ADMIN") {
         router.replace("/office/dashboard");
       } else {

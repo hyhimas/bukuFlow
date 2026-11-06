@@ -8,7 +8,7 @@ export function canAccessOffice(role?: UserRole): boolean {
   return role === "SUPER_ADMIN";
 }
 
-export function isSupportedRole(role: UserRole): boolean {
+export function isSupportedRole(role?: string | null): role is "COMPANY_ADMIN" | "STAFF" | "SUPER_ADMIN" {
   return role === "COMPANY_ADMIN" || role === "STAFF" || role === "SUPER_ADMIN";
 }
 
@@ -142,7 +142,7 @@ export const ROUTE_ACCESS_MAP: Record<string, RouteRule> = {
   },
 };
 
-export function getRouteAccess(pathname: string, role?: UserRole): RouteAccessResult {
+export function getRouteAccess(pathname: string, role?: string | null): RouteAccessResult {
   if (!role || !isSupportedRole(role)) {
     return { allowed: false, redirect: "/login" };
   }

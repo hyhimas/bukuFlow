@@ -15,6 +15,7 @@ import FeedbackPanel from "@/components/ui/FeedbackPanel";
 import LoadingState from "@/components/ui/LoadingState";
 import Pagination from "@/components/ui/Pagination";
 import Modal from "@/components/ui/Modal";
+import Skeleton from "@/components/ui/Skeleton";
 import PageHeader from "@/components/ui/PageHeader";
 import RowActions from "@/components/ui/RowActions";
 import DataTable, { type DataTableColumn } from "@/components/ui/DataTable";
@@ -27,7 +28,13 @@ import {
   canManageReturns,
   canViewOfficer,
 } from "@/lib/authorization";
-import { listLoansApi, getCompanySettingsApi, getErrorMessage } from "@/lib/api";
+import {
+  listLoansApi,
+  getCompanySettingsApi,
+  getErrorMessage,
+  getMemberApi,
+  getMemberActiveLoanCountApi,
+} from "@/lib/api";
 import {
   exportToExcel,
   filterByExportDate,
@@ -35,7 +42,7 @@ import {
   type ExportPeriod,
 } from "@/lib/export/excel";
 
-import type { Loan, TransactionData, TransactionLoanItem, UserRole } from "@/lib/types";
+import type { Loan, TransactionData, TransactionLoanItem, UserRole, Member } from "@/lib/types";
 import { calculateTransactionCirculation } from "@/lib/circulation";
 import { useToast } from "@/components/ui/Toast";
 
@@ -121,6 +128,46 @@ function TransactionsContent() {
   const [dailyFineRate, setDailyFineRate] = useState<number | null>(null);
   const [selectedDetailTransaction, setSelectedDetailTransaction] = useState<TransactionData | null>(null);
   const [configError, setConfigError] = useState("");
+
+  // Modal Detail Anggota (Revisi 4)
+  const [selectedMemberId, setSelectedMemberId] = useState<string | null>(null);
+  const [memberModalOpen, setMemberModalOpen] = useState(false);
+  const [memberDetail, setMemberDetail] = useState<Member | null>(null);
+  const [memberActiveLoanCount, setMemberActiveLoanCount] = useState<number | null>(null);
+  const [memberLoading, setMemberLoading] = useState(false);
+  const [memberError, setMemberError] = useState<string | null>(null);
+
+  const loadMemberDetail = useCallback(async (id: string) => {
+    setMemberLoading(true);
+    setMemberError(null);
+    try {
+      const [memberData, activeCount] = await Promise.all([
+        getMemberApi(id),
+        getMemberActiveLoanCountApi(id).catch(() => null),
+      ]);
+      setMemberDetail(memberData);
+      setMemberActiveLoanCount(activeCount);
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : "Gagal memuat detail anggota.";
+      setMemberError(msg);
+    } finally {
+      setMemberLoading(false);
+    }
+  }, []);
+
+  const handleOpenMemberModal = useCallback((memberId: string) => {
+    if (!memberId || memberId === "-") return;
+    setSelectedMemberId(memberId);
+    setMemberModalOpen(true);
+    void loadMemberDetail(memberId);
+  }, [loadMemberDetail]);
+
+  const handleCloseMemberModal = useCallback(() => {
+    setMemberModalOpen(false);
+    setSelectedMemberId(null);
+    setMemberDetail(null);
+    setMemberError(null);
+  }, []);
 
   const [loading, setLoading] = useState(true);
   const [tableLoading, setTableLoading] = useState(false);
@@ -406,7 +453,7 @@ function TransactionsContent() {
               title={t.member?.name ?? "-"}
             >
               <span className="font-medium text-text-main">{t.member?.name ?? "-"}</span>
-              {t.member?.memberNumber && (
+              {t.member?.memberNumber && t.member.memberNumber !== "-" && (
                 <span className="ml-1 text-[11px] text-text-muted font-mono">
                   ({t.member.memberNumber})
                 </span>
@@ -517,11 +564,11 @@ function TransactionsContent() {
                     },
                   ]
                 : []),
-              ...(canViewMember && (t.member?.id || t.loan.memberId)
+              ...(canViewMember && (t.member?.id || t.loan.memberId) && (t.member?.id !== "-" || t.loan.memberId !== "-")
                 ? [
                     {
                       label: "Lihat Anggota",
-                      href: `/master/members?memberId=${encodeURIComponent(t.member?.id || t.loan.memberId)}`,
+                      onClick: () => handleOpenMemberModal(t.member?.id || t.loan.memberId),
                       icon: (
                         <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden="true">
                           <path d="M19 21v-2a4 4 0 0 0-4-4H9a4 4 0 0 0-4 4v2" />
@@ -536,7 +583,7 @@ function TransactionsContent() {
         ),
       },
     ],
-    [canReturn, canViewMember, dailyFineRate]
+    [canReturn, canViewMember, dailyFineRate, handleOpenMemberModal]
   );
 
   // =========================================================
@@ -1822,11 +1869,15 @@ function TransactionsContent() {
                                 },
                               ]
                             : []),
-                          ...(canViewMember && (transaction.member?.id || transaction.loan.memberId)
+                          ...(canViewMember && (transaction.member?.id || transaction.loan.memberId) && (transaction.member?.id !== "-" || transaction.loan.memberId !== "-")
                             ? [
                                 {
                                   label: "Lihat Anggota",
-                                  href: `/master/members?memberId=${encodeURIComponent(transaction.member?.id || transaction.loan.memberId)}`,
+                                  onClick: () =>
+                                    handleOpenMemberModal(
+                                      transaction.member?.id ||
+                                        transaction.loan.memberId
+                                    ),
                                   icon: (
                                     <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden="true">
                                       <path d="M19 21v-2a4 4 0 0 0-4-4H9a4 4 0 0 0-4 4v2" />
@@ -1929,7 +1980,8 @@ function TransactionsContent() {
                       <span className="font-semibold text-text-main text-sm block mt-0.5">
                         {selectedDetailTransaction.member?.name || "-"}
                       </span>
-                      {selectedDetailTransaction.member?.memberNumber && (
+                      {selectedDetailTransaction.member?.memberNumber &&
+                        selectedDetailTransaction.member.memberNumber !== "-" && (
                         <span className="text-[11px] text-text-muted font-mono block mt-0.5">
                           No. Anggota: {selectedDetailTransaction.member.memberNumber}
                         </span>
@@ -2122,6 +2174,123 @@ function TransactionsContent() {
             </Modal>
           );
         })()}
+
+        {/* Modal Detail Anggota (Revisi 4) */}
+        <Modal
+          open={memberModalOpen}
+          onClose={handleCloseMemberModal}
+          title="Detail Anggota"
+          description="Informasi profil dan keanggotaan perpustakaan."
+          size="md"
+        >
+          {memberLoading ? (
+            <div className="space-y-4 py-2" role="status" aria-label="Memuat data anggota...">
+              <div className="flex items-center gap-3 border-b border-border pb-4">
+                <Skeleton className="h-12 w-12 rounded-full shrink-0" />
+                <div className="space-y-2 flex-1 min-w-0">
+                  <Skeleton className="h-5 w-3/4 max-w-[200px]" />
+                  <Skeleton className="h-3.5 w-1/2 max-w-[140px]" />
+                </div>
+              </div>
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-1">
+                <Skeleton className="h-16 rounded-xl" />
+                <Skeleton className="h-16 rounded-xl" />
+                <Skeleton className="h-16 rounded-xl" />
+                <Skeleton className="h-16 rounded-xl" />
+              </div>
+            </div>
+          ) : memberError ? (
+            <div className="py-6 text-center">
+              <div className="mx-auto flex h-12 w-12 items-center justify-center rounded-full bg-danger-soft text-danger mb-3">
+                <svg
+                  width="24"
+                  height="24"
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="currentColor"
+                  strokeWidth="2"
+                  aria-hidden="true"
+                >
+                  <circle cx="12" cy="12" r="10" />
+                  <line x1="12" y1="8" x2="12" y2="12" />
+                  <line x1="12" y1="16" x2="12.01" y2="16" />
+                </svg>
+              </div>
+              <p className="text-sm font-semibold text-text-main mb-1">Gagal Memuat Data Anggota</p>
+              <p className="text-xs text-text-muted mb-4 max-w-xs mx-auto leading-relaxed">{memberError}</p>
+              <div className="flex justify-center gap-2">
+                <Button
+                  size="sm"
+                  variant="secondary"
+                  onClick={handleCloseMemberModal}
+                >
+                  Tutup
+                </Button>
+                <Button
+                  size="sm"
+                  variant="primary"
+                  onClick={() => selectedMemberId && loadMemberDetail(selectedMemberId)}
+                >
+                  Coba Lagi
+                </Button>
+              </div>
+            </div>
+          ) : memberDetail ? (
+            <div className="space-y-4 py-1">
+              <div className="flex items-start justify-between gap-3 border-b border-border pb-4">
+                <div className="min-w-0 flex-1">
+                  <h3 className="text-base font-bold text-text-main truncate">{memberDetail.name}</h3>
+                  <p className="text-xs font-mono font-medium text-text-muted mt-0.5">
+                    No. Anggota: {memberDetail.memberNumber || "-"}
+                  </p>
+                </div>
+                <Badge
+                  variant={memberDetail.status === "ACTIVE" ? "success" : "neutral"}
+                >
+                  {memberDetail.status === "ACTIVE" ? "Aktif" : "Non-aktif"}
+                </Badge>
+              </div>
+
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-xs">
+                <div className="rounded-xl border border-border bg-surface-subtle p-3">
+                  <p className="text-text-muted font-medium mb-1">NIK / Identitas</p>
+                  <p className="font-semibold text-text-main font-mono text-sm">
+                    {memberDetail.identityNumber || "-"}
+                  </p>
+                </div>
+
+                <div className="rounded-xl border border-border bg-surface-subtle p-3">
+                  <p className="text-text-muted font-medium mb-1">Nomor Telepon</p>
+                  <p className="font-semibold text-text-main font-mono text-sm">
+                    {memberDetail.phone || "-"}
+                  </p>
+                </div>
+
+                <div className="rounded-xl border border-border bg-surface-subtle p-3">
+                  <p className="text-text-muted font-medium mb-1">Email</p>
+                  <p className="font-semibold text-text-main truncate text-sm" title={memberDetail.email || undefined}>
+                    {memberDetail.email || "-"}
+                  </p>
+                </div>
+
+                <div className="rounded-xl border border-border bg-surface-subtle p-3">
+                  <p className="text-text-muted font-medium mb-1">Pinjaman Aktif</p>
+                  <p className="font-semibold text-brand-text text-sm">
+                    {typeof memberActiveLoanCount === "number"
+                      ? `${memberActiveLoanCount} buku dipinjam`
+                      : "-"}
+                  </p>
+                </div>
+              </div>
+
+              <div className="flex justify-end pt-2 border-t border-border mt-4">
+                <Button variant="secondary" size="sm" onClick={handleCloseMemberModal}>
+                  Tutup
+                </Button>
+              </div>
+            </div>
+          ) : null}
+        </Modal>
       </div>
     </div>
   );

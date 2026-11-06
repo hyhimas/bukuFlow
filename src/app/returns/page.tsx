@@ -266,7 +266,73 @@ function ReturnsContent() {
         return;
       }
 
-      // C. Cari ke server via getActiveReturnsApi (pencarian langsung transaksi aktif ke server)
+      // C. Match Member Number / Card (Dijalankan SEBELUM memakai hasil pencarian transaksi dari server)
+      let foundMemberObj: { id: string; name: string; memberNumber?: string } | null = null;
+
+      const localMemberLoans = currentLoans.filter(
+        (l) =>
+          l.member.memberNumber?.toUpperCase() === code ||
+          l.member.id?.toUpperCase() === code
+      );
+      if (localMemberLoans.length > 0) {
+        foundMemberObj = localMemberLoans[0].member;
+      } else {
+        try {
+          const memberCandidates = await searchMembersApi(rawCode);
+          if (Array.isArray(memberCandidates) && memberCandidates.length > 0) {
+            foundMemberObj =
+              memberCandidates.find(
+                (m) =>
+                  m.memberNumber.toUpperCase() === code ||
+                  m.identityNumber?.toUpperCase() === code ||
+                  m.id.toUpperCase() === code
+              ) || null;
+          }
+        } catch {
+          // Abaikan jika endpoint search member gagal
+        }
+      }
+
+      if (foundMemberObj?.id) {
+        try {
+          const memberLoansRes = await listLoansApi({
+            member_id: foundMemberObj.id,
+            status: ["ACTIVE", "OVERDUE"],
+            size: 20,
+          });
+
+          if (memberLoansRes.items.length > 0) {
+            setQuery(foundMemberObj.memberNumber || rawCode);
+
+            if (memberLoansRes.items.length > 1) {
+              // Jika punya lebih dari satu peminjaman aktif: jangan memilih satu transaksi otomatis
+              setSelectedLoan(null);
+              setSelectedItemIds([]);
+              toast.info(
+                `Ditemukan ${memberLoansRes.items.length} peminjaman aktif untuk ${foundMemberObj.name}. Silakan pilih transaksi di panel kiri.`
+              );
+            } else {
+              const singleLoan = memberLoansRes.items[0];
+              selectLoan(singleLoan);
+              const borrowedIds = singleLoan.items
+                .filter((it) => it.loanItem.status === "BORROWED")
+                .map((it) => it.loanItem.id);
+              setSelectedItemIds(borrowedIds);
+              toast.success(
+                `Peminjaman ${singleLoan.loan.loanNumber} (${singleLoan.member.name}) ditemukan.`
+              );
+            }
+            return;
+          } else {
+            toast.info(`Anggota ${foundMemberObj.name} tidak memiliki peminjaman aktif.`);
+            return;
+          }
+        } catch {
+          // Lanjut ke pengecekan berikutnya jika gagal
+        }
+      }
+
+      // D. Cari ke server via getActiveReturnsApi (pencarian langsung transaksi aktif ke server)
       try {
         const serverLoansRes = await getActiveReturnsApi({
           search: rawCode,
@@ -335,61 +401,7 @@ function ReturnsContent() {
           return;
         }
       } catch {
-        // Lanjut ke pengecekan kartu anggota
-      }
-
-      // D. Match Member Number / Name / Identity Number (Support multiple active loans from server)
-      let foundMemberObj: Member | null = null;
-      try {
-        const memberCandidates = await searchMembersApi(rawCode);
-        if (Array.isArray(memberCandidates) && memberCandidates.length > 0) {
-          foundMemberObj =
-            memberCandidates.find(
-              (m) =>
-                m.memberNumber.toUpperCase() === code ||
-                m.identityNumber?.toUpperCase() === code ||
-                m.id.toUpperCase() === code
-            ) || null;
-        }
-      } catch {
-        // Abaikan jika endpoint search member gagal
-      }
-
-      if (foundMemberObj?.id) {
-        try {
-          // Panggil GET /loan/search?member_id=...&status=ACTIVE&status=OVERDUE
-          const memberLoansRes = await listLoansApi({
-            member_id: foundMemberObj.id,
-            status: ["ACTIVE", "OVERDUE"],
-            size: 10,
-          });
-
-          if (memberLoansRes.items.length > 0) {
-            setQuery(foundMemberObj.memberNumber || rawCode);
-            const primaryLoan = memberLoansRes.items[0];
-            selectLoan(primaryLoan);
-            const borrowedIds = primaryLoan.items
-              .filter((it) => it.loanItem.status === "BORROWED")
-              .map((it) => it.loanItem.id);
-            setSelectedItemIds(borrowedIds);
-
-            if (memberLoansRes.items.length > 1) {
-              toast.info(
-                `Ditemukan ${memberLoansRes.items.length} peminjaman aktif untuk anggota ${primaryLoan.member.name}. Silakan pilih transaksi di panel kiri.`
-              );
-            } else {
-              toast.success(
-                `Peminjaman anggota ${primaryLoan.member.name} (${primaryLoan.loan.loanNumber}) ditemukan.`
-              );
-            }
-            return;
-          } else {
-            toast.info(`Anggota ${foundMemberObj.name} tidak memiliki peminjaman aktif.`);
-            return;
-          }
-        } catch {
-          // Lanjut ke pengecekan berikutnya
-        }
+        // Lanjut ke pesan error tidak ditemukan
       }
 
       // If not found in active loans:
@@ -705,12 +717,28 @@ function ReturnsContent() {
           ? lateInfo.daysOverdue * dailyFineRate * selectedItemIds.length
           : 0;
 
+      const now = new Date();
+      let returnTimestamp = now.toISOString();
+      if (returnDate && returnDate !== getTodayLocal() && /^\d{4}-\d{2}-\d{2}$/.test(returnDate)) {
+        const [y, m, d] = returnDate.split("-").map(Number);
+        const dt = new Date(
+          y,
+          m - 1,
+          d,
+          now.getHours(),
+          now.getMinutes(),
+          now.getSeconds(),
+          now.getMilliseconds()
+        );
+        returnTimestamp = dt.toISOString();
+      }
+
       const loan = await returnLoanItemsApi(
         selectedLoan.loan.id,
         selectedCopies,
         selectedItemIds,
         selectedLoan.loan.companyId,
-        returnDate
+        returnTimestamp
       );
 
       const returnedIdSet = new Set(selectedItemIds);
@@ -722,8 +750,7 @@ function ReturnsContent() {
               ...it.loanItem,
               status: "RETURNED" as const,
               returnedAt:
-                loan.returnedAt ||
-                (returnDate ? `${returnDate}T12:00:00.000Z` : ""),
+                loan.returnedAt || returnTimestamp,
             },
             bookCopy: {
               ...it.bookCopy,
@@ -750,7 +777,7 @@ function ReturnsContent() {
             : "COMPLETED",
           returnedAt: hasRemainingBorrowed
             ? loan.returnedAt || selectedLoan.loan.returnedAt
-            : loan.returnedAt || `${returnDate}T12:00:00.000Z`,
+            : loan.returnedAt || returnTimestamp,
         },
         items: updatedItems,
       };

@@ -197,7 +197,7 @@ export default function Sidebar({
               <Link
                 href={canAccessOffice(role) ? "/office/dashboard" : "/dashboard"}
                 onClick={handleNavClick}
-                className="flex items-center gap-2 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 rounded"
+                className="flex items-center gap-2 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand rounded"
               >
                 <img
                   src="/logo.png"
@@ -452,18 +452,22 @@ export default function Sidebar({
               onClick={handleNavClick}
               tabIndex={isFullyHidden ? -1 : 0}
               title={isDesktopCollapsed ? `${session.user.name} (${session.user.role})` : undefined}
-              className={`group flex items-center transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 ${
+              className={`group flex items-center transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand ${
                 isDesktopCollapsed
-                  ? "h-11 w-11 mx-auto justify-center rounded-xl hover:bg-surface-muted"
+                  ? `h-11 w-11 mx-auto justify-center rounded-xl ${
+                      pathname === "/profile"
+                        ? "bg-brand-soft ring-1 ring-brand-border"
+                        : "hover:bg-surface-muted"
+                    }`
                   : `mb-3 justify-between rounded-xl border p-2.5 ${
                       pathname === "/profile"
-                        ? "border-blue-300 bg-blue-50/90 shadow-sm ring-1 ring-blue-200"
-                        : "border-border bg-surface-subtle hover:border-blue-200 hover:bg-blue-50/40"
+                        ? "border-brand-border bg-brand-soft shadow-xs ring-1 ring-brand-border"
+                        : "border-border bg-surface-subtle hover:border-brand-border hover:bg-brand-soft/50"
                     }`
               }`}
             >
               {isDesktopCollapsed ? (
-                <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-blue-600 font-bold text-white text-xs shadow-sm">
+                <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-brand font-bold text-white text-xs shadow-sm">
                   {session.user.name
                     ? session.user.name
                         .split(" ")
@@ -476,7 +480,7 @@ export default function Sidebar({
               ) : (
                 <>
                   <div className="flex items-center gap-2.5 overflow-hidden">
-                    <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-blue-600 font-bold text-white text-xs shadow-sm">
+                    <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-brand font-bold text-white text-xs shadow-sm">
                       {session.user.name
                         ? session.user.name
                             .split(" ")
@@ -487,10 +491,22 @@ export default function Sidebar({
                         : "U"}
                     </div>
                     <div className="min-w-0">
-                      <p className="truncate text-sm font-semibold text-text-main group-hover:text-blue-600 transition">
+                      <p
+                        className={`truncate text-sm font-semibold transition ${
+                          pathname === "/profile"
+                            ? "text-brand-text"
+                            : "text-text-main group-hover:text-brand-text"
+                        }`}
+                      >
                         {session.user.name}
                       </p>
-                      <p className="truncate text-xs text-text-secondary font-medium">
+                      <p
+                        className={`truncate text-xs font-medium transition ${
+                          pathname === "/profile"
+                            ? "text-brand-text/90"
+                            : "text-text-secondary group-hover:text-text-main"
+                        }`}
+                      >
                         {session.user.role === "SUPER_ADMIN"
                           ? "Super Admin"
                           : session.user.role === "COMPANY_ADMIN"
@@ -499,7 +515,13 @@ export default function Sidebar({
                       </p>
                     </div>
                   </div>
-                  <span className="shrink-0 text-text-subtle group-hover:text-blue-600 group-hover:translate-x-0.5 transition">
+                  <span
+                    className={`shrink-0 transition group-hover:translate-x-0.5 ${
+                      pathname === "/profile"
+                        ? "text-brand-text"
+                        : "text-text-subtle group-hover:text-brand-text"
+                    }`}
+                  >
                     <svg aria-hidden="true" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
                       <polyline points="9 18 15 12 9 6" />
                     </svg>
@@ -593,13 +615,13 @@ function NavItem({
           : "gap-3 px-3 py-2.5 text-sm font-medium w-full"
       } ${
         active
-          ? "bg-blue-50 text-blue-700 font-semibold ring-1 ring-blue-200/80 shadow-xs"
+          ? "bg-brand-soft text-brand-text font-semibold ring-1 ring-brand-border shadow-xs"
           : "text-text-secondary hover:bg-surface-muted hover:text-text-main"
-      } focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500`}
+      } focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand`}
     >
       <span
         className={`flex h-5 w-5 shrink-0 items-center justify-center transition-colors ${
-          active ? "text-blue-700" : "text-text-muted group-hover:text-text-secondary"
+          active ? "text-brand-text" : "text-text-muted group-hover:text-text-secondary"
         }`}
       >
         <NavIcon name={iconKey} />
